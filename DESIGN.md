@@ -1,12 +1,15 @@
-# pyomo-nmpc: design record
+# drto: design record
 
 Status: design only, no code. This document records the decisions made
 during the design discussions of 2026-07-11/12, before implementation.
 
 ## What it is
 
-The Pyomo NMPC package: a receding-horizon control loop for pyomo.dae
-models, with advanced-step NMPC as its headline capability. The
+drto (dynamic real-time optimization): a receding-horizon control loop
+for pyomo.dae models, with advanced-step NMPC as its headline
+capability. The name is the field's own term (the D-RTO literature):
+dynamic real-time optimization is the umbrella over both halves of the
+loop, control (NMPC) now and estimation (MHE) as the follow-on. The
 advanced-step update is an acceleration mode of the loop, not a separate
 controller, so the package serves plain-NMPC users who never touch
 sensitivities and differentiates on the mode nobody else has.
@@ -50,10 +53,16 @@ visible solve delay) is the package's own killer demo.
 - pyomo + pyomo.dae for modeling and discretization.
 - pyomo-cvp for piecewise-constant control parameterization
   (`declare_profile`); the controls' declaration already lives there.
+  pyomo-cvp STAYS a standalone package (independently useful for
+  offline dynamic optimization, and a Pyomo upstream candidate); drto
+  depends on it and re-exports the declarations so users get one
+  import surface. Revisit only if the warm shift needs to reach inside
+  cvp's substitution machinery.
 - pyomo-pounce (pounce >= 0.8.0) for the in-process solve session,
-  sensitivity gradients, and the `estimate()` fast update. Merged
-  upstream as jkitchin/pounce#199; the estimation-side machinery
-  (covariance) is PR #203.
+  sensitivity gradients, and the `estimate()` fast update (merged as
+  jkitchin/pounce#199). The estimation-side machinery (covariance with
+  hessian="lagrangian"|"gauss-newton" and active-bound projection)
+  merged as #203 on 2026-07-12; it ships in the release after 0.8.0.
 - pounce coupling is a hard dependency for v1: simpler and honest about
   what works today. A sensitivity-backend interface (with k_aug as a
   legacy alternative) was considered and deferred.
@@ -124,13 +133,27 @@ Moving horizon estimation (asMHE): the twin Caprese promised and never
 shipped. The arrival cost is a covariance-propagation question, and the
 pounce#203 covariance machinery computes the needed pieces from the same
 factorizations. asNMPC + asMHE is the complete output-feedback stack;
-it exists nowhere in open source.
+it exists nowhere in open source. One known consumer obligation: the
+covariance's active-bound projection returns a SINGULAR matrix when an
+estimated state sits on a bound, so the arrival-cost update must
+pseudo-invert for the weight and carry the active bound into the next
+horizon as a constraint. Gauss-Newton (`hessian="gauss-newton"`) is the
+PSD-guaranteed choice for arrival costs.
+
+## Name and home (resolved 2026-07-12)
+
+- Name: drto. D-RTO is the literature's own abbreviation for dynamic
+  real-time optimization, it covers the control and estimation halves
+  under one term, and it passes the say-it-aloud test. PyPI name free
+  (claim with a stub at first release); GitHub handle `drto` is taken,
+  so the repo lives at devin-griff/drto; drto.io free. Rejected in the
+  naming search: a pyomo- prefix (the package should outgrow "Pyomo
+  toolbox" into a standalone product), dynoptic (collides with
+  DynOptic Systems, an Acoem instrumentation brand selling into the
+  same industrial market), dynarto (fails the say-it-aloud test).
+- Standalone package in this repo; not a pyomo-pounce module.
 
 ## Open questions
 
-- Where it lives: standalone package (this repo) vs a module in
-  pyomo-pounce upstream. This repo assumes standalone until decided.
-- Name: pyomo-nmpc (working name; advanced-step is the headline feature,
-  not the package name).
 - v1 scope boundaries confirmed so far: no MHE, no economic NMPC, no
   amsNMPC multistep variant.
