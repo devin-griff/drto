@@ -71,6 +71,51 @@ visible solve delay) is the package's own killer demo.
   relax-and-round for integer controls, which would live beside
   pyomo-cvp's profiles as a transformation, not inside the loop.
 
+## Steady-state reduction (setpoint consistency and economic RTO)
+
+A first-class feature: drto reduces the dynamic model to its
+steady-state problem, the same equations with every dz/dt = 0 at a
+single time point, solving f(z,u)=0 and g(z,u)=0 for an equilibrium
+(z_ss, u_ss). Two uses:
+
+1. **Setpoint consistency.** The tracking target is DERIVED from the
+   model, not hand-specified, so the state target and the control
+   target are a true fixed point of the dynamics by construction.
+   Motivating case (2026-07-13): a hand-typed Hicks CSTR tracking pair
+   (xss, uss) that was not an exact equilibrium: the control that
+   actually holds xss was v1 = 0.578, not the declared 0.583. The
+   controller could not zero both the state-tracking and the
+   control-tracking terms at once, so the controls never settled: they
+   drifted ~5e-4 at the tail hunting a compromise, at any horizon
+   (with a model-consistent uss the tail spread dropped ~100x to
+   4e-6). A model-derived setpoint removes the whole failure mode.
+
+2. **Economic RTO.** The same reduced problem plus an economic
+   objective phi(z_ss, u_ss) over the steady-state variables, subject
+   to constraints: the RTO layer that computes the economically-
+   optimal operating point, which the NMPC then tracks (or uses as an
+   economic-NMPC terminal reference). This is what makes the D-RTO
+   name literal: steady-state RTO is the dz/dt -> 0 limit of the
+   dynamic problem, so the dynamic controller and its setpoint
+   optimizer are one package.
+
+MECHANISM (USER DECISION 2026-07-13): reuse the user's modeling
+object for multiple purposes rather than doing expression surgery on
+the discretized constraints. The user writes the dynamics once, in a
+reusable form (a rule/function defining the RHS and algebraic
+relations); drto instantiates that same object for both the dynamic
+(discretized) problem and the steady-state (single-point, derivatives
+fixed to zero) problem, and for the economic RTO on top of it.
+Rejected: introspect-and-substitute (clone the discretized model and
+pin each declared state's DerivativeVar to zero). The reusable-object
+route is explicit, matches the family's explicit-over-introspection
+philosophy (the same reason declare_state rejected DerivativeVar
+introspection), and avoids fragile surgery on transformed constraint
+bodies. Consequence to design deliberately: the drto model-building
+API must let the user express the dynamics so both the dynamic ODE
+constraints and the steady-state constraints are built from the one
+source of truth.
+
 ## Dependency stack
 
 - pyomo + pyomo.dae for modeling and discretization.
