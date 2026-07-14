@@ -1,13 +1,10 @@
 ## What it is
 
-drto (dynamic real-time optimization): a receding-horizon control loop
-for pyomo.dae models, with advanced-step NMPC as its headline
-capability. The name is the field's own term (the D-RTO literature):
-dynamic real-time optimization is the umbrella over both halves of the
-loop, control (NMPC) now and estimation (MHE) as the follow-on. The
-advanced-step update is an acceleration mode of the loop, not a separate
-controller, so the package serves plain-NMPC users who never touch
-sensitivities and differentiates on the mode nobody else has.
+DRTO is a framework that provides steady-state and dynamic estimation, 
+simulation, and optimzation from a core PYOMO model, as well as the 
+moving-horizon machinery for implemmentations of dynamic real-time optimization.
+The intent is to apply to a broad range of model and problem types, with functionality 
+being built incrementally. 
 
 ## The mode framework (six modes)
 
