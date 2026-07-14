@@ -30,7 +30,7 @@ plus steady-state RTO. Estimation is the planned follow-on.
 ## Declaring a control problem
 
 drto is declaration-first, and each declaration tags a Pyomo component you
-already wrote: a Variable or a Constraint. You build your dynamic model as
+already wrote: a Variable, a Constraint, or a Parameter. You build your dynamic model as
 an ordinary `pyomo.dae` model, then point the declarations at its pieces;
 drto assembles the horizon problem and runs the loop. It bolts onto an
 existing model rather than replacing how you build one. The pieces are the
@@ -41,11 +41,13 @@ mode):
 | --- | --- | --- | --- |
 | State | Variable | `declare_state(m.z, ...)` | A differential state. drto reads its dynamics from the state's `DerivativeVar`. |
 | Control | Variable | `declare_control(m.u, ..., wrt=m.t, profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp. |
-| Tracking stage cost | Constraint | `declare_tracking_stage_cost(m.tracking_stage_con)` | Equality defining the setpoint-tracking running cost; its left-hand-side scalar goes in the objective. The setpoint it references is a mutable Param drto updates. |
+| Tracking stage cost | Constraint | `declare_tracking_stage_cost(m.tracking_stage_con)` | Equality defining the setpoint-tracking running cost; its left-hand-side scalar goes in the objective. The setpoint it references is the declared steady-state Param (below). |
 | Economic stage cost | Constraint | `declare_economic_stage_cost(m.economic_stage_con)` | Equality defining the economic running cost; the same objective the steady-state RTO mode uses. |
 | Tracking terminal cost | Constraint | `declare_tracking_terminal_cost(m.tracking_terminal_con)` | Equality defining the terminal tracking cost; its left-hand-side scalar goes in the objective. |
 | Initial condition | Constraint | `declare_initial_condition(m.init_con)` | Equality anchoring the initial state; left-hand side is the state at t0, right-hand side the feedback. |
 | Terminal constraint | Constraint | `declare_terminal_constraint(m.terminal_con)` | Constraint on the states at the final time; the terminal set the final state must lie in. |
+| Steady-state target | Parameter | `declare_steady_state(m.z_ss)` | The state setpoint the tracking costs drive toward; populated by the steady-state/RTO solve. |
+| Steady-state control target | Parameter | `declare_steady_state_control(m.u_ss)` | The control setpoint the tracking costs drive toward. |
 
 Conventions drto enforces on those constraints: the cost and
 initial-condition constraints are equalities whose left-hand side is the

@@ -196,11 +196,12 @@ time or hand-discretized models have states but no DerivativeVars; and
 no structure implies the measured vs unmeasured distinction MHE will
 need.
 
-Each declaration tags a Pyomo component the user already wrote, a Var or a
-Constraint (USER DECISION 2026-07-14): the point is to bolt onto an
-existing pyomo.dae model, not to introduce a new modeling framework. State
-and control tag Vars; the cost and boundary declarations tag Constraints.
-The control-scope declaration surface (the estimation-side surface follows
+Each declaration tags a Pyomo component the user already wrote, a Var, a
+Constraint, or a Param (USER DECISION 2026-07-14): the point is to bolt
+onto an existing pyomo.dae model, not to introduce a new modeling
+framework. State and control tag Vars; the cost and boundary declarations
+tag Constraints; the measurement and steady-state targets tag Params. The
+control-scope declaration surface (the estimation-side surface follows
 below):
 
 - `declare_state(m.z1, m.z2, ...)`: tags the differential-state Vars. Varargs,
@@ -218,11 +219,11 @@ below):
   that implements the parameterization underneath.
 - `declare_tracking_stage_cost(m.tracking_stage_con)`: tags the equality
   Constraint defining the setpoint-tracking running cost (the
-  ||z - z_sp|| + ||u - u_sp|| regulation penalty). LHS a lone scalar Var;
-  drto adds it to the objective it assembles. The tracking setpoint lives
-  here: the z_sp/u_sp it references are mutable Params drto updates when
-  the setpoint changes, which is where the tracking-setpoint hook resolves.
-  The RHS is however the user expressed the accumulated cost (a
+  ||z - z_ss|| + ||u - u_ss|| regulation penalty). LHS a lone scalar Var;
+  drto adds it to the objective it assembles. The tracking targets are the
+  declared steady-state Params (`declare_steady_state` /
+  `declare_steady_state_control` below), populated by the steady-state/RTO
+  solve. The RHS is however the user expressed the accumulated cost (a
   finite-element sum, a pyomo.dae Integral, an accumulator's terminal
   value): drto does not care as long as it resolves to the LHS scalar.
 - `declare_economic_stage_cost(m.economic_stage_con)`: tags the equality
@@ -256,6 +257,14 @@ below):
   which is what separates it from a path constraint (present at every t).
   "Constraint" not "condition" because it restricts to a set rather than
   pinning a value.
+- `declare_steady_state(m.z_ss, ...)`: tags the Params holding the
+  steady-state state target z_ss. The tracking costs drive toward these
+  (z - z_ss); the steady-state/RTO mode populates them from its solve (or
+  they are set directly, since they are Params), so the target is
+  model-derived rather than hand-typed (the Hicks CSTR lesson above).
+- `declare_steady_state_control(m.u_ss, ...)`: tags the Params holding the
+  steady-state control target u_ss, driven toward the same way (u - u_ss)
+  and populated the same way (USER DECISION 2026-07-14).
 
 Convention on the declared constraints (USER DECISION 2026-07-14, verified
 against Pyomo 6.10):
@@ -297,10 +306,10 @@ Not declared, by design:
 
 Moving-horizon data hooks now have homes: the state anchor z_hat is the
 mutable Param on the RHS of the initial-condition constraint; the tracking
-setpoint z_sp/u_sp are mutable Params in the tracking-cost constraints; the
-measurements are the mutable Param stream in `declare_measurement` below.
-Each is updated each step. Dynamics source is decided too: picked up from
-each state's DerivativeVar, above.
+setpoint is the declared steady-state Params z_ss/u_ss; the measurements
+are the mutable Param stream in `declare_measurement` below. Each is
+updated each step. Dynamics source is decided too: picked up from each
+state's DerivativeVar, above.
 
 Shared conventions:
 
@@ -425,12 +434,12 @@ PSD-guaranteed choice for arrival costs.
   chosen to avoid DerivativeVar surgery, so how the two square (one
   reusable rule feeding both, versus picking up DerivativeVars for the
   loop and reducing to steady state separately) still needs settling.
-- Moving-horizon data: RESOLVED 2026-07-14. Each hook is a mutable Param in
-  the relevant declared constraint, updated each step: z_hat on the
-  initial-condition RHS, the setpoint z_sp/u_sp in the tracking-cost
-  constraints, the measurements in `declare_measurement`. Remaining detail:
-  the measurement Param's window bookkeeping (which measurement maps to
-  which time point) and whether a thin layer wraps the updates.
+- Moving-horizon data: RESOLVED 2026-07-14. Each hook is a mutable Param,
+  updated each step: z_hat on the initial-condition RHS, the setpoint as
+  the declared steady-state Params z_ss/u_ss, the measurements in
+  `declare_measurement`. Remaining detail: the measurement Param's window
+  bookkeeping (which measurement maps to which time point) and whether a
+  thin layer wraps the updates.
 - MHE surface settled 2026-07-14 (estimation declarations above);
   implementation deferred to the follow-on. `declare_measurement` tags a
   mutable Param (the measured values in the estimation costs); the only
