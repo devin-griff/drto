@@ -1,0 +1,50 @@
+name: publish
+
+# Publishes to PyPI on a version tag (e.g. `git tag v0.1.0 && git push --tags`).
+# Uses PyPI Trusted Publishing (OIDC) -- no API token needed, but the project
+# must be configured for trusted publishing on PyPI first (one-time setup).
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Cut a GitHub Release for the same tag, with notes lifted from the matching
+  # CHANGELOG section, so the repo's Releases page tracks the PyPI versions.
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create the release
+    steps:
+      - uses: actions/checkout@v7
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" 'BEGIN{s="## [" ver "]"} index($0,s)==1{f=1;next} f && index($0,"## [")==1{exit} f{print}' CHANGELOG.md | grep -vE '^\[[^]]+\]: ' | sed '/./,$!d' > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "${GITHUB_REF_NAME}. See CHANGELOG.md for details." > release_notes.md
+          fi
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release_notes.md \
+            --verify-tag

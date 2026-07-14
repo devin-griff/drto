@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drto"
+version = "0.0.0"
+description = "Dynamic real-time optimization: receding-horizon NMPC and moving horizon estimation for Pyomo models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Devin Griffith", email = "dwg176@gmail.com" }]
+keywords = [
+  "nmpc",
+  "mhe",
+  "moving-horizon-estimation",
+  "pyomo",
+  "dynamic-optimization",
+  "receding-horizon",
+  "dae",
+]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = ["pyomo>=6.8.1"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+examples = ["numpy", "matplotlib", "jupyter"]
+
+[project.urls]
+Homepage = "https://github.com/devin-griff/drto"
+Repository = "https://github.com/devin-griff/drto"
+Issues = "https://github.com/devin-griff/drto/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drto"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Mirrors Pyomo's own Black settings so formatting matches upstream exactly.
+[tool.black]
+line-length = 88
+skip-string-normalization = true
+skip-magic-trailing-comma = true

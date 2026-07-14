@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Reject commits that are not black-clean, mirroring CI's `black --check`
+# gate so formatting drift never reaches CI. Enable with:
+#
+#     git config core.hooksPath .githooks
+#
+# Bypass for a single commit with `git commit --no-verify` (discouraged).
+set -euo pipefail
+
+if ! command -v black >/dev/null 2>&1; then
+    echo "pre-commit: black not found on PATH; skipping format check" >&2
+    exit 0
+fi
+
+if ! black --check src/ tests/; then
+    echo >&2
+    echo "pre-commit: black check failed; run 'make fmt', re-stage, and commit again." >&2
+    exit 1
+fi

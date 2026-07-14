@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use drto in academic work, please cite it as below."
+title: "drto: dynamic real-time optimization for Pyomo"
+abstract: >
+  drto is a receding-horizon control and estimation framework for Pyomo
+  models: nonlinear model predictive control (NMPC), dynamic real-time
+  optimization, and moving horizon estimation for pyomo.dae models.
+type: software
+license: BSD-3-Clause
+repository-code: "https://github.com/devin-griff/drto"
+url: "https://github.com/devin-griff/drto"
+authors:
+  - family-names: Griffith
+    given-names: Devin
+keywords:
+  - nmpc
+  - moving horizon estimation
+  - pyomo
+  - dynamic optimization
+  - receding horizon
+# TODO: add ORCID, the Zenodo DOI, and date-released once the first tagged
+# release is archived.

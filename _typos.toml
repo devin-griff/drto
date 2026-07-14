@@ -1,0 +1,11 @@
+# Configuration for the `typos` spell-checker (crate-ci/typos), matching the
+# Pyomo contribution guide's spell-check step.
+[files]
+# Executed-notebook outputs carry base64 blobs and verbatim solver log text;
+# the notebook prose is reviewed by eye instead.
+extend-exclude = ["*.ipynb"]
+
+[default.extend-words]
+# Domain terms, not misspellings.
+RTO = "RTO"      # real-time optimization
+IDAES = "IDAES"  # the IDAES process-systems framework
