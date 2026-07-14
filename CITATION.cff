@@ -1,10 +1,10 @@
 cff-version: 1.2.0
 message: "If you use drto in academic work, please cite it as below."
-title: "drto: dynamic real-time optimization for Pyomo"
+title: "DRTO: A Unified Framework for Dynamic Real-Time Optimization"
 abstract: >
-  drto is a receding-horizon control and estimation framework for Pyomo
-  models: nonlinear model predictive control (NMPC), dynamic real-time
-  optimization, and moving horizon estimation for pyomo.dae models.
+  DRTO is a framework that provides steady-state and dynamic estimation, 
+  simulation, and optimzation from a core PYOMO model, as well as the 
+  moving-horizon machinery for implemmentations of dynamic real-time optimization.
 type: software
 license: BSD-3-Clause
 repository-code: "https://github.com/devin-griff/drto"
