@@ -35,8 +35,8 @@ plus steady-state RTO. Estimation is the planned follow-on.
 ## Declaring a control problem
 
 drto is declaration-first, and each declaration tags a Pyomo component you
-already wrote: a Variable, a Constraint, or a Parameter. You build your dynamic model as
-an ordinary `pyomo.dae` model, then point the declarations at its pieces;
+already wrote: a Variable, a Constraint, a Parameter, or a Set. You build your dynamic model as
+an ordinary Pyomo model, then point the declarations at its pieces;
 drto assembles the horizon problem and runs the loop. It bolts onto an
 existing model rather than replacing how you build one. The pieces are the
 object types of an optimal control problem (the dynamic-optimization
@@ -44,8 +44,9 @@ mode):
 
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
+| Time set | Set | `declare_time(m.t)` | The moving-horizon dimension. A `pyomo.dae` ContinuousSet or a discrete Set; drto reads dynamics from the DerivativeVars taken with respect to it. |
 | State | Variable | `declare_state(m.z, ...)` | A differential state. drto reads its dynamics from the state's `DerivativeVar`. |
-| Control | Variable | `declare_control(m.u, ..., wrt=m.t, profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp. |
+| Control | Variable | `declare_control(m.u, ..., profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp, over the declared time set. |
 | Tracking stage cost | Constraint | `declare_tracking_stage_cost(m.tracking_stage_con)` | Equality defining the setpoint-tracking running cost; its left-hand-side scalar goes in the objective. The setpoint it references is the declared steady-state Param (below). |
 | Economic stage cost | Constraint | `declare_economic_stage_cost(m.economic_stage_con)` | Equality defining the economic running cost; the same objective the steady-state RTO mode uses. |
 | Tracking terminal cost | Constraint | `declare_tracking_terminal_cost(m.tracking_terminal_con)` | Equality defining the terminal tracking cost; its left-hand-side scalar goes in the objective. |

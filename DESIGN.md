@@ -91,13 +91,24 @@ no structure implies the measured vs unmeasured distinction MHE will
 need.
 
 Each declaration tags a Pyomo component the user already wrote, a Var, a
-Constraint, or a Param (USER DECISION 2026-07-14): the point is to bolt
-onto an existing pyomo.dae model, not to introduce a new modeling
-framework. State and control tag Vars; the cost and boundary declarations
-tag Constraints; the measurement and steady-state targets tag Params. The
-control-scope declaration surface (the estimation-side surface follows
-below):
+Constraint, a Param, or a Set (USER DECISION 2026-07-14): the point is to
+bolt onto an existing Pyomo model, not to introduce a new modeling
+framework. The time set tags a Set; state and control tag Vars; the cost
+and boundary declarations tag Constraints; the measurement and steady-state
+targets tag Params. The control-scope declaration surface (the
+estimation-side surface follows below):
 
+- `declare_time(m.t)`: tags the time set, the moving-horizon dimension
+  shared by every dynamic mode. It may be a `pyomo.dae` ContinuousSet
+  (continuous-time) or a discrete Set (discrete-time, difference equations),
+  so drto does not assume continuity (USER DECISION 2026-07-14). Declaring
+  it separates time from any other set (a spatial axis in a PDE model): the
+  DerivativeVars taken with respect to this set are the temporal dynamics
+  drto picks up and shifts, while DerivativeVars over other sets are spatial
+  and left alone. For a continuous time set the dynamics are those
+  DerivativeVars (see `declare_state`); for a discrete time set there are no
+  DerivativeVars and the dynamics are the user's difference-equation
+  constraints (that pickup is still open).
 - `declare_state(m.z1, m.z2, ...)`: tags the differential-state Vars. Varargs,
   indexed-container-aware (one call declares all members). drto then picks
   up each state's dynamics automatically from its DerivativeVar (USER
@@ -105,12 +116,13 @@ below):
   This is NOT the rejected state auto-detection: the state role is still
   declared, and the DerivativeVar only locates the ODE of an
   already-declared state.
-- `declare_control(m.u, ..., wrt=m.t, profile=...)`: tags the
-  manipulated-input Vars, the free decision variables. The `profile` flag folds in the
-  control's parameterization: `declare_control` calls pyomo-cvp's
-  `declare_profile` automatically (USER DECISION 2026-07-14). One call
-  declares the control and its parameterization; cvp stays the dependency
-  that implements the parameterization underneath.
+- `declare_control(m.u, ..., profile=...)`: tags the manipulated-input
+  Vars, the free decision variables. No `wrt` argument: drto uses the
+  declared time set, so the control's parameterization is over that set
+  (USER DECISION 2026-07-14). The `profile` flag folds in the
+  parameterization: `declare_control` calls pyomo-cvp's `declare_profile`
+  automatically. One call declares the control and its parameterization; cvp
+  stays the dependency that implements it underneath.
 - `declare_tracking_stage_cost(m.tracking_stage_con)`: tags the equality
   Constraint defining the setpoint-tracking running cost (the
   ||z - z_ss|| + ||u - u_ss|| regulation penalty). LHS a lone scalar Var;
@@ -202,8 +214,9 @@ Moving-horizon data hooks now have homes: the state anchor z_hat is the
 mutable Param on the RHS of the initial-condition constraint; the tracking
 setpoint is the declared steady-state Params z_ss/u_ss; the measurements
 are the mutable Param stream in `declare_measurement` below. Each is
-updated each step. Dynamics source is decided too: picked up from each
-state's DerivativeVar, above.
+updated each step. Dynamics source: each state's DerivativeVar taken with
+respect to the declared time set (continuous-time); the discrete-time case
+(difference-equation constraints) is still open, see `declare_time`.
 
 Shared conventions:
 
