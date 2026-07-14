@@ -1,8 +1,8 @@
 ## What it is
 
 DRTO is a framework that provides steady-state and dynamic estimation, 
-simulation, and optimzation from a core PYOMO model, as well as the 
-moving-horizon machinery for implemmentations of dynamic real-time optimization.
+simulation, and optimization from a core Pyomo model, as well as the 
+moving-horizon machinery for implementations of dynamic real-time optimization.
 The intent is to apply to a broad range of model and problem types, with functionality 
 being built incrementally. 
 

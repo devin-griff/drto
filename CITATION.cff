@@ -3,8 +3,8 @@ message: "If you use drto in academic work, please cite it as below."
 title: "DRTO: A Unified Framework for Dynamic Real-Time Optimization"
 abstract: >
   DRTO is a framework that provides steady-state and dynamic estimation, 
-  simulation, and optimzation from a core PYOMO model, as well as the 
-  moving-horizon machinery for implemmentations of dynamic real-time optimization.
+  simulation, and optimization from a core Pyomo model, as well as the
+  moving-horizon machinery for implementations of dynamic real-time optimization.
 type: software
 license: BSD-3-Clause
 repository-code: "https://github.com/devin-griff/drto"
