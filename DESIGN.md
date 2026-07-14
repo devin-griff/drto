@@ -146,9 +146,59 @@ time or hand-discretized models have states but no DerivativeVars; and
 no structure implies the measured vs unmeasured distinction MHE will
 need.
 
-- `declare_state(m.z1, m.z2, ...)`: varargs, indexed-container-aware
-  (one call declares all members), like the rest of the family.
-- Controls: already declared via pyomo-cvp `declare_profile`.
+The control-scope declaration surface (USER DECISION 2026-07-14;
+estimation-side declarations deferred with the MHE half):
+
+- `declare_state(m.z1, m.z2, ...)`: the differential states. Varargs,
+  indexed-container-aware (one call declares all members). drto then picks
+  up each state's dynamics automatically from its DerivativeVar (USER
+  DECISION 2026-07-14, good-enough starting point; no `declare_dynamics`).
+  This is NOT the rejected state auto-detection: the state role is still
+  declared, and the DerivativeVar only locates the ODE of an
+  already-declared state.
+- `declare_control(m.u, ..., wrt=m.t, profile=...)`: the manipulated
+  inputs, the free decision variables. The `profile` flag folds in the
+  control's parameterization: `declare_control` calls pyomo-cvp's
+  `declare_profile` automatically (USER DECISION 2026-07-14). One call
+  declares the control and its parameterization; cvp stays the dependency
+  that implements the parameterization underneath.
+- `declare_stage_cost(expr)`: the running (Lagrange) cost integrand
+  L(z, u); drto integrates/sums it over the horizon.
+- `declare_terminal_cost(expr)`: the terminal (Mayer) cost V_f(z(T)).
+- `declare_initial_condition(...)`: the initial-state anchor z(0) = z_hat,
+  a hard equality (the measurement feedback in NMPC; the prediction/RTO
+  anchor in DRTO). Named "condition" deliberately: it pins the state (an
+  equality), a different job from a boundary set. This is the exact seam
+  where MHE will diverge, since its initial anchor is the soft arrival
+  cost, not a hard equality, so a soft mode or a separate
+  `declare_arrival_cost` is the estimation follow-on, not this.
+- `declare_terminal_constraint(...)`: the terminal set/region z(T) in
+  X_f. "Constraint" not "condition" because it restricts to a set rather
+  than pinning a value.
+
+Naming (USER DECISION 2026-07-14): fully-written-out, not abbreviated
+(`declare_terminal_cost` not `declare_term_cost`,
+`declare_initial_condition` not `declare_init_con`). These are setup-time
+calls, never hot-path, so brevity buys nothing; `con` is ambiguous
+between condition and constraint, the exact distinction that matters; the
+full forms are the OCP literature's own vocabulary, so a reader who knows
+the theory maps straight on; and spelling them out forces the precise
+concept (condition vs constraint vs set) rather than hiding behind an
+abbreviation.
+
+Not declared, by design:
+
+- Path constraints: the states' upper and lower bounds, i.e. the Var
+  bounds, which drto reads off the model (USER DECISION 2026-07-14). Not
+  a separate declaration.
+
+Still open (see Open questions): how the moving-horizon data (the mutable
+z_hat, tracking setpoint, and later the measurements) is supplied and
+updated each solve. Dynamics source is now decided: picked up from each
+state's DerivativeVar, above.
+
+Shared conventions:
+
 - Each declaration has an explicit call-time form as well (the
   declared/explicit duality established in pyomo-cvp and pyomo-pounce).
 - Family conventions locked in pounce#203: varargs on every declaration,
@@ -225,3 +275,17 @@ PSD-guaranteed choice for arrival costs.
 
 - v1 scope boundaries confirmed so far: no MHE, no economic NMPC, no
   amsNMPC multistep variant.
+- Dynamics source: RESOLVED 2026-07-14 (good-enough starting point). drto
+  picks up each declared state's dynamics from its DerivativeVar; no
+  `declare_dynamics`. Remaining thread: this is the dynamic-problem
+  source, while the steady-state reduction's reusable-object mechanism was
+  chosen to avoid DerivativeVar surgery, so how the two square (one
+  reusable rule feeding both, versus picking up DerivativeVars for the
+  loop and reducing to steady state separately) still needs settling.
+- Moving-horizon data: how the mutable feedback (z_hat), tracking
+  setpoint, and later the measurements are supplied and updated each
+  solve. A thin layer over the declarations is the leaning, not settled.
+- (MHE, deferred) the measurement notion and the soft arrival cost noted
+  under `declare_initial_condition`.
+- `declare_control` vs `declare_profile`: RESOLVED 2026-07-14. The
+  `profile` flag on `declare_control` calls cvp's `declare_profile`.
