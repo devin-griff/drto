@@ -196,35 +196,75 @@ time or hand-discretized models have states but no DerivativeVars; and
 no structure implies the measured vs unmeasured distinction MHE will
 need.
 
-The control-scope declaration surface (USER DECISION 2026-07-14;
-estimation-side declarations deferred with the MHE half):
+Each declaration tags a Pyomo component the user already wrote, a Var or a
+Constraint (USER DECISION 2026-07-14): the point is to bolt onto an
+existing pyomo.dae model, not to introduce a new modeling framework. State
+and control tag Vars; the four cost and boundary declarations tag
+Constraints. The control-scope declaration surface (estimation-side
+declarations deferred with the MHE half):
 
-- `declare_state(m.z1, m.z2, ...)`: the differential states. Varargs,
+- `declare_state(m.z1, m.z2, ...)`: tags the differential-state Vars. Varargs,
   indexed-container-aware (one call declares all members). drto then picks
   up each state's dynamics automatically from its DerivativeVar (USER
   DECISION 2026-07-14, good-enough starting point; no `declare_dynamics`).
   This is NOT the rejected state auto-detection: the state role is still
   declared, and the DerivativeVar only locates the ODE of an
   already-declared state.
-- `declare_control(m.u, ..., wrt=m.t, profile=...)`: the manipulated
-  inputs, the free decision variables. The `profile` flag folds in the
+- `declare_control(m.u, ..., wrt=m.t, profile=...)`: tags the
+  manipulated-input Vars, the free decision variables. The `profile` flag folds in the
   control's parameterization: `declare_control` calls pyomo-cvp's
   `declare_profile` automatically (USER DECISION 2026-07-14). One call
   declares the control and its parameterization; cvp stays the dependency
   that implements the parameterization underneath.
-- `declare_stage_cost(expr)`: the running (Lagrange) cost integrand
-  L(z, u); drto integrates/sums it over the horizon.
-- `declare_terminal_cost(expr)`: the terminal (Mayer) cost V_f(z(T)).
-- `declare_initial_condition(...)`: the initial-state anchor z(0) = z_hat,
-  a hard equality (the measurement feedback in NMPC; the prediction/RTO
-  anchor in DRTO). Named "condition" deliberately: it pins the state (an
-  equality), a different job from a boundary set. This is the exact seam
-  where MHE will diverge, since its initial anchor is the soft arrival
-  cost, not a hard equality, so a soft mode or a separate
+- `declare_stage_cost(m.stage_cost_con)`: tags the equality Constraint
+  that defines the running (Lagrange) cost. Its LHS is a lone scalar Var,
+  the stage-cost term; drto adds that Var to the objective it assembles.
+  The RHS is however the user expressed the accumulated cost (an explicit
+  finite-element sum, a pyomo.dae Integral, an accumulator's terminal
+  value): drto does not care as long as it resolves to the LHS scalar.
+- `declare_terminal_cost(m.terminal_cost_con)`: tags the equality
+  Constraint that defines the terminal (Mayer) cost V_f(z(tN)). Same
+  LHS-scalar convention; drto adds the terminal-cost Var to the objective.
+  This is the term dropped in steady-state (see the objective note below).
+- `declare_initial_condition(m.init_con)`: tags the equality Constraint
+  anchoring the initial state, LHS the anchored state at t0. If the RHS is
+  a mutable Param, that Param is the feedback-injection point drto updates
+  each step, so this convention doubles as the state-feedback hook (z_hat)
+  for the online loop. Named "condition" deliberately: it pins the state
+  (an equality), a different job from a boundary set. This is the exact
+  seam where MHE will diverge, since its initial anchor is the soft
+  arrival cost, not a hard equality, so a soft mode or a separate
   `declare_arrival_cost` is the estimation follow-on, not this.
-- `declare_terminal_constraint(...)`: the terminal set/region z(T) in
-  X_f. "Constraint" not "condition" because it restricts to a set rather
-  than pinning a value.
+- `declare_terminal_constraint(m.terminal_con)`: tags the Constraint
+  (equality or inequality) defining the terminal set/region z(tN) in X_f.
+  Requirement (USER DECISION 2026-07-14): every Var it references is a
+  declared state at tN, the final time; a control at tN is excluded, the
+  standard OCP convention (X_f lives in state space). No LHS convention,
+  which is what separates it from a path constraint (present at every t).
+  "Constraint" not "condition" because it restricts to a set rather than
+  pinning a value.
+
+Convention on the declared constraints (USER DECISION 2026-07-14, verified
+against Pyomo 6.10):
+
+- The cost and initial-condition constraints must be equalities; an
+  inequality is rejected with a clear error (a cost term or anchor written
+  as an inequality is a user mistake).
+- Their LHS is the appropriate scalar, read as `con.expr.args[0]`. Pyomo
+  canonicalizes the constraint body to `LHS - RHS` (lower=upper=0), but
+  `con.expr` preserves the as-written relational expression, so the LHS is
+  a stable read and a misplaced scalar (a non-Var LHS) is detectable and
+  rejected. For a cost the scalar is the cost-term Var drto puts in the
+  objective; for the initial condition it is the anchored state at t0.
+
+The objective is drto's, not the user's: it assembles `min` over the
+declared cost-term Vars that are live in the current mode. Modes add or
+drop terms by including or excluding a cost's (Var, defining constraint)
+pair; in steady-state the reduced model never instantiates the terminal
+cost, so that term is simply absent, nothing to zero-weight. This is the
+practical payoff of representing each cost as a Var defined by a
+constraint rather than a bare expression: the pair is one handle drto can
+find and drop.
 
 Naming (USER DECISION 2026-07-14): fully-written-out, not abbreviated
 (`declare_terminal_cost` not `declare_term_cost`,
@@ -242,10 +282,10 @@ Not declared, by design:
   bounds, which drto reads off the model (USER DECISION 2026-07-14). Not
   a separate declaration.
 
-Still open (see Open questions): how the moving-horizon data (the mutable
-z_hat, tracking setpoint, and later the measurements) is supplied and
-updated each solve. Dynamics source is now decided: picked up from each
-state's DerivativeVar, above.
+Still open (see Open questions): the tracking setpoint and later the
+measurements. The state anchor z_hat is now decided: the mutable Param on
+the RHS of the initial-condition constraint, updated each step. Dynamics
+source is decided too: picked up from each state's DerivativeVar, above.
 
 Shared conventions:
 
@@ -332,9 +372,11 @@ PSD-guaranteed choice for arrival costs.
   chosen to avoid DerivativeVar surgery, so how the two square (one
   reusable rule feeding both, versus picking up DerivativeVars for the
   loop and reducing to steady state separately) still needs settling.
-- Moving-horizon data: how the mutable feedback (z_hat), tracking
-  setpoint, and later the measurements are supplied and updated each
-  solve. A thin layer over the declarations is the leaning, not settled.
+- Moving-horizon data: the state anchor z_hat is RESOLVED 2026-07-14 (the
+  mutable Param on the RHS of the declared initial-condition constraint,
+  which drto updates each step). Still open: how the tracking setpoint and
+  later the measurements are supplied and updated each solve. A thin layer
+  over the declarations is the leaning, not settled.
 - (MHE, deferred) the measurement notion and the soft arrival cost noted
   under `declare_initial_condition`.
 - `declare_control` vs `declare_profile`: RESOLVED 2026-07-14. The

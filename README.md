@@ -29,20 +29,30 @@ plus steady-state RTO. Estimation is the planned follow-on.
 
 ## Declaring a control problem
 
-drto is declaration-first. You write your dynamic model as an ordinary
-`pyomo.dae` model, then declare the pieces that turn it into a
-receding-horizon control problem (the dynamic-optimization mode); drto
-assembles the horizon problem and runs the loop. Those pieces are the six
-object types of an optimal control problem:
+drto is declaration-first, and each declaration tags a Pyomo component you
+already wrote: a Variable or a Constraint. You build your dynamic model as
+an ordinary `pyomo.dae` model, then point the declarations at its pieces;
+drto assembles the horizon problem and runs the loop. It bolts onto an
+existing model rather than replacing how you build one. The pieces are the
+six object types of an optimal control problem (the dynamic-optimization
+mode):
 
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
 | State | Variable | `declare_state(m.z, ...)` | A differential state. drto reads its dynamics from the state's `DerivativeVar`. |
 | Control | Variable | `declare_control(m.u, ..., wrt=m.t, profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp. |
-| Stage cost | Constraint | `declare_stage_cost(expr)` | The running cost, summed over the horizon. |
-| Terminal cost | Constraint | `declare_terminal_cost(expr)` | The cost on the state at the end of the horizon. |
-| Initial condition | Constraint | `declare_initial_condition(...)` | The initial-state anchor, the measurement feedback in NMPC. |
-| Terminal constraint | Constraint | `declare_terminal_constraint(...)` | The terminal set or region the final state must lie in. |
+| Stage cost | Constraint | `declare_stage_cost(m.stage_cost_con)` | Equality defining the running cost; its left-hand-side scalar is the term drto adds to the objective. |
+| Terminal cost | Constraint | `declare_terminal_cost(m.terminal_cost_con)` | Equality defining the terminal cost; its left-hand-side scalar is added to the objective. |
+| Initial condition | Constraint | `declare_initial_condition(m.init_con)` | Equality anchoring the initial state; left-hand side is the state at t0, right-hand side the feedback. |
+| Terminal constraint | Constraint | `declare_terminal_constraint(m.terminal_con)` | Constraint on the states at the final time; the terminal set the final state must lie in. |
+
+Conventions drto enforces on those constraints: the cost and
+initial-condition constraints are equalities whose left-hand side is the
+scalar the declaration is about (the cost term, or the anchored state); a
+terminal constraint may reference only states at the final time, which is
+what separates it from a path constraint. The objective is drto's own: it
+sums the declared cost terms that are live in the current mode, so a mode
+drops a term just by leaving out its constraint.
 
 Two things you never declare, because they already live in the model: the
 **dynamics** are read from the `pyomo.dae` `DerivativeVar`s of the
