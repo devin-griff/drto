@@ -9,6 +9,17 @@ Dynamic real-time optimization: receding-horizon optimization and
 estimation for Pyomo models, with advanced-step NMPC as the headline
 capability and moving horizon estimation as the planned follow-on.
 
+## Status
+
+Design phase: see [DESIGN.md](DESIGN.md). No code yet.
+
+## Spec-driven development
+
+drto is built spec-first: every feature is specified under
+[`features/`](features/) before it is implemented, as a short doc with a
+status, a user-story description, a benefit hypothesis, and acceptance
+criteria that drive the tests. See [`features/README.md`](features/README.md).
+
 ## The six modes
 
 drto runs one declared model in any of six modes, the 2x3 grid of
@@ -65,10 +76,8 @@ what separates it from a path constraint. The objective is drto's own: it
 sums the declared cost terms that are live in the current mode, so a mode
 drops a term just by leaving out its constraint.
 
-Two things you never declare, because they already live in the model: the
-**dynamics** are read from the `pyomo.dae` `DerivativeVar`s of the
-declared states, and the **path constraints** are the state variables'
-own upper and lower bounds.
+One thing you never declare, because it already lives in the model: the
+**path constraints** are the state variables' own upper and lower bounds.
 
 The vocabulary is the optimal-control literature's own (stage cost,
 terminal cost, terminal constraint), so a model reads the way the theory
@@ -97,7 +106,3 @@ the live cost terms.
 The arrival cost is the soft dual of the control side's initial condition,
 and the estimation stage and terminal costs are the measurement-fitting
 counterparts of the tracking costs.
-
-## Status
-
-Design phase: see [DESIGN.md](DESIGN.md). No code yet.
