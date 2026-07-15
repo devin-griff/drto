@@ -16,4 +16,4 @@ implemented. A feature spec is one Markdown file, numbered in order
   implementation must satisfy. They drive the tests and the definition of
   done.
 
-`001-build_objective.md` is the first example.
+`001-info.md` is the first example.
