@@ -33,6 +33,11 @@ declarations rather than re-deriving them.
   `declare_economic_stage_cost`, `declare_tracking_terminal_cost`, and
   `declare_terminal_constraint` each take exactly one object and error on more
   than one.
+- Re-declaration: a single-object declaration errors on a second call with a
+  different object (for example a second `declare_time` on a new Set), since the
+  model has one of each. A varargs declaration accumulates across calls, but
+  declaring the same component twice is rejected as a duplicate. Both checks run
+  against the registry (feature 001).
 - `declare_time(m.t)` tags the horizon Set. It accepts a `pyomo.dae`
   ContinuousSet or a discrete Set; DRTO does not assume continuity.
 - `declare_state(m.z, ...)` tags one or more differential-state Vars.
@@ -47,9 +52,9 @@ declarations rather than re-deriving them.
   whose left-hand sides are declared states at the next time point. Continuous
   versus discrete dynamics are told apart by the left-hand-side component type
   (DerivativeVar versus plain Var).
-- `declare_tracking_stage_cost` and `declare_economic_stage_cost` each tag a
-  per-time-point equality Constraint whose left-hand side is the scalar
-  running-cost variable; the right-hand side defines the cost.
+- `declare_tracking_stage_cost(m.con)` and `declare_economic_stage_cost(m.con)`
+  each tag a per-time-point equality Constraint whose left-hand side is the
+  scalar running-cost variable; the right-hand side defines the cost.
 - `declare_tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable.
 - `declare_initial_condition(m.con, ...)` tags one or more equality Constraints
