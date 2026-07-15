@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 
 DRTO is a unified framework for dynamic real-time optimization built on
-Pyomo. The pounce solver is required for full functionality, DRTO relies on
+Pyomo. The pounce solver is required for full functionality, as DRTO relies on
 capabilities in [pyomo-pounce](https://github.com/jkitchin/pounce) including
 sensitivity analysis, covariance matrix calculations, and initialization
 routines.
