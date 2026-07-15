@@ -20,6 +20,13 @@ drto is built spec-first: every feature is specified under
 status, a user-story description, a benefit hypothesis, and acceptance
 criteria that drive the tests. See [`features/README.md`](features/README.md).
 
+## Solver
+
+The pounce solver is required for full functionality. drto relies on
+capabilities in [pyomo-pounce](https://github.com/jkitchin/pounce) such as
+sensitivity analysis, covariance matrix calculations, and initialization
+routines.
+
 ## The six modes
 
 drto runs one declared model in any of six modes, the 2x3 grid of
