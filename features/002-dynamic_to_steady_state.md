@@ -1,4 +1,4 @@
-# drto.dyn_2_ss
+# drto.dynamic_to_steady_state
 
 **Status:** ready
 
@@ -20,7 +20,7 @@ many modes" promise.
 
 ## Acceptance criteria
 
-- `TransformationFactory('drto.dyn_2_ss')` requires `declare_time`,
+- `TransformationFactory('drto.dynamic_to_steady_state')` requires `declare_time`,
   `declare_state`, and `declare_continuous_dynamics` on the model, and errors
   clearly if any is missing.
 - It validates that each continuous-dynamics constraint's left-hand side is the

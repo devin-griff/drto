@@ -15,7 +15,7 @@ If DRTO owns objective assembly from the declared cost terms, the objective
 stays correct and consistent as the same model is reused across problems and
 modes, and users are freed from hand-writing summed objectives and rewriting
 them per problem. This establishes the "objective is DRTO's" principle that
-later features (the six modes, `dyn_2_ss`) build on, so getting it reusable
+later features (the six modes, `dynamic_to_steady_state`) build on, so getting it reusable
 and correct now de-risks all of them.
 
 ## Acceptance criteria
