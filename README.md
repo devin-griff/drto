@@ -45,7 +45,7 @@ plus steady-state RTO. Estimation is the planned follow-on.
 
 ## Transformations
 
-The six modes above are the **open-loop modes**, each a single solve exposed
+The six modes above are each a single solve exposed
 as a Pyomo transformation under the `drto.` namespace, alongside the two
 lower-level transformations they compose. You build one declared model and
 apply the transformation you want, the same way you apply any Pyomo
@@ -62,10 +62,10 @@ transformation.
 | Objective assembly | `drto.build_objective` |
 | Steady-state reduction | `drto.dynamic_to_steady_state` |
 
-## Closed-loop modes
+## Closed-loop frameworks
 
-On top of the open-loop modes come the four **closed-loop modes**: `NMPC`,
-`MHE`, `asNMPC`, and `asMHE`. These are specced later.
+Separately from the modes come four **closed-loop frameworks**: `NMPC`,
+`asNMPC`, `MHE`, and `asMHE`. These are specced later.
 
 ## Declaring a control problem
 
