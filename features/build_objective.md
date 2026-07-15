@@ -1,5 +1,7 @@
 # drto.build_objective
 
+**Status:** ready
+
 ## Description
 
 As a user of DRTO, I want DRTO to build my model's optimization objective
