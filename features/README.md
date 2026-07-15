@@ -1,8 +1,8 @@
 # Features
 
 drto is built spec-first: each feature is specified here before it is
-implemented. A feature spec is one Markdown file, a Status line at the top
-followed by three sections.
+implemented. A feature spec is one Markdown file, numbered in order
+(`NNN-<name>.md`), with a Status line at the top followed by three sections.
 
 ## Template
 
@@ -16,4 +16,4 @@ followed by three sections.
   implementation must satisfy. They drive the tests and the definition of
   done.
 
-`build_objective.md` is the first example.
+`001-build_objective.md` is the first example.
