@@ -100,8 +100,7 @@ already wrote: a Variable, a Constraint, a Parameter, or a Set. You build your d
 an ordinary Pyomo model, then point the declarations at its pieces;
 drto assembles the horizon problem and runs the loop. It bolts onto an
 existing model rather than replacing how you build one. The pieces are the
-object types of an optimal control problem (the dynamic-optimization
-mode):
+object types of a dynamic optimization or simulation problem:
 
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
