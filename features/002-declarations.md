@@ -41,25 +41,25 @@ declarations rather than re-deriving them.
   declared time set via pyomo-cvp. The `profile` applies to the controls named in
   that call. A control that needs a different parameterization is declared in a
   separate call.
-- `declare_continuous_dynamics(m.ode)` tags an equality Constraint whose
-  left-hand side is the DerivativeVar of a declared state.
-- `declare_discrete_dynamics(m.diff)` tags an equality Constraint whose
-  left-hand side is a declared state at the next time point. Continuous versus
-  discrete dynamics are told apart by the left-hand-side component type
+- `declare_continuous_dynamics(m.ode, ...)` tags one or more equality
+  Constraints whose left-hand sides are the DerivativeVars of declared states.
+- `declare_discrete_dynamics(m.diff, ...)` tags one or more equality Constraints
+  whose left-hand sides are declared states at the next time point. Continuous
+  versus discrete dynamics are told apart by the left-hand-side component type
   (DerivativeVar versus plain Var).
 - `declare_tracking_stage_cost` and `declare_economic_stage_cost` each tag a
   per-time-point equality Constraint whose left-hand side is the scalar
   running-cost variable; the right-hand side defines the cost.
 - `declare_tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable.
-- `declare_initial_condition(m.con)` tags an equality Constraint whose left-hand
-  side is a declared state at the first time point and whose right-hand side is
-  a mutable Param, the feedback hook.
+- `declare_initial_condition(m.con, ...)` tags one or more equality Constraints
+  whose left-hand sides are declared states at the first time point and whose
+  right-hand sides are mutable Params, the feedback hook.
 - `declare_terminal_constraint(m.con)` tags a single Constraint that references
   only states at the final time point.
-- `declare_steady_state(m.z_ss)` and `declare_steady_state_control(m.u_ss)` each
-  tag a Param holding the state or control setpoint the tracking costs drive
-  toward.
+- `declare_steady_state(m.z_ss, ...)` and
+  `declare_steady_state_control(m.u_ss, ...)` each tag one or more Params holding
+  the state or control setpoints the tracking costs drive toward.
 - The scalar-left-hand-side conventions (the cost and initial-condition
   constraints) are read from the constraint body's canonical form, so they hold
   regardless of how the user wrote the equality.
