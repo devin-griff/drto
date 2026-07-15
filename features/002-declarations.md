@@ -1,10 +1,11 @@
-# Control declarations
+# Simulation and optimization declarations
 
 **Status:** draft
 
 ## Description
 
-As a user of DRTO, I want to declare the pieces of my control problem by
+As a user of DRTO, I want to declare the pieces of my optimization or
+simulation problem by
 tagging the components I already built on my Pyomo model, so that DRTO can find
 and assemble them into the horizon problem without my restructuring the model
 or writing a separate DRTO model.
