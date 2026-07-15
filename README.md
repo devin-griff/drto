@@ -5,9 +5,11 @@
 [![CI](https://github.com/devin-griff/drto/actions/workflows/ci.yml/badge.svg)](https://github.com/devin-griff/drto/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 
-Dynamic real-time optimization: receding-horizon optimization and
-estimation for Pyomo models, with advanced-step NMPC as the headline
-capability and moving horizon estimation as the planned follow-on.
+DRTO is a unified framework for dynamic real-time optimization built on
+Pyomo. The pounce solver is required for full functionality, DRTO relies on
+capabilities in [pyomo-pounce](https://github.com/jkitchin/pounce) including
+sensitivity analysis, covariance matrix calculations, and initialization
+routines.
 
 ## Status
 
@@ -19,13 +21,6 @@ drto is built spec-first: every feature is specified under
 [`features/`](features/) before it is implemented, as a short doc with a
 status, a user-story description, a benefit hypothesis, and acceptance
 criteria that drive the tests. See [`features/README.md`](features/README.md).
-
-## Solver
-
-The pounce solver is required for full functionality. drto relies on
-capabilities in [pyomo-pounce](https://github.com/jkitchin/pounce) such as
-sensitivity analysis, covariance matrix calculations, and initialization
-routines.
 
 ## The six modes
 
