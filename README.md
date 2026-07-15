@@ -22,7 +22,7 @@ drto is built spec-first: every feature is specified under
 status, a user-story description, a benefit hypothesis, and acceptance
 criteria that drive the tests. See [`features/README.md`](features/README.md).
 
-## The six modes
+## Modes
 
 drto runs one declared model in any of six modes, the 2x3 grid of
 {steady-state, dynamic} by {simulation, optimization, estimation}. You
@@ -69,7 +69,7 @@ transformation.
 Separately from the modes come four **closed-loop frameworks**: `NMPC`,
 `asNMPC`, `MHE`, and `asMHE`. These are specced later.
 
-## Initialization
+## Initialization routines
 
 A good initial guess is often the difference between an IPOPT solve that
 converges and one that stalls, so drto provides named initializers rather than
