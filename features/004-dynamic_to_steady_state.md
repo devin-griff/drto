@@ -34,7 +34,7 @@ many modes" promise.
   model to a single point (so a per-time-point stage cost becomes the
   single-point cost).
 - The transformed model carries a `min` objective equal to the single reduced
-  stage cost, assembled via `drto.build_objective` (feature 002).
+  stage cost, assembled via `drto.build_objective` (feature 003).
 - The transformed model is the steady-state system: solving it gives an
   equilibrium satisfying the dynamics at rest (f(z,u)=0) and the model's
   algebraic relations; for a test model with a known analytic steady state, the
