@@ -27,15 +27,13 @@ which drive the tests and the definition of done. See `features/README.md`.
 Canonical commands (they mirror CI, so local green means CI green; do not
 hand-roll black or pytest flags):
 
-- `make dev` -- editable install with dev extras.
-- `make lint` -- `black --check` plus `typos`.
-- `make test` -- `pytest` with coverage.
-- `make check-imports` -- import drto with only base deps.
+- `python -m pip install -e ".[dev]"` -- editable install with dev extras.
+- `black --check --diff src/ tests/` then `typos` -- lint.
+- `python -m pytest -q --cov=drto --cov-report=term-missing` -- test with coverage.
+- `python -c "import drto; print('drto', drto.__version__)"` -- import drto with only base deps.
 
-If `make` is not on PATH (a bare Windows shell), the targets are thin
-wrappers: run `black --check --diff src/ tests/`, `typos`, and
-`python -m pytest` directly. `make help` (or reading the Makefile) lists the
-exact command behind each target.
+These mirror the CI jobs one-to-one; `.github/workflows/ci.yml` is the source
+of truth for the exact steps.
 
 This is a single pure-Python package that matches its siblings pyomo-cvp and
 pyomo-cp. When adding a file, copy the shape of the nearest sibling rather

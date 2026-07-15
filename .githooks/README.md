@@ -18,7 +18,7 @@ reaching CI.
 Fix a rejection with:
 
 ```sh
-make fmt
+black src/ tests/
 git add -u
 ```
 

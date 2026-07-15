@@ -29,8 +29,9 @@ three** of these land in the same PR:
 These mirror the CI jobs; run them for fast feedback:
 
 ```sh
-make lint    # black --check + typos
-make test    # pytest with coverage
+black --check --diff src/ tests/                          # formatting gate
+typos                                                     # spell-check
+python -m pytest -q --cov=drto --cov-report=term-missing  # tests
 ```
 
 ## House style
