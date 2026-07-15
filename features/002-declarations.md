@@ -25,13 +25,22 @@ declarations rather than re-deriving them.
   (a Var, Constraint, Param, or Set), validates that the component is of the
   expected type and meets the declaration's convention, and records it in
   `drto.info(m)` (feature 001). An invalid target errors clearly.
+- Arity: `declare_state`, `declare_control`, `declare_continuous_dynamics`,
+  `declare_discrete_dynamics`, `declare_initial_condition`,
+  `declare_steady_state`, and `declare_steady_state_control` accept varargs or an
+  indexed container (one declaration per container), since they scale with the
+  states and controls. `declare_time`, `declare_tracking_stage_cost`,
+  `declare_economic_stage_cost`, `declare_tracking_terminal_cost`, and
+  `declare_terminal_constraint` each take exactly one object and error on more
+  than one.
 - `declare_time(m.t)` tags the horizon Set. It accepts a `pyomo.dae`
   ContinuousSet or a discrete Set; DRTO does not assume continuity.
-- `declare_state(m.z, ...)` tags one or more differential-state Vars. It accepts
-  varargs and indexed containers, one declaration per container.
-- `declare_control(m.u, ..., profile=...)` tags a manipulated-input Var and sets
-  its parameterization (piecewise-constant, ...) over the declared time set via
-  pyomo-cvp.
+- `declare_state(m.z, ...)` tags one or more differential-state Vars.
+- `declare_control(m.u, ..., profile=...)` tags one or more manipulated-input
+  Vars and sets their parameterization (piecewise-constant, ...) over the
+  declared time set via pyomo-cvp. The `profile` applies to the controls named in
+  that call. A control that needs a different parameterization is declared in a
+  separate call.
 - `declare_continuous_dynamics(m.ode)` tags an equality Constraint whose
   left-hand side is the DerivativeVar of a declared state.
 - `declare_discrete_dynamics(m.diff)` tags an equality Constraint whose
@@ -46,8 +55,8 @@ declarations rather than re-deriving them.
 - `declare_initial_condition(m.con)` tags an equality Constraint whose left-hand
   side is a declared state at the first time point and whose right-hand side is
   a mutable Param, the feedback hook.
-- `declare_terminal_constraint(m.con)` tags a Constraint that references only
-  states at the final time point.
+- `declare_terminal_constraint(m.con)` tags a single Constraint that references
+  only states at the final time point.
 - `declare_steady_state(m.z_ss)` and `declare_steady_state_control(m.u_ss)` each
   tag a Param holding the state or control setpoint the tracking costs drive
   toward.
