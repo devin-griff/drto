@@ -21,10 +21,10 @@ validation runs rely on.
   errors clearly if any is missing.
 - The declared controls are fixed; the mode frees nothing and solves the model
   as declared over the horizon.
-- The objective is just zero: the transform deactivates any existing objective
-  and installs a constant-zero `Objective`, giving an NLP solver a well-posed
-  square problem for the fixed-control model. It does not call
-  `drto.build_objective`, since a simulation has no cost term to assemble.
+- The objective is zero: the transform calls `drto.build_objective` (feature
+  003) with the option for a simulation, which installs a constant-zero
+  `Objective` and gives an NLP solver a well-posed square problem for the
+  fixed-control model.
 - The transform keeps the time horizon.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
   clone).
