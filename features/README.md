@@ -24,6 +24,7 @@ Lifecycle: ![draft](https://img.shields.io/badge/draft-lightgrey) &rarr; ![ready
 | [012 warm_start_dynamic](012-warm_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [013 ideal_nmpc](013-ideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [014 asnmpc](014-asnmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [015 nonideal_nmpc](015-nonideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
