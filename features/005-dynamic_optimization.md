@@ -20,14 +20,24 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
 
 - `TransformationFactory('drto.dynamic_optimization')` requires `declare_time`,
   `declare_state`, `declare_continuous_dynamics`, `declare_control`, and at
-  least one stage cost, and errors clearly if any is missing.
+  least one of `declare_tracking_stage_cost` or `declare_economic_stage_cost`,
+  and errors clearly if any is missing.
 - It targets continuous dynamics. Discrete-time (difference-equation)
   optimization is a separate topic, out of scope for this transform.
 - The declared controls are the free decision variables, parameterized over the
   time set by their declared profile (pyomo-cvp).
 - The objective is assembled by `drto.build_objective` (feature 003) from the
-  live cost terms over the horizon.
-- The transform keeps the time horizon; it does not reduce the model to steady
+  live cost terms over the horizon. When both a tracking and an economic stage
+  cost are declared, both are summed into the objective, with a weight applied
+  to the tracking stage cost. The transform accepts that weight as an argument,
+  used only when both are present.
+- `declare_tracking_terminal_cost`, `declare_terminal_constraint`, and the
+  steady-state targets (`declare_steady_state`, `declare_steady_state_control`)
+  are optional. The transform uses them if declared.
+- Any estimation-category declarations on the model (measurements,
+  disturbances, arrival cost, estimation stage and terminal costs, estimated
+  parameters) are dropped.
+- The transform keeps the time horizon and does not reduce the model to steady
   state.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
   clone).
