@@ -19,8 +19,11 @@ validation runs rely on.
 - `TransformationFactory('drto.dynamic_simulation')` requires `declare_time`,
   `declare_state`, `declare_continuous_dynamics`, and `declare_control`, and
   errors clearly if any is missing.
-- The declared controls are fixed; the mode frees nothing and solves the model
-  as declared over the horizon.
+- The declared controls are fixed, so the mode frees nothing and solves the
+  model as declared over the horizon. A control-profile option sets what they
+  are fixed to: the full declared profile, where each control follows its
+  parameterized trajectory over the horizon, or held constant, where each
+  control is held at its value at the initial time across the whole horizon.
 - The objective is zero: the transform calls `drto.build_objective` (feature
   003) with the option for a simulation, which installs a constant-zero
   `Objective` and gives an NLP solver a well-posed square problem for the
