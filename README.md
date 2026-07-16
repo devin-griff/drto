@@ -111,7 +111,7 @@ object types of a dynamic optimization or simulation problem:
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
 | Time set | Set | `declare_time(m.t)` | The moving-horizon dimension. A `pyomo.dae` ContinuousSet, the root handle for the horizon. Dynamics are declared separately, below. |
-| State | Variable | `declare_state(m.z, ...)` | A differential state; its dynamics are declared separately, below. |
+| State | Variable | `declare_state(m.z, ...)` | A state variable. In a dynamic model it carries a DerivativeVar, with its dynamics declared separately below. In a steady-state model it need not have one. |
 | Continuous dynamics | Constraint | `declare_continuous_dynamics(m.ode_con)` | Equality ODE; its left-hand side is the state's DerivativeVar (dz/dt). |
 | Control | Variable | `declare_control(m.u, ..., profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp, over the declared time set. |
 | Tracking stage cost | Constraint | `declare_tracking_stage_cost(m.tracking_stage_con)` | Per-time-point equality for the setpoint-tracking running cost; drto sums its left-hand-side cost var over time in the objective. |

@@ -111,13 +111,16 @@ estimation-side surface follows below):
   not hunt for DerivativeVars; it validates that a continuous-dynamics LHS
   DerivativeVar is taken with respect to this set, which is what separates
   time from a spatial axis in a PDE model.
-- `declare_state(m.z1, m.z2, ...)`: tags the differential-state Vars.
+- `declare_state(m.z1, m.z2, ...)`: tags the state Vars.
   Varargs, indexed-container-aware (one call declares all members). The
   state role is declared; its dynamics are declared separately, by
   `declare_continuous_dynamics` or `declare_discrete_dynamics` below (USER
   DECISION 2026-07-14, revising the earlier auto-pickup-from-DerivativeVar
   plan: declaring the dynamics explicitly is uniform across continuous and
-  discrete time and matches the LHS convention).
+  discrete time and matches the LHS convention). A state carries a
+  DerivativeVar only in a dynamic model. A model the user built as
+  steady-state has states with no derivative, so `declare_state` does not
+  require one (USER DECISION 2026-07-16).
 - `declare_continuous_dynamics(m.ode_con)`: tags the equality Constraint of
   a continuous-time ODE. Its LHS is the DerivativeVar of a state (dz/dt),
   read via `con.expr.args[0]`; drto gets the state from the DerivativeVar

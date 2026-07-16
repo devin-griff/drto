@@ -39,7 +39,9 @@ declarations rather than re-deriving them.
   declaring the same component twice is rejected as a duplicate. Both checks run
   against the registry (feature 001).
 - `declare_time(m.t)` tags the horizon Set, a `pyomo.dae` ContinuousSet.
-- `declare_state(m.z, ...)` tags one or more differential-state Vars.
+- `declare_state(m.z, ...)` tags one or more state Vars. A state carries a
+  `DerivativeVar` for its dynamics only in a dynamic model, so a steady-state
+  model's states need not have one and `declare_state` does not require it.
 - `declare_control(m.u, ..., profile=...)` tags one or more manipulated-input
   Vars and sets their parameterization (piecewise-constant, ...) over the
   declared time set via pyomo-cvp. The `profile` applies to the controls named in
