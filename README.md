@@ -37,9 +37,12 @@ is.
 
 Down the columns: simulation frees nothing and solves the model as given;
 optimization frees the controls and adds a cost; estimation frees the
-states and fits them to measurements. Across the rows: steady-state
-collapses the model to a single equilibrium point, dynamic keeps the time
-horizon. The optimization and estimation columns are duals (NMPC with MHE,
+states and fits them to measurements. Across the rows: the
+steady-state modes solve at a single equilibrium point, the dynamic modes
+keep the time horizon. A dynamic model is collapsed to that equilibrium, and
+a model authored directly as steady-state, with no time or dynamics, runs in
+the steady-state modes as it stands, so a user can define the model either
+way and still use it across the modes. The optimization and estimation columns are duals (NMPC with MHE,
 RTO with reconciliation), so one declaration surface serves both.
 
 The near-term focus is the optimization column: dynamic NMPC/D-RTO, whose
