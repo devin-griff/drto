@@ -19,8 +19,10 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.dynamic_optimization')` requires `declare_time`,
-  `declare_state`, a dynamics declaration, `declare_control`, and at least one
-  stage cost, and errors clearly if any is missing.
+  `declare_state`, `declare_continuous_dynamics`, `declare_control`, and at
+  least one stage cost, and errors clearly if any is missing.
+- It targets continuous dynamics. Discrete-time (difference-equation)
+  optimization is a separate topic, out of scope for this transform.
 - The declared controls are the free decision variables, parameterized over the
   time set by their declared profile (pyomo-cvp).
 - The objective is assembled by `drto.build_objective` (feature 003) from the
