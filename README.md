@@ -22,6 +22,8 @@ drto is built spec-first: every feature is specified under
 [`features/`](features/) before it is implemented, as a short doc with a
 status, a user-story description, a benefit hypothesis, and acceptance
 criteria that drive the tests. See [`features/README.md`](features/README.md).
+A feature request may be made by opening a pull request that adds a feature
+file under [`features/`](features/) in the template format.
 
 ## Modes
 
