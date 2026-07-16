@@ -1,4 +1,4 @@
-# Simulation and optimization declarations
+# Dynamic optimization and simulation declarations
 
 **Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
@@ -26,8 +26,8 @@ declarations rather than re-deriving them.
   expected type and meets the declaration's convention, and records it in
   `drto.info(m)` (feature 001). An invalid target errors clearly.
 - Arity: `declare_state`, `declare_control`, `declare_continuous_dynamics`,
-  `declare_discrete_dynamics`, `declare_initial_condition`,
-  `declare_steady_state`, and `declare_steady_state_control` accept varargs or an
+  `declare_initial_condition`, `declare_steady_state`, and
+  `declare_steady_state_control` accept varargs or an
   indexed container (one declaration per container), since they scale with the
   states and controls. `declare_time`, `declare_tracking_stage_cost`,
   `declare_economic_stage_cost`, `declare_tracking_terminal_cost`, and
@@ -48,10 +48,6 @@ declarations rather than re-deriving them.
   separate call.
 - `declare_continuous_dynamics(m.ode, ...)` tags one or more equality
   Constraints whose left-hand sides are the DerivativeVars of declared states.
-- `declare_discrete_dynamics(m.diff, ...)` tags one or more equality Constraints
-  whose left-hand sides are declared states at the next time point. Continuous
-  versus discrete dynamics are told apart by the left-hand-side component type
-  (DerivativeVar versus plain Var).
 - `declare_tracking_stage_cost(m.con)` and `declare_economic_stage_cost(m.con)`
   each tag a per-time-point equality Constraint whose left-hand side is the
   scalar running-cost variable; the right-hand side defines the cost.
