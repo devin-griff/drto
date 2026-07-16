@@ -21,6 +21,9 @@ Lifecycle: ![draft](https://img.shields.io/badge/draft-lightgrey) &rarr; ![ready
 | [009 initialize_steady_state](009-initialize_steady_state.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [010 cold_start_dynamic](010-cold_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [011 advanced_step_controller](011-advanced_step_controller.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [012 warm_start_dynamic](012-warm_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [013 nmpc](013-nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [014 asnmpc](014-asnmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
