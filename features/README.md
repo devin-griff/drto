@@ -20,6 +20,7 @@ Lifecycle: ![draft](https://img.shields.io/badge/draft-lightgrey) &rarr; ![ready
 | [008 steady_state_optimization](008-steady_state_optimization.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [009 initialize_steady_state](009-initialize_steady_state.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [010 cold_start_dynamic](010-cold_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [011 show](011-show.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
