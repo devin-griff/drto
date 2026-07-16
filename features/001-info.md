@@ -49,9 +49,11 @@ cloning, which the `create_using` form of every transformation depends on.
   while its attributes stay queryable.
 - The view groups components by role (the horizon or single point, states,
   controls marked free or fixed, dynamics, stage and terminal costs, boundary
-  conditions, steady-state targets), one labeled line each, using the index set
-  rather than expanding every time point.
-- It renders the objective in compact symbolic form and annotates each applied
-  transformation's outcome (what it freed or fixed, the terms it dropped, the
-  objective it assembled, whether it kept or collapsed the horizon), read from
-  the transformation log.
+  conditions, steady-state targets), one labeled line each.
+- Indexed constraints and the objective render in compact symbolic form: one
+  equation per constraint family with a free index over its set, for example
+  `dz[k]/dt == f(z[k], u[k])` for `k` in the time set, not the per-index
+  expansion `pprint` produces.
+- It annotates each applied transformation's outcome (what it freed or fixed,
+  the terms it dropped, the objective it assembled, whether it kept or collapsed
+  the horizon), read from the transformation log.
