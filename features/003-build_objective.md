@@ -18,10 +18,13 @@ time.
 
 ## Acceptance criteria
 
-- `drto.build_objective(m)` is a function the mode transforms call as their
-  final step to assemble the objective from the live cost terms on the model
-  (the cost declarations the calling mode has kept).
-- It installs exactly one minimize `Objective` summed from those live terms.
+- `drto.build_objective(m)` assembles the objective from the live cost terms on
+  the model (the cost declarations that are present and kept), installing
+  exactly one minimize `Objective` summed from those terms. The mode transforms
+  call it as their final step, so the assembly logic lives in one place.
+- It is also registered as `TransformationFactory('drto.build_objective')` so a
+  user can apply it on its own. The transform calls the same function, and both
+  `apply_to` (in place) and `create_using` (a clone) work.
 - The objective is the plain sum of each live stage cost's per-point cost var
   over its time index, excluding the last time point, plus each live
   terminal-cost var.
