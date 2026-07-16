@@ -17,10 +17,13 @@ rather than duplicating it.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.steady_state_simulation')` requires
-  `declare_time`, `declare_state`, and `declare_continuous_dynamics`, and errors
-  clearly if any is missing.
-- It composes `drto.dynamic_to_steady_state` (feature 004) to collapse the model
-  to a single equilibrium point, with the declared controls fixed.
+  `declare_state`, and errors clearly if it is missing. `declare_time` and
+  `declare_continuous_dynamics` are optional, since drto cannot tell whether the
+  user built a dynamic model or a steady-state one.
+- If the model is dynamic (time and continuous dynamics declared), it reduces to
+  a single equilibrium point by composing `drto.dynamic_to_steady_state`
+  (feature 004). If the model is already steady-state, that step is skipped.
+  Either way the declared controls are fixed.
 - A control option sets the values the fixed controls take: supplied control
   values, or with nothing supplied, the values the control variables are already
   initialized to on the model. The steady state is a single point, so the

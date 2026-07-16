@@ -17,11 +17,14 @@ pair. This is what makes the D-RTO name literal.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.steady_state_optimization')` requires
-  `declare_time`, `declare_state`, `declare_continuous_dynamics`,
-  `declare_control`, and an economic stage cost, and errors clearly if any is
-  missing.
-- It composes `drto.dynamic_to_steady_state` (feature 004); the declared
-  controls are free.
+  `declare_state`, `declare_control`, and an economic stage cost, and errors
+  clearly if any is missing. `declare_time` and `declare_continuous_dynamics`
+  are optional, since drto cannot tell whether the user built a dynamic model or
+  a steady-state one.
+- If the model is dynamic (time and continuous dynamics declared), it reduces to
+  a single point by composing `drto.dynamic_to_steady_state` (feature 004). If
+  the model is already steady-state, that step is skipped. The declared controls
+  are free.
 - The objective is the single-point economic cost, assembled via
   `drto.build_objective` (feature 003).
 - Solving the transformed model gives the optimal steady operating point.

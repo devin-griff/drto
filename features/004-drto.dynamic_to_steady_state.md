@@ -33,8 +33,10 @@ many modes" promise.
 - It removes the time index from every variable and constraint, collapsing the
   model to a single point (so a per-time-point stage cost becomes the
   single-point cost).
-- The transformed model carries a `min` objective equal to the single reduced
-  stage cost, assembled via `drto.build_objective` (feature 003).
+- It does not construct the objective. Its only interaction with an objective,
+  if one is present, is removing the time index from the variables in it while
+  collapsing to a single point. Choosing and assembling the mode's objective is
+  left to the mode transforms and `drto.build_objective`.
 - The transformed model is the steady-state system: solving it gives an
   equilibrium satisfying the dynamics at rest (f(z,u)=0) and the model's
   algebraic relations; for a test model with a known analytic steady state, the
