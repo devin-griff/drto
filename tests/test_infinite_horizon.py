@@ -1,0 +1,250 @@
+# Copyright (c) 2026 Devin Griffith
+# SPDX-License-Identifier: BSD-3-Clause
+"""Feature 004: the infinite-horizon terminal segment."""
+import math
+
+import pyomo.environ as pyo
+import pytest
+from pyomo.dae import ContinuousSet, DerivativeVar
+
+import drto
+from test_declarations import base_model, declared_model
+
+ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
+
+IH = "drto.infinite_horizon"
+
+
+def ready_model():
+    """The declared linear model, discretized: ready for the transform."""
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def hicks(n_samples):
+    """The Hicks-Ray CSTR, declared, with an n_samples-step horizon."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=range(n_samples + 1))
+    m.zc = pyo.Var(m.t, bounds=(0, 1), initialize=0.6416)
+    m.zt = pyo.Var(m.t, bounds=(0, None), initialize=0.5387)
+    m.dzc = DerivativeVar(m.zc, wrt=m.t)
+    m.dzt = DerivativeVar(m.zt, wrt=m.t)
+    m.v1 = pyo.Var(m.t, bounds=(0.166666666666667, 1), initialize=0.57828)
+    m.v2 = pyo.Var(m.t, bounds=(0.025, 1), initialize=0.49989)
+    m.zc_hat = pyo.Param(initialize=0.625, mutable=True)
+    m.zt_hat = pyo.Param(initialize=0.525, mutable=True)
+    m.cost = pyo.Var(m.t, within=pyo.NonNegativeReals)
+
+    @m.Constraint(m.t)
+    def zc_ode(m, t):
+        return m.dzc[t] == (1 - m.zc[t]) / (40 * m.v2[t]) - 300 * m.zc[t] * pyo.exp(
+            -5 / m.zt[t]
+        )
+
+    @m.Constraint(m.t)
+    def zt_ode(m, t):
+        return m.dzt[t] == (0.395 - m.zt[t]) / (40 * m.v2[t]) + 300 * m.zc[t] * pyo.exp(
+            -5 / m.zt[t]
+        ) - 0.000195 * 600 * m.v1[t] * (m.zt[t] - 0.38)
+
+    @m.Constraint(m.t)
+    def stage(m, t):
+        if t == m.t.last():
+            return pyo.Constraint.Skip
+        return m.cost[t] == (
+            10 * (m.zc[t] - 0.6416) ** 2
+            + 2 * (m.zt[t] - 0.5387) ** 2
+            + (m.v1[t] - 0.57828) ** 2
+            + 0.5 * (m.v2[t] - 0.49989) ** 2
+        )
+
+    @m.Constraint()
+    def zc_init(m):
+        return m.zc[0] == m.zc_hat
+
+    @m.Constraint()
+    def zt_init(m):
+        return m.zt[0] == m.zt_hat
+
+    drto.declare_time(m.t)
+    drto.declare_state(m.zc, m.zt)
+    drto.declare_continuous_dynamics(m.zc_ode, m.zt_ode)
+    drto.declare_control(m.v1, m.v2, profile="piecewise_constant")
+    drto.declare_tracking_stage_cost(m.stage)
+    drto.declare_initial_condition(m.zc_init, m.zt_init)
+    return m
+
+
+# ----------------------------------------------------------------------
+# guards
+# ----------------------------------------------------------------------
+def test_requires_the_declarations():
+    m = base_model()
+    with pytest.raises(ValueError, match="declare_time"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_economic_alone_is_rejected():
+    m = base_model()
+    m.ecost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def econ(m, t):
+        if t == m.t.last():
+            return pyo.Constraint.Skip
+        return m.ecost[t] == -m.u[t]
+
+    drto.declare_time(m.t)
+    drto.declare_state(m.z)
+    drto.declare_continuous_dynamics(m.ode)
+    drto.declare_control(m.u)
+    drto.declare_economic_stage_cost(m.econ)
+    with pytest.raises(ValueError, match="tail integral diverges"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_requires_a_discretized_time_set():
+    m = declared_model()
+    with pytest.raises(ValueError, match="discretize"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_beta_must_exceed_one():
+    m = ready_model()
+    with pytest.raises(ValueError, match="beta > 1"):
+        pyo.TransformationFactory(IH).apply_to(m, beta=1.0)
+
+
+def test_double_application_errors():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    with pytest.raises(ValueError, match="already applied"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_assembled_objective_blocks_application():
+    m = ready_model()
+    drto.build_objective(m)
+    with pytest.raises(ValueError, match="already assembled"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+# ----------------------------------------------------------------------
+# structure
+# ----------------------------------------------------------------------
+def test_segment_structure():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_infinite_horizon
+    fe = b.tau.get_finite_elements()
+    assert len(fe) == 4  # nfe=3 default
+    # dilated dynamics at interior collocation points only
+    assert all(s not in b.ode for s in fe)
+    assert len(b.ode) == 15  # 3 elements x 5 points
+    # equilibrium endpoint and linking present
+    assert b.component("ode_equilibrium") is not None
+    assert b.component("z_link") is not None
+    # segment control parameterized: free values at collocation points only
+    assert len(b.u) == 15
+    assert 0 not in b.u and 1 not in b.u
+
+
+def test_gamma_follows_the_mesh_rule_and_option_overrides():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_infinite_horizon
+    dt = 2.5  # the declared sample spacing
+    tau11 = sorted(b.tau)[1]
+    assert pyo.value(b.gamma) == pytest.approx(math.atanh(tau11) / dt)
+
+    m2 = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m2, gamma=0.05)
+    assert pyo.value(m2.drto_infinite_horizon.gamma) == 0.05
+
+
+def test_tail_terms_reach_the_objective():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_infinite_horizon
+    obj = drto.build_objective(m)
+    from pyomo.common.collections import ComponentSet
+    from pyomo.core.expr import identify_variables
+
+    in_obj = ComponentSet(identify_variables(obj.expr))
+    (group,) = drto.info(m).declarations("cost_group")
+    assert len(group["terms"]) == 15  # 3 elements x 5 points
+    assert all(var in in_obj for var, _ in group["terms"])
+
+
+def test_beta_and_gamma_retune_without_reapply():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_infinite_horizon
+    drto.build_objective(m)
+    for t in m.t:
+        if m.cost[t].value is None or True:
+            m.cost[t].set_value(0.0)
+    for s in b.cost.index_set():
+        b.cost[s].set_value(1.0)
+    obj = m.component("drto_objective")
+    before = pyo.value(obj.expr)
+    b.beta.set_value(2.4)
+    assert pyo.value(obj.expr) == pytest.approx(2 * before)
+
+
+def test_create_using_leaves_the_source_alone():
+    m = ready_model()
+    m2 = pyo.TransformationFactory(IH).create_using(m)
+    assert m2.component("drto_infinite_horizon") is not None
+    assert m.component("drto_infinite_horizon") is None
+    assert drto.info(m2).has_transformation(IH)
+    assert not drto.info(m).has_transformation(IH)
+
+
+def test_application_is_recorded():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m, nfe=2, ncp=4)
+    reg = drto.info(m)
+    assert reg.has_transformation(IH)
+    outcome = reg.transformations[-1]["outcome"]
+    assert outcome["segment"] == "2 elements x 4 Legendre points"
+
+
+# ----------------------------------------------------------------------
+# the numbers: the Hicks study, compressed
+# ----------------------------------------------------------------------
+@needs_ipopt
+def test_hicks_short_horizon_reproduces_the_long_one():
+    ipopt = pyo.SolverFactory("ipopt")
+
+    m50 = hicks(50)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m50, wrt=m50.t, nfe=50, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("cvp.parameterize").apply_to(m50)
+    drto.build_objective(m50)
+    r = ipopt.solve(m50)
+    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+
+    m5 = hicks(5)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m5, wrt=m5.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory(IH).apply_to(m5)
+    pyo.TransformationFactory("cvp.parameterize").apply_to(m5)
+    drto.build_objective(m5)
+    r = ipopt.solve(m5)
+    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+
+    # the first control move matches the long horizon
+    assert pyo.value(m5.v1[0]) == pytest.approx(pyo.value(m50.v1[0]), rel=0.05)
+    assert pyo.value(m5.v2[0]) == pytest.approx(pyo.value(m50.v2[0]), rel=0.05)
+
+    # the endpoint found the setpoint equilibrium with no pins
+    b = m5.drto_infinite_horizon
+    assert pyo.value(b.zc[1]) == pytest.approx(0.6416, abs=2e-3)
+    assert pyo.value(b.zt[1]) == pytest.approx(0.5387, abs=2e-3)

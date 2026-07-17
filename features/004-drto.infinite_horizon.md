@@ -1,6 +1,6 @@
 # drto.infinite_horizon
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
@@ -84,7 +84,9 @@ move.
 - The tail cost uses no quadrature state. The declared tracking stage cost is
   replicated at the segment collocation points and enters the objective as
   explicit weighted terms, `beta * h_i * omega_k * psi_ik /
-  (gamma*(1 - tau_ik^2))`, assembled by `drto.build_objective` (feature 003)
+  (gamma * dt * (1 - tau_ik^2))`, the paper's `(beta/dt) * phi_f`, so the tail
+  is commensurate with the per-sample stage sum. They are assembled by
+  `drto.build_objective` (feature 003)
   as an option-dependent outcome. The Gauss weights are derived from the
   discretization's stored collocation nodes, since `pyomo.dae` stores nodes
   but no quadrature weights, and the result equals the paper's
@@ -98,8 +100,8 @@ move.
   are never left on the segment.
 - `gamma` is a mutable Param, derived by default from the rule
   `tanh(gamma*dt) = tau_11`: the segment's first collocation point lands one
-  sampling time past the junction, with `dt` read from the discretized
-  horizon's element spacing. An explicit `gamma` option overrides the rule.
+  sampling time past the junction, with `dt` read from the sample grid
+  captured by `declare_time`. An explicit `gamma` option overrides the rule.
 - `beta` is a mutable Param set by an option, default 1.2, and must satisfy
   `beta > 1` (paper section 4.1.2): the terminal cost must overestimate the
   tail, and the margin `beta - 1` is what covers the quadrature error, so

@@ -58,7 +58,7 @@ def _check_ctype(component, ctype_name, fn):
         )
 
 
-def _declare_single(kind, component, fn):
+def _declare_single(kind, component, fn, **metadata):
     """Record a one-of-each declaration, enforcing the re-declaration rule."""
     reg = info(component.model())
     existing = reg.components(kind)
@@ -69,7 +69,7 @@ def _declare_single(kind, component, fn):
             f"drto: {fn} was already called with '{existing[0].name}'; the "
             f"model has one {kind.replace('_', ' ')}. Got '{component.name}'."
         )
-    reg.record_declaration(kind, component)
+    reg.record_declaration(kind, component, **metadata)
     return reg
 
 
@@ -149,9 +149,11 @@ def _members(con):
 def declare_time(component):
     """Declare the horizon time set, a ``pyomo.dae`` ContinuousSet.
 
-    The root handle for the moving-horizon machinery: the horizon's start and
-    end come off its bounds, and the dynamics are validated against it.
-    Exactly one per model.
+    The root handle for the moving-horizon machinery. The set is initialized
+    with the sample grid (the sampling instants), and declaring it captures
+    that grid in the registry: the samples define the stage-cost sum (feature
+    003) and the sampling time. Exactly one per model, declared before the
+    set is discretized.
     """
     _container(component, "declare_time")
     if not isinstance(component, ContinuousSet):
@@ -159,7 +161,18 @@ def declare_time(component):
             f"drto: declare_time expects a pyomo.dae ContinuousSet, got "
             f"{type(component).__name__} '{component.name}'."
         )
-    _declare_single("time", component, "declare_time")
+    if component.get_discretization_info():
+        raise ValueError(
+            f"drto: declare_time must be called before '{component.name}' is "
+            f"discretized: the set's points are captured as the sample grid."
+        )
+    samples = tuple(sorted(component))
+    if len(samples) < 2:
+        raise ValueError(
+            f"drto: initialize '{component.name}' with the sample grid (the "
+            f"sampling instants); it holds {len(samples)} point(s)."
+        )
+    _declare_single("time", component, "declare_time", samples=samples)
 
 
 def declare_state(*components):

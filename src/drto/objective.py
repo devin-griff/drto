@@ -88,7 +88,12 @@ def _live_cost_terms(reg):
     generic ``cost_group`` records contribute their own ``terms`` pairs. A
     record's ``weight`` entry (default 1) scales its group.
     """
+    samples = None
+    time_records = reg.declarations("time")
+    if time_records:
+        samples = set(time_records[0]["samples"])
     for kind in _STAGE_KINDS + _TERMINAL_KINDS:
+        stage = kind in _STAGE_KINDS
         for record in reg.declarations(kind):
             con = record["component"]
             if con.parent_block() is None:  # removed from the model
@@ -97,6 +102,12 @@ def _live_cost_terms(reg):
             members = con.values() if con.is_indexed() else (con,)
             for cd in members:
                 if not cd.active:
+                    continue
+                # the stage-cost sum runs at the sample points: cost members
+                # at interior collocation points exist after discretization
+                # but are not summed, keeping the finite horizon commensurate
+                # with the infinite-horizon tail
+                if stage and samples is not None and cd.index() not in samples:
                     continue
                 var, _ = _side_matching(
                     cd, _is_var_member, "build_objective", "the cost variable"

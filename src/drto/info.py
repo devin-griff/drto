@@ -234,7 +234,13 @@ def _component_category(comp):
 def _entry(record, kind):
     """Render one non-constraint declaration record as a short entry."""
     comp = record["component"]
-    notes = [str(v) for k, v in record.items() if k != "component"]
+    # only short scalar metadata renders; structural payloads (e.g. a
+    # cost_group's terms) stay out of the view
+    notes = [
+        str(v)
+        for k, v in record.items()
+        if k != "component" and isinstance(v, (str, int, float, bool))
+    ]
     if _component_category(comp) == "set":
         points = f"{len(comp)} points" if len(comp) else "no points"
         notes.append(f"{type(comp).__name__}, {points}")

@@ -45,10 +45,13 @@ it the same way every time.
   outcomes.
 - The cost objective is the sum of the live registered cost groups, each with
   its group's weights. The declared stage costs are the uniform-weight group:
-  each live stage cost's per-point cost var summed over its time index,
-  excluding the last time point, plus each live terminal-cost var. For a time
-  set over 0..N, the stage-cost sum runs over 0..N-1, and a live terminal cost
-  applies at N.
+  each live stage cost's cost var summed at the sample points, the grid
+  captured by `declare_time` (feature 002), plus each live terminal-cost var.
+  For samples 0..N, the stage-cost sum runs over 0..N-1 and a live terminal
+  cost applies at N. Cost-var members at interior collocation points exist
+  after discretization but do not enter the sum: the samples are the sum's
+  index set, which is what makes the finite horizon and the infinite-horizon
+  tail (feature 004) commensurate.
 - Transforms may register additional cost groups carrying their own per-point
   weights (`drto.infinite_horizon`, feature 004, registers its tail terms this
   way), and the assembly includes every registered group that is live: its

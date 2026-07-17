@@ -16,7 +16,7 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 m = pyo.ConcreteModel()
-m.t = ContinuousSet(bounds=(0, 10))
+m.t = ContinuousSet(initialize=range(11))  # the sample grid, dt = 1
 m.z = pyo.Var(m.t)
 m.dzdt = DerivativeVar(m.z, wrt=m.t)
 m.u = pyo.Var(m.t, bounds=(0, 1))
@@ -81,7 +81,11 @@ declarations rather than re-deriving them.
   model has one of each. A varargs declaration accumulates across calls, but
   declaring the same component twice is rejected as a duplicate. Both checks run
   against the registry (feature 001).
-- `declare_time(m.t)` tags the horizon Set, a `pyomo.dae` ContinuousSet.
+- `declare_time(m.t)` tags the horizon Set, a `pyomo.dae` ContinuousSet,
+  initialized with the sample grid (the sampling instants). Declaring it
+  captures that grid in the registry: the samples define the stage-cost sum
+  (feature 003) and the sampling time `dt`, so `declare_time` errors if the
+  set holds fewer than two points or is already discretized.
 - `declare_state(m.z, ...)` tags one or more state Vars. A state carries a
   `DerivativeVar` for its dynamics only in a dynamic model, so a steady-state
   model's states need not have one and `declare_state` does not require it.

@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.infinite_horizon` (feature 004): the terminal segment of Dinh et al.
+  (2025). Segment copies of the declared states and controls, dilated
+  dynamics at interior Gauss-Legendre points, hard equilibrium endpoint, the
+  tracking stage cost replicated as the tail integrand, and the tail cost as
+  explicit Gauss-weighted terms, `(beta/dt)*phi_f`, registered as a cost
+  group for `build_objective`. `beta` and `gamma` are mutable Params,
+  symbolic in dynamics and weights; `gamma` defaults to the mesh rule.
+
+### Changed
+
+- `declare_time` captures the sample grid (the ContinuousSet's initialized
+  points) and requires an undiscretized set with at least two points; the
+  stage-cost sum in `build_objective` runs at the samples, keeping the finite
+  horizon commensurate with the infinite-horizon tail.
+
 - `drto.build_objective` (feature 003): one routine owns objective
   installation. Default assembles the live registered cost groups by their
   weights (stage costs per active member, terminal cost, and generic

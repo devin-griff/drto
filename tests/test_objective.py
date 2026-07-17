@@ -23,6 +23,18 @@ def test_bare_call_assembles_the_live_stage_cost():
     assert cost_vars(obj) == expected
 
 
+def test_stage_sum_stays_at_the_samples_after_discretization():
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    obj = drto.build_objective(m)
+    # cost members now exist at every collocation point, but only the
+    # sample grid captured by declare_time enters the sum
+    expected = ComponentSet(m.cost[t] for t in (0, 2.5, 5, 7.5))
+    assert cost_vars(obj) == expected
+
+
 def test_terminal_cost_var_joins_the_sum():
     m = declared_model()
     m.term = pyo.Var()

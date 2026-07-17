@@ -30,7 +30,7 @@ classifiers = [
 dependencies = ["pyomo>=6.8.1"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "pyomo-cvp>=0.6"]
+dev = ["pytest", "pytest-cov", "pyomo-cvp>=0.6", "pyomo-ripopt"]
 examples = ["numpy", "matplotlib", "jupyter"]
 docs = ["sphinx", "myst-nb", "sphinx-book-theme", "sphinx-copybutton"]
 

@@ -25,6 +25,9 @@ from drto.declarations import (
 from drto.info import Info, info
 from drto.objective import build_objective
 
+# importing registers the drto.* transformations
+from drto import infinite_horizon as _infinite_horizon  # noqa: F401
+
 try:
     __version__ = version("drto")
 except PackageNotFoundError:  # not installed (e.g. running from a source tree)
