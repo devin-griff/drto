@@ -13,7 +13,7 @@ state.
 Usage from a notebook in ``examples/``::
 
     from models.hicks import hicks
-    m = hicks(n_samples=5)
+    m = hicks(N=5)
 """
 import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
@@ -21,16 +21,16 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 
-def hicks(n_samples=5, dt=1.0):
-    """Return the declared Hicks-Ray CSTR with an ``n_samples``-step horizon.
+def hicks(N=5, h=1):
+    """Return the declared Hicks-Ray CSTR with an ``N``-step horizon.
 
-    The time set is initialized with the sample grid (``n_samples`` steps of
-    ``dt``), the convention ``drto.horizon`` captures. All physical constants
+    The time set is initialized with the sample grid (``N`` steps of the
+    sampling time ``h``), the convention ``drto.horizon`` captures. All physical constants
     and setpoints are mutable Params, so they retune by ``set_value``; the
     initial state is set through ``m.zc_hat`` / ``m.zt_hat``.
     """
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(initialize=[i * dt for i in range(n_samples + 1)])
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
 
     m.u1sf = pyo.Param(initialize=600, mutable=True)  # coolant-flow scale factor
     m.u2sf = pyo.Param(initialize=40, mutable=True)  # residence-time scale factor

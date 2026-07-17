@@ -10,7 +10,7 @@ that a notebook's structure, not the model, is the story.
 Usage from a notebook in ``examples/``::
 
     from models.first_order import first_order
-    m = first_order(n_samples=10)
+    m = first_order(N=10)
 """
 import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
@@ -18,15 +18,15 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 
-def first_order(n_samples=10, dt=1.0):
-    """Return the declared first-order model with an ``n_samples``-step horizon.
+def first_order(N=10, h=1):
+    """Return the declared first-order model with an ``N``-step horizon.
 
-    The time set is initialized with the sample grid (``n_samples`` steps of
-    ``dt``). The gain and time constant, the setpoints, and the initial state
+    The time set is initialized with the sample grid (``N`` steps of the
+    sampling time ``h``). The gain and time constant, the setpoints, and the initial state
     are mutable Params.
     """
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(initialize=[i * dt for i in range(n_samples + 1)])
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
 
     m.tau_p = pyo.Param(initialize=2.0, mutable=True)  # time constant
     # a consistent equilibrium pair: dz/dt = 0 requires z = u for this model

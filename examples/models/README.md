@@ -9,13 +9,13 @@ decorator-style constraints, unbounded cost variables, and the full feature
 
 | Module | Builder | Model |
 | --- | --- | --- |
-| `hicks.py` | `hicks(n_samples=5, dt=1.0)` | Hicks-Ray CSTR (Hicks & Ray 1971), the canonical nonlinear example: two states, two controls, exothermic reaction. |
-| `first_order.py` | `first_order(n_samples=10, dt=1.0)` | First-order linear system, the minimal example from the feature 002 spec. |
+| `hicks.py` | `hicks(N=5, h=1)` | Hicks-Ray CSTR (Hicks & Ray 1971), the canonical nonlinear example: two states, two controls, exothermic reaction. |
+| `first_order.py` | `first_order(N=10, h=1)` | First-order linear system, the minimal example from the feature 002 spec. |
 
 From a notebook in `examples/`:
 
 ```python
 from models.hicks import hicks
 
-m = hicks(n_samples=5)
+m = hicks(N=5)
 ```

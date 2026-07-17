@@ -20,7 +20,8 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 m = pyo.ConcreteModel()
-m.t = ContinuousSet(initialize=range(11))  # the sample grid, dt = 1
+N, h = 10, 1  # samples and sampling time
+m.t = ContinuousSet(initialize=pyo.RangeSet(0, N*h, h))  # the sample grid
 drto.horizon(m.t)
 
 m.z = pyo.Var(m.t)
@@ -63,7 +64,8 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 m = pyo.ConcreteModel()
-m.t = drto.horizon(ContinuousSet(initialize=range(11)))  # the sample grid, dt = 1
+N, h = 10, 1  # samples and sampling time
+m.t = drto.horizon(ContinuousSet(initialize=pyo.RangeSet(0, N*h, h)))
 m.z = drto.state(pyo.Var(m.t))
 m.dzdt = DerivativeVar(m.z, wrt=m.t)
 m.u = drto.control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")

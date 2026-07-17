@@ -11,7 +11,8 @@ import drto
 def base_model():
     """The feature 002 example model, before any declarations."""
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(bounds=(0, 10), initialize=[0, 2.5, 5, 7.5, 10])
+    N, h = 4, 2.5  # samples and sampling time
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
     m.z = pyo.Var(m.t)
     m.dzdt = DerivativeVar(m.z, wrt=m.t)
     m.u = pyo.Var(m.t, bounds=(0, 1))
@@ -54,7 +55,8 @@ def declared_model():
 def wrapped_model():
     """The feature 002 wrapping example: declared as the model is written."""
     m = pyo.ConcreteModel()
-    m.t = drto.horizon(ContinuousSet(bounds=(0, 10), initialize=[0, 2.5, 5, 7.5, 10]))
+    N, h = 4, 2.5  # samples and sampling time
+    m.t = drto.horizon(ContinuousSet(initialize=pyo.RangeSet(0, N * h, h)))
     m.z = drto.state(pyo.Var(m.t))
     m.dzdt = DerivativeVar(m.z, wrt=m.t)
     m.u = drto.control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")
@@ -507,7 +509,8 @@ def test_decorator_validation_still_applies():
 def test_styles_mix_per_component():
     # decorator constraints over tagged variables (the spec's example mix)
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(bounds=(0, 10), initialize=[0, 2.5, 5, 7.5, 10])
+    N, h = 4, 2.5  # samples and sampling time
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
     drto.horizon(m.t)
     m.z = pyo.Var(m.t)
     drto.state(m.z)

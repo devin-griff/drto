@@ -25,10 +25,10 @@ def ready_model():
     return m
 
 
-def hicks(n_samples):
-    """The Hicks-Ray CSTR, declared, with an n_samples-step horizon."""
+def hicks(N, h=1):
+    """The Hicks-Ray CSTR, declared, with an N-step horizon."""
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(initialize=range(n_samples + 1))
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
     m.u1sf = pyo.Param(initialize=600, mutable=True)  # coolant-flow scale factor
     m.u2sf = pyo.Param(initialize=40, mutable=True)  # residence-time scale factor
     m.k0 = pyo.Param(initialize=300, mutable=True)  # Arrhenius pre-exponential
