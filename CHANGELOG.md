@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `drto.info` (feature 001): the per-model registry. Records declarations by
+  kind and an ordered transformation log, backed by `Block.private_data` so it
+  survives `clone()`/`create_using` with remapped component references, and
+  renders a drto-aware view (console and notebook) with indexed constraints in
+  compact symbolic form.
+
 ## [0.0.0] - 2026-07-14
 
 ### Added
