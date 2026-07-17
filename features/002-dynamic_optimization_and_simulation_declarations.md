@@ -1,6 +1,6 @@
 # Dynamic optimization and simulation declarations
 
-**Status:** ![shipped](https://img.shields.io/badge/shipped-brightgreen)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
@@ -39,14 +39,14 @@ def stage(m, t):
 def init(m):
     return m.z[0] == m.z_hat
 
-drto.declare_time(m.t)
-drto.declare_state(m.z)
-drto.declare_continuous_dynamics(m.ode)
-drto.declare_control(m.u, profile="piecewise_constant")
-drto.declare_tracking_stage_cost(m.stage)
-drto.declare_initial_condition(m.init)
-drto.declare_steady_state(m.z_ss)
-drto.declare_steady_state_control(m.u_ss)
+drto.horizon(m.t)
+drto.state(m.z)
+drto.continuous_dynamics(m.ode)
+drto.control(m.u, profile="piecewise_constant")
+drto.tracking_stage_cost(m.stage)
+drto.initial_condition(m.init)
+drto.steady_state(m.z, m.z_ss)
+drto.steady_state_control(m.u, m.u_ss)
 ```
 
 Later features elide this as `# ... declared model m (feature 002) ...`.
@@ -62,39 +62,39 @@ declarations rather than re-deriving them.
 
 ## Acceptance criteria
 
-- Each `declare_*` function tags an existing Pyomo component on the user's model
+- Each declaration function tags an existing Pyomo component on the user's model
   (a Var, Constraint, Param, or Set), validates that the component is of the
   expected type and meets the declaration's convention, and records it in
   `drto.info(m)` (feature 001). An invalid target errors clearly.
-- Arity: `declare_state`, `declare_control`, `declare_continuous_dynamics`,
-  `declare_initial_condition`, `declare_steady_state`, and
-  `declare_steady_state_control` accept varargs or an
+- Arity: `state`, `control`, `continuous_dynamics`, and
+  `initial_condition` accept varargs or an
   indexed container (one declaration per container), since they scale with the
-  states and controls. `declare_time`, `declare_tracking_stage_cost`,
-  `declare_economic_stage_cost`, `declare_tracking_terminal_cost`, and
-  `declare_terminal_constraint` each take exactly one object and error on more
-  than one.
+  states and controls. `horizon`, `tracking_stage_cost`,
+  `economic_stage_cost`, `tracking_terminal_cost`, and
+  `terminal_constraint` each take exactly one object and error on more
+  than one. `steady_state` and `steady_state_control` take exactly one
+  pair per call (see below) and accumulate across calls.
 - Re-declaration: a single-object declaration errors on a second call with a
-  different object (for example a second `declare_time` on a new Set), since the
+  different object (for example a second `horizon` on a new Set), since the
   model has one of each. A varargs declaration accumulates across calls, but
   declaring the same component twice is rejected as a duplicate. Both checks run
   against the registry (feature 001).
-- `declare_time(m.t)` tags the horizon Set, a `pyomo.dae` ContinuousSet,
+- `horizon(m.t)` tags the horizon Set, a `pyomo.dae` ContinuousSet,
   initialized with the sample grid (the sampling instants). Declaring it
   captures that grid in the registry: the samples define the stage-cost sum
-  (feature 003) and the sampling time `dt`, so `declare_time` errors if the
+  (feature 003) and the sampling time `dt`, so `horizon` errors if the
   set holds fewer than two points or is already discretized.
-- `declare_state(m.z, ...)` tags one or more state Vars. A state carries a
+- `state(m.z, ...)` tags one or more state Vars. A state carries a
   `DerivativeVar` for its dynamics only in a dynamic model, so a steady-state
-  model's states need not have one and `declare_state` does not require it.
-- `declare_control(m.u, ..., profile=...)` tags one or more manipulated-input
+  model's states need not have one and `state` does not require it.
+- `control(m.u, ..., profile=...)` tags one or more manipulated-input
   Vars and sets their parameterization (piecewise-constant, ...) over the
   declared time set via pyomo-cvp. The `profile` applies to the controls named in
   that call. A control that needs a different parameterization is declared in a
   separate call.
-- `declare_continuous_dynamics(m.ode, ...)` tags one or more equality
+- `continuous_dynamics(m.ode, ...)` tags one or more equality
   Constraints whose left-hand sides are the DerivativeVars of declared states.
-- `declare_tracking_stage_cost(m.con)` and `declare_economic_stage_cost(m.con)`
+- `tracking_stage_cost(m.con)` and `economic_stage_cost(m.con)`
   each tag a per-time-point equality Constraint whose left-hand side is the
   scalar running-cost variable; the right-hand side defines the cost. The
   stage cost does not apply at the final time point, where only the terminal
@@ -102,16 +102,21 @@ declarations rather than re-deriving them.
   (for example `sorted(m.t)[:-1]`), one member per sample: a member at the
   final time, or a missing sample, is rejected. Indexing by a plain list also
   keeps the discretization from expanding it beyond the samples.
-- `declare_tracking_terminal_cost(m.con)` tags an equality Constraint whose
+- `tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable.
-- `declare_initial_condition(m.con, ...)` tags one or more equality Constraints
+- `initial_condition(m.con, ...)` tags one or more equality Constraints
   whose left-hand sides are declared states at the first time point and whose
   right-hand sides are mutable Params, the feedback hook.
-- `declare_terminal_constraint(m.con)` tags a single Constraint that references
+- `terminal_constraint(m.con)` tags a single Constraint that references
   only states at the final time point.
-- `declare_steady_state(m.z_ss, ...)` and
-  `declare_steady_state_control(m.u_ss, ...)` each tag one or more Params holding
-  the state or control setpoints the tracking costs drive toward.
+- `steady_state(m.z, m.z_ss)` pairs a declared state with the mutable Param
+  holding its setpoint; `steady_state_control(m.u, m.u_ss)` pairs a declared
+  control with its setpoint Param. One pair per call, accumulating across
+  calls; a state or control that already has a target is rejected as a
+  duplicate, and the first argument must already be declared. The pairing is
+  recorded in the registry so the steady-state/RTO solve (feature 009) knows
+  which target Param each solved state or control value populates. The
+  function returns the target Param.
 - The scalar-left-hand-side conventions (the cost and initial-condition
   constraints) are read from the constraint body's canonical form, so they hold
   regardless of how the user wrote the equality.
