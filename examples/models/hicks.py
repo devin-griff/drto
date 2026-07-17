@@ -6,9 +6,8 @@ A first-order exothermic reaction A -> B in a cooled continuous stirred-tank
 reactor (Hicks & Ray, 1971), in the dimensionless form used by
 Dinh et al. (2025), doi:10.1016/j.jprocont.2025.103565. Two states
 (concentration zc, temperature zt), two manipulated inputs (coolant flow v1,
-residence time v2), a tracking stage cost toward the model's steady state,
-and mutable-Param feedback hooks (zc_hat, zt_hat) anchoring the initial
-state.
+residence time v2), tracking stage and terminal costs toward the model's
+steady state, and initial conditions (zc_hat, zt_hat).
 
 Usage from a notebook in ``examples/``::
 

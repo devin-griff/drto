@@ -3,9 +3,9 @@
 """A first-order linear system, declared for drto: the minimal example.
 
 The feature 002 example model: one state z with time constant tau_p, one
-control u, a tracking stage cost toward mutable-Param targets, and a
-mutable-Param feedback hook (z_hat) anchoring the initial state. Small enough
-that a notebook's structure, not the model, is the story.
+control u, tracking stage and terminal costs, and an initial condition
+(z_hat). Small enough that a notebook's structure, not the model, is the
+story.
 
 Usage from a notebook in ``examples/``::
 
