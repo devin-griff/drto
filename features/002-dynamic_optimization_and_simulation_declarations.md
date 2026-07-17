@@ -10,7 +10,9 @@ Pyomo model or by wrapping the components as I build them, so that DRTO can
 find and assemble them into the horizon problem without my restructuring the
 model or writing a separate DRTO model.
 
-Tagging: build the model plainly, declare at the end.
+Tagging: declare each component right after it is built. The tags work
+anywhere after the component exists, so a finished model can equally be
+declared in one block at the end.
 
 ```python
 import pyomo.environ as pyo
@@ -19,12 +21,19 @@ import drto
 
 m = pyo.ConcreteModel()
 m.t = ContinuousSet(initialize=range(11))  # the sample grid, dt = 1
+drto.horizon(m.t)
+
 m.z = pyo.Var(m.t)
+drto.state(m.z)
 m.dzdt = DerivativeVar(m.z, wrt=m.t)
+
 m.u = pyo.Var(m.t, bounds=(0, 1))
+drto.control(m.u, profile="piecewise_constant")
 
 m.z_ss = pyo.Param(initialize=0.5, mutable=True)   # tracking targets
+drto.steady_state(m.z, m.z_ss)
 m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+drto.steady_state_control(m.u, m.u_ss)
 m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
 
 m.cost = pyo.Var(m.t)
@@ -32,23 +41,17 @@ m.cost = pyo.Var(m.t)
 @m.Constraint(m.t)
 def ode(m, t):
     return m.dzdt[t] == -m.z[t] + m.u[t]
+drto.continuous_dynamics(m.ode)
 
 @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
 def stage(m, t):
     return m.cost[t] == 10*(m.z[t] - m.z_ss)**2 + (m.u[t] - m.u_ss)**2
+drto.tracking_stage_cost(m.stage)
 
 @m.Constraint()
 def init(m):
     return m.z[0] == m.z_hat
-
-drto.horizon(m.t)
-drto.state(m.z)
-drto.continuous_dynamics(m.ode)
-drto.control(m.u, profile="piecewise_constant")
-drto.tracking_stage_cost(m.stage)
 drto.initial_condition(m.init)
-drto.steady_state(m.z, m.z_ss)
-drto.steady_state_control(m.u, m.u_ss)
 ```
 
 Wrapping: the same functions around the construction, declaring as the model
