@@ -54,7 +54,7 @@ plus steady-state RTO. Estimation is the planned follow-on.
 ## Transformations
 
 The six modes above are each a single solve exposed
-as a Pyomo transformation under the `drto.` namespace, alongside the two
+as a Pyomo transformation under the `drto.` namespace, alongside the
 lower-level transformations they compose. You build one declared model and
 apply the transformation you want, the same way you apply any Pyomo
 transformation.
@@ -69,6 +69,7 @@ transformation.
 | Dynamic estimation | `drto.dynamic_estimation` |
 | Objective assembly | `drto.build_objective` |
 | Steady-state reduction | `drto.dynamic_to_steady_state` |
+| Infinite-horizon terminal segment | `drto.infinite_horizon` |
 
 ## Closed-loop frameworks
 
