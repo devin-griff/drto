@@ -9,6 +9,23 @@ optimization problem from my declarations, so that I can solve for the optimal
 control trajectory over the horizon without hand-wiring the objective and the
 free and fixed variables.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002) ...
+
+pyo.TransformationFactory("dae.collocation").apply_to(
+    m, wrt=m.t, nfe=20, ncp=3, scheme="LAGRANGE-RADAU")
+
+pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+# controls free and parameterized by their declared profiles, estimation
+# declarations dropped, objective assembled from the live cost terms.
+# With both cost kinds declared, the tracking weight is an argument:
+# apply_to(m, tracking_weight=10.0)
+pyo.SolverFactory("ipopt").solve(m)
+```
+
 ## Benefit hypothesis
 
 Assembling the horizon optimization from the same declarations that describe

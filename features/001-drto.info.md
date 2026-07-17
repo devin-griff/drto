@@ -11,6 +11,20 @@ invalid or repeated application, and compose without stepping on each other,
 and so that I can read back a clear, DRTO-aware view of what DRTO has done to
 the model.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002) ...
+
+drto.info(m)   # the registry: declarations by kind, transformations applied
+# displaying it renders the DRTO-aware view: components grouped by role,
+# compact symbolic equations, and each applied transformation's outcome
+
+pyo.TransformationFactory("drto.dynamic_to_steady_state").apply_to(m)
+drto.info(m)   # now also records the reduction and what it did
+```
+
 ## Benefit hypothesis
 
 DRTO already has to store the declarations somewhere for the transformations to

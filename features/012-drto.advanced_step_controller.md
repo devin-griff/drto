@@ -8,6 +8,17 @@ As a user of DRTO, I want a function that turns a horizon problem solved at a
 predicted state into the corrected control for the actual state, so that I get
 the advanced-step NMPC correction without re-solving online.
 
+```python
+import drto
+
+# ... m solved by drto.dynamic_optimization at the PREDICTED next state ...
+
+m.z_hat.set_value(z_measured)          # the actual measurement arrives
+u0 = drto.advanced_step_controller(m)  # pounce estimate() of the controls,
+                                       # corrected to z_hat, no re-solve
+dudz = drto.advanced_step_controller(m, gradient=True)  # sensitivities instead
+```
+
 ## Benefit hypothesis
 
 Advanced-step NMPC's whole value is replacing the online solve with a fast

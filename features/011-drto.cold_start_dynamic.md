@@ -8,6 +8,15 @@ As a user of DRTO, I want a function that simulates my model forward under
 nominal controls to seed the first dynamic solve, so that a problem with no
 prior solution starts from a feasible trajectory.
 
+```python
+import drto
+
+# ... declared and discretized model m, initial condition set ...
+
+drto.cold_start_dynamic(m)   # simulate forward under nominal controls:
+                             # a feasible trajectory for the first solve
+```
+
 ## Benefit hypothesis
 
 A forward simulation gives a feasible starting trajectory for the first solve of

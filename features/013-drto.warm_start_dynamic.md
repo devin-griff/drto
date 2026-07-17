@@ -8,6 +8,15 @@ As a user of DRTO, I want a function that shifts the previous horizon solution
 forward one step to seed the next solve, so that each receding-horizon iteration
 starts warm instead of cold.
 
+```python
+import drto
+
+# ... m solved at time k; the loop advances one sample ...
+
+drto.warm_start_dynamic(m)   # shift every declared trajectory one step
+                             # (ref[t] <- ref[t+1]) and fill the tail
+```
+
 ## Benefit hypothesis
 
 The receding-horizon warm start, shift the last solution forward and fill the

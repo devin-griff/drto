@@ -8,6 +8,21 @@ As a user of DRTO, I want every mode to install its objective the same way
 through one routine, so that the objective is correct and consistent across
 modes and I never hand-write or maintain it.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002), discretized ...
+
+drto.build_objective(m)   # default: assemble the live cost terms
+
+# the transform form is equivalent
+pyo.TransformationFactory("drto.build_objective").apply_to(m)
+
+# the marked case, what the simulation transforms pass
+drto.build_objective(m, zero=True)
+```
+
 ## Benefit hypothesis
 
 Owning objective installation in one shared routine keeps the objective

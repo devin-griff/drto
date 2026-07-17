@@ -10,6 +10,39 @@ tagging the components I already built on my Pyomo model, so that DRTO can find
 and assemble them into the horizon problem without my restructuring the model
 or writing a separate DRTO model.
 
+```python
+import pyomo.environ as pyo
+from pyomo.dae import ContinuousSet, DerivativeVar
+import drto
+
+m = pyo.ConcreteModel()
+m.t = ContinuousSet(bounds=(0, 10))
+m.z = pyo.Var(m.t)
+m.dzdt = DerivativeVar(m.z, wrt=m.t)
+m.u = pyo.Var(m.t, bounds=(0, 1))
+
+m.z_ss = pyo.Param(initialize=0.5, mutable=True)   # tracking targets
+m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
+
+m.ode = pyo.Constraint(m.t, rule=lambda m, t: m.dzdt[t] == -m.z[t] + m.u[t])
+m.cost = pyo.Var(m.t)
+m.stage = pyo.Constraint(m.t, rule=lambda m, t:
+    m.cost[t] == 10*(m.z[t] - m.z_ss)**2 + (m.u[t] - m.u_ss)**2)
+m.init = pyo.Constraint(expr=m.z[0] == m.z_hat)
+
+drto.declare_time(m.t)
+drto.declare_state(m.z)
+drto.declare_continuous_dynamics(m.ode)
+drto.declare_control(m.u, profile="piecewise_constant")
+drto.declare_tracking_stage_cost(m.stage)
+drto.declare_initial_condition(m.init)
+drto.declare_steady_state(m.z_ss)
+drto.declare_steady_state_control(m.u_ss)
+```
+
+Later features elide this as `# ... declared model m (feature 002) ...`.
+
 ## Benefit hypothesis
 
 Declaring by tagging existing components lets DRTO bolt onto an ordinary Pyomo

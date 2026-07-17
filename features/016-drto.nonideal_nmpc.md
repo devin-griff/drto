@@ -8,6 +8,18 @@ As a user of DRTO, I want a function that runs the NMPC loop with the
 computational solve delay modeled honestly, so that I can see the closed-loop
 cost of the delay that ideal NMPC ignores and advanced-step removes.
 
+```python
+import drto
+
+# ... declared controller model m (feature 002), discretized ...
+
+result = drto.nonideal_nmpc(m, plant=plant, steps=50, delay="measured")
+# each cycle: solve after the measurement arrives, apply the new move one
+# solve time late; the plant advances over the delay under the held input.
+# delay: "measured" wall clock (live demo) or a supplied model of the
+# delay (reproducible run)
+```
+
 ## Benefit hypothesis
 
 Nonideal NMPC is the honest middle of the three execution variants. It applies

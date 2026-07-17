@@ -8,6 +8,17 @@ As a user of DRTO, I want a transformation that reduces my model to steady
 state with the controls fixed and solves for the equilibrium, so that I can
 find the resting operating point from the one model.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002), dynamic or already steady-state ...
+
+sim = pyo.TransformationFactory("drto.steady_state_simulation").create_using(
+    m, controls={m.u: 0.3})
+pyo.SolverFactory("ipopt").solve(sim)   # the equilibrium under u = 0.3
+```
+
 ## Benefit hypothesis
 
 Deriving the equilibrium from the same declarations makes the resting state

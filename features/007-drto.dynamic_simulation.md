@@ -8,6 +8,18 @@ As a user of DRTO, I want a transformation that fixes my controls and prepares
 the dynamic model to be solved forward over the horizon, so that I can integrate
 the model as declared without writing a separate simulation.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002), discretized ...
+
+pyo.TransformationFactory("drto.dynamic_simulation").apply_to(m)
+# controls fixed at the values they already hold, objective zero; a
+# supplied constant or profile is the option: apply_to(m, controls={m.u: 0.3})
+pyo.SolverFactory("ipopt").solve(m)   # square forward integration
+```
+
 ## Benefit hypothesis
 
 Reusing the one declared model to simulate keeps simulation and optimization

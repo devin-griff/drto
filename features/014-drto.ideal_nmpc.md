@@ -8,6 +8,16 @@ As a user of DRTO, I want a function that runs the NMPC moving-horizon loop on m
 declared model, so that I get closed-loop control without wiring the measure,
 solve, apply, shift cycle by hand.
 
+```python
+import drto
+
+# ... declared controller model m (feature 002), discretized ...
+
+result = drto.ideal_nmpc(m, plant=plant, steps=50)
+# each cycle: write the measurement into the initial-condition parameter,
+# solve drto.dynamic_optimization, apply the first move, warm start
+```
+
 ## Benefit hypothesis
 
 NMPC is the same receding-horizon cycle every time: feed the measured state,

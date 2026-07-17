@@ -8,6 +8,18 @@ As a user of DRTO, I want a function that runs the advanced-step NMPC loop, so
 that the expensive horizon solve happens between samples at a predicted state and
 each measurement is handled by a fast correction instead of an online solve.
 
+```python
+import drto
+
+# ... declared controller model m (feature 002), discretized ...
+
+result = drto.asnmpc(m, plant=plant, steps=50)
+# plant is both the measurement source and, simulated forward, the
+# next-state predictor. Each cycle: solve at the predicted next state
+# between samples, then correct to the measurement with
+# drto.advanced_step_controller and apply
+```
+
 ## Benefit hypothesis
 
 Advanced-step NMPC removes the online computational delay: solve at a predicted

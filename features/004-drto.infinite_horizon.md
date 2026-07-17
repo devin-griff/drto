@@ -26,7 +26,8 @@ pyo.TransformationFactory("dae.collocation").apply_to(
     m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU")
 
 pyo.TransformationFactory("drto.infinite_horizon").apply_to(
-    m, nfe=3, ncp=5, beta=1.2)  # gamma defaults to the mesh rule
+    m, nfe=3, ncp=5, beta=1.2)  # the defaults, shown explicitly;
+                                # gamma defaults to the mesh rule
 
 drto.build_objective(m)
 pyo.SolverFactory("ipopt").solve(m)

@@ -8,6 +8,17 @@ As a user of DRTO, I want a transformation that reduces my model to steady
 state and optimizes the economic objective over the free controls, so that I
 get the optimal steady operating point (economic RTO) from the one model.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared model m (feature 002) with an economic stage cost ...
+
+rto = pyo.TransformationFactory(
+    "drto.steady_state_optimization").create_using(m)
+pyo.SolverFactory("ipopt").solve(rto)   # the optimal steady operating point
+```
+
 ## Benefit hypothesis
 
 The economic RTO point derived this way is a true equilibrium of the dynamics,

@@ -8,6 +8,15 @@ As a user of DRTO, I want a function that initializes my dynamic model from its
 steady state, so that the horizon problem starts from a model-consistent flat
 trajectory that helps the solver converge.
 
+```python
+import drto
+
+# ... declared model m (feature 002), discretized ...
+
+drto.initialize_steady_state(m)   # solve the steady-state form, broadcast
+                                  # the equilibrium across every time point
+```
+
 ## Benefit hypothesis
 
 A steady-state-based initial guess is often the difference between an IPOPT

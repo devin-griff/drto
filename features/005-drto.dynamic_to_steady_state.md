@@ -9,6 +9,19 @@ its steady-state form, so that from the one model I can solve for an
 equilibrium or the economic operating point without hand-writing a separate
 steady-state model.
 
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... declared dynamic model m (feature 002) ...
+
+ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
+# ss is the steady-state system: time collapsed to a single point,
+# dz/dt = 0 added, initial and terminal pieces removed; m is unchanged
+drto.build_objective(ss)              # e.g. the single-point cost
+pyo.SolverFactory("ipopt").solve(ss)
+```
+
 ## Benefit hypothesis
 
 Deriving the steady-state model from the same dynamic declarations makes the
