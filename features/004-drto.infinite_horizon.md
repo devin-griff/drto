@@ -99,8 +99,12 @@ move.
   `tanh(gamma*dt) = tau_11`: the segment's first collocation point lands one
   sampling time past the junction, with `dt` read from the discretized
   horizon's element spacing. An explicit `gamma` option overrides the rule.
-- `beta` is an option with default 1.2 and must satisfy `beta >= 1`, which
-  the stability argument requires.
+- `beta` is a mutable Param set by an option, default 1.2, and must satisfy
+  `beta >= 1`, which the stability argument requires.
+- Both Params are referenced symbolically everywhere they appear, `gamma` in
+  the dilated dynamics and both in the tail weights, never baked in as
+  numbers, so `set_value` retunes either between solves with the dynamics and
+  the objective staying consistent, no re-apply needed.
 - The transform records what it added in `drto.info` (feature 001). There is
   no coupling option on the mode transforms: the tail terms it registers are
   live cost terms, so `drto.build_objective` includes them wherever it runs,
