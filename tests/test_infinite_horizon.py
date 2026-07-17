@@ -405,7 +405,7 @@ def test_algebraic_variables_are_discovered_and_replicated():
     assert len(b.w_def) == 15 + 1
     assert 1 in b.w_def and not any(s in b.w_def for s in fe[:-1])
     (ih_rec,) = [r for r in drto.info(m).transformations if r["name"] == IH]
-    assert "1 components" in ih_rec["outcome"]["algebraic"]
+    assert "1 component " in ih_rec["outcome"]["algebraic"] + " "
 
 
 @needs_ipopt
@@ -422,6 +422,41 @@ def test_algebraic_model_reaches_the_fixed_point():
     b = m.drto_infinite_horizon
     assert pyo.value(b.z[1]) == pytest.approx(0.5, abs=1e-4)
     assert pyo.value(b.w[1]) == pytest.approx(0.5, abs=1e-4)
+
+
+def test_legendre_discretized_horizon_applies():
+    # pyomo.dae's Legendre continuity equations are discretization
+    # artifacts, not algebraic equations: they must not be replicated
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-LEGENDRE"
+    )
+    pyo.TransformationFactory(IH).apply_to(m)
+    assert m.drto_infinite_horizon.component("z_link") is not None
+
+
+def test_unpinned_algebraic_copy_errors():
+    # a variable copied to the segment with no replicated equation would be
+    # free there; the transform stops instead of letting the solver exploit it
+    m = dae_model()
+    m.del_component(m.w_def)
+
+    @m.Constraint(sorted(m.t))  # a list of numbers, not the time set
+    def w_def(m, t):
+        return m.w[t] == 0.5 * (m.z[t] + m.u[t])
+
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    with pytest.raises(ValueError, match="no replicated equation involves"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_bad_profile_errors_before_the_model_is_touched():
+    m = ready_model()
+    with pytest.raises(ValueError, match="profile"):
+        pyo.TransformationFactory(IH).apply_to(m, profile="colocation")
+    assert m.component("drto_infinite_horizon") is None
 
 
 # ----------------------------------------------------------------------

@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- `drto.infinite_horizon` no longer fails on a LAGRANGE-LEGENDRE-discretized
+  horizon: pyomo.dae's continuity equations are discretization artifacts,
+  not algebraic equations to replicate.
+- A variable copied to the segment with no replicated equation involving it
+  now errors, naming the variable, instead of solving with a silently free
+  variable in the tail.
+- An invalid `profile` errors before the model is touched, not midway
+  through the segment construction.
+
 ### Changed
 
 - `drto.infinite_horizon` re-declares each control's profile with cvp's

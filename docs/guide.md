@@ -68,7 +68,7 @@ registered as `TransformationFactory('drto.build_objective')`.
 
 Appends the terminal segment of Dinh et al. (2025): the tail of the horizon
 to infinity, compressed onto [0, 1] by `tau = tanh(gamma*(t - tN))`. The
-segment carries copies of the declared states and controls, the dilated
+segment carries copies of the declared states and controls (states may carry index sets besides time; undeclared algebraic variables and equations ride along automatically), the dilated
 dynamics at interior Gauss-Legendre points, a hard equilibrium endpoint the
 stage cost selects, and the tracking stage cost replicated as the tail
 integrand. The tail enters the objective as explicit Gauss-weighted terms,

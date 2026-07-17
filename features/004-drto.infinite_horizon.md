@@ -96,7 +96,7 @@ move.
   but no quadrature weights, and the result equals the paper's
   quadrature-state formulation exactly.
 - The segment controls are new variables with their own pyomo-cvp profile,
-  declared by the transform and independent of the profile declared on the
+  applied by the transform through cvp's explicit form and independent of the profile declared on the
   finite-horizon controls: default `'collocation'` (the element's
   collocation polynomial through all its collocation points), the
   accuracy-first class with `beta` carrying the safety margin, and
@@ -122,10 +122,19 @@ move.
   time-indexed variable referenced by the replicated equations that is not a
   declared state or control gets a segment copy, and every active
   time-indexed constraint that is not declared as something else and is not
-  a discretization artifact is replicated on the segment at the interior
-  collocation points and the endpoint, which is what pins the algebraic
-  values the equilibrium ``0 = f`` references at ``tau = 1``. Algebraic
-  copies get no element-boundary values and no linking.
+  a discretization artifact (the collocation and continuity equations) is
+  replicated on the segment at the interior collocation points and the
+  endpoint, which is what pins the algebraic values the equilibrium
+  ``0 = f`` references at ``tau = 1``. Algebraic copies get no
+  element-boundary values and no linking.
+- A variable copied to the segment with no replicated equation involving it
+  errors, naming the variable: a silently free variable there is a wrong
+  tail the solver exploits.
+- The finite grid's final instant becomes the linking time, so the
+  transform re-declares each declared control's pyomo-cvp profile with
+  ``final_node='keep'``: the control at that instant is the held last move,
+  and equations there may reference it. On a plain finite horizon (no
+  tail), the declaration default ``'remove'`` stands.
 - A declared tracking terminal cost is deactivated on application: the tail
   integral is the cost-to-go, so V_f would double-count. The deactivation is
   noted in the transformation outcome.

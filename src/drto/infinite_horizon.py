@@ -24,7 +24,14 @@ reference that is not a declared state or control gets a segment copy, and
 every active time-indexed constraint not declared as something else (and not
 a discretization artifact) is replicated at the interior points plus the
 endpoint, which pins the algebraic values the equilibrium references at
-``tau = 1``.
+``tau = 1``. A variable copied to the segment with no replicated equation
+involving it is an error, not a silent free variable.
+
+With the tail attached, the finite grid's final instant is the linking
+time, not an end, so the transform re-declares each declared control's cvp
+profile with ``final_node='keep'``: the control there is the held last
+move, and the model's equations at that instant may reference it. The
+segment's own control copies are parameterized the same way.
 """
 import math
 from itertools import product
@@ -184,6 +191,9 @@ class InfiniteHorizonTransformation(Transformation):
             raise RuntimeError(
                 "drto: infinite_horizon requires numpy for the quadrature " "weights."
             )
+        # validate before anything is added to the model: a bad profile must
+        # not error midway through the segment construction
+        pyomo_cvp.parameterize._validate_profile(config.profile)
 
         reg = info(model)
         missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
@@ -246,8 +256,8 @@ class InfiniteHorizonTransformation(Transformation):
             pos, _ = _time_index(comp, time)
             if pos is None:
                 raise ValueError(
-                    f"drto: state '{comp.name}' is not indexed by the "
-                    f"declared time set."
+                    f"drto: infinite_horizon requires states indexed by the "
+                    f"declared time set; '{comp.name}' is not."
                 )
 
         states_set = ComponentSet(states)
@@ -297,7 +307,14 @@ class InfiniteHorizonTransformation(Transformation):
             declared_cons.update(reg.components(kind))
         alg_cons = []
         for con in model.component_objects(Constraint, active=True):
-            if con in declared_cons or "_disc_" in con.local_name:
+            # pyomo.dae artifacts: collocation equations ('_disc_') and the
+            # Legendre continuity equations ('_cont_eq'); the segment builds
+            # its own discretization with its own continuity
+            if (
+                con in declared_cons
+                or "_disc_" in con.local_name
+                or con.local_name.endswith("_cont_eq")
+            ):
                 continue
             pos, _ = _time_index(con, time)
             if pos is None:
@@ -359,6 +376,23 @@ class InfiniteHorizonTransformation(Transformation):
         _scan(psi, t_rep_cost, cd.name)
         cost_var = cost_side.parent_component()
 
+        # every variable copied to the segment must have at least one
+        # replicated equation involving it; a variable with none would be
+        # free there, and the solver would exploit it silently
+        defined = ComponentSet()
+        for entries in alg_reps.values():
+            for expr, _ in entries.values():
+                for v in identify_variables(expr, include_fixed=True):
+                    defined.add(v.parent_component())
+        for comp in algebraic:
+            if comp not in defined:
+                raise ValueError(
+                    f"drto: infinite_horizon copies '{comp.name}' to the "
+                    f"segment, but no replicated equation involves it; its "
+                    f"defining equation must be indexed by the declared "
+                    f"time set '{time.name}'."
+                )
+
         # --- the segment block ----------------------------------------
         b = Block(concrete=True)
         model.add_component(_BLOCK_NAME, b)
@@ -382,14 +416,13 @@ class InfiniteHorizonTransformation(Transformation):
             v = seg[comp]
             return v[tuple(o) + (s,)] if o else v[s]
 
-        def _emap(t_rep, s, u_point=None):
+        def _emap(t_rep, s):
             """Model members at ``t_rep`` mapped to segment members at
-            ``s`` (controls at ``u_point`` when given)."""
+            ``s``."""
             mmap = {}
             for comp in seg:
-                pt = u_point if (u_point is not None and comp in controls_set) else s
                 for o in _combos(comp):
-                    mmap[id(_member(comp, o, t_rep))] = _seg_at(comp, o, pt)
+                    mmap[id(_member(comp, o, t_rep))] = _seg_at(comp, o, s)
             return mmap
 
         # --- dilated dynamics at interior collocation points (eq. 25) ---
@@ -496,7 +529,6 @@ class InfiniteHorizonTransformation(Transformation):
         # and the control values from the segment profile at the endpoint
         # (the segment is parameterized with final_node='keep': the tail
         # continues to t = infinity, where the last move is held) ---
-        u_point = 1
         for con in dynamics:
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
@@ -506,7 +538,7 @@ class InfiniteHorizonTransformation(Transformation):
                 if o not in _entries:
                     return Constraint.Skip
                 _, _, rhs, t_rep = _entries[o]
-                return 0 == replace_expressions(rhs, _emap(t_rep, 1, u_point=u_point))
+                return 0 == replace_expressions(rhs, _emap(t_rep, 1))
 
             b.add_component(
                 con.local_name + "_equilibrium",
@@ -567,7 +599,11 @@ class InfiniteHorizonTransformation(Transformation):
             profile=config.profile,
             horizon="kept, infinite tail appended",
             **(
-                {"algebraic": f"{len(algebraic)} components replicated"}
+                {
+                    "algebraic": f"{len(algebraic)} component"
+                    + ("s" if len(algebraic) != 1 else "")
+                    + " replicated"
+                }
                 if algebraic
                 else {}
             ),
