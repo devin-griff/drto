@@ -26,7 +26,7 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
   optimization is a separate topic, out of scope for this transform.
 - The declared controls are the free decision variables, parameterized over the
   time set by their declared profile (pyomo-cvp).
-- The objective is assembled by `drto.build_objective` (feature 004) from the
+- The objective is assembled by `drto.build_objective` (feature 003) from the
   live cost terms over the horizon. When both a tracking and an economic stage
   cost are declared, both are summed into the objective, with a weight applied
   to the tracking stage cost. The transform accepts that weight as an argument,

@@ -25,7 +25,7 @@ validation runs rely on.
   profile over the time set. With nothing supplied, the controls stay at the
   values the control variables are already initialized to on the model.
 - The objective is zero: the transform calls `drto.build_objective` (feature
-  004) with the option for a simulation, which installs a constant-zero
+  003) with the option for a simulation, which installs a constant-zero
   `Objective` and gives an NLP solver a well-posed square problem for the
   fixed-control model.
 - The transform keeps the time horizon.

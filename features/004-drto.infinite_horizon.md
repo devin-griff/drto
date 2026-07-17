@@ -51,7 +51,7 @@ move.
 - The tail cost uses no quadrature state. The declared stage cost is
   replicated at the segment collocation points and enters the objective as
   explicit weighted terms, `beta * h_i * omega_k * psi_ik /
-  (gamma*(1 - tau_ik^2))`, assembled by `drto.build_objective` (feature 004)
+  (gamma*(1 - tau_ik^2))`, assembled by `drto.build_objective` (feature 003)
   as an option-dependent outcome. The Gauss weights are derived from the
   discretization's stored collocation nodes, since `pyomo.dae` stores nodes
   but no quadrature weights, and the result equals the paper's
