@@ -19,7 +19,9 @@ IH = "drto.infinite_horizon"
 def ready_model():
     """The declared linear model, discretized: ready for the transform."""
     m = declared_model()
-    pyo.TransformationFactory("dae.collocation").apply_to(m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU")
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
     return m
 
 
@@ -52,15 +54,26 @@ def hicks(N, h=1):
 
     @m.Constraint(m.t)
     def zc_ode(m, t):
-        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[
+            t
+        ] * pyo.exp(-m.ea / m.zt[t])
 
     @m.Constraint(m.t)
     def zt_ode(m, t):
-        return m.dzt[t] == ((m.ztf - m.zt[t]) / (m.u2sf * m.v2[t]) + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t]) - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw))
+        return m.dzt[t] == (
+            (m.ztf - m.zt[t]) / (m.u2sf * m.v2[t])
+            + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+            - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw)
+        )
 
     @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
     def stage(m, t):
-        return m.cost[t] == (10 * (m.zc[t] - m.zc_ss) ** 2 + 2 * (m.zt[t] - m.zt_ss) ** 2 + (m.v1[t] - m.v1_ss) ** 2 + 0.5 * (m.v2[t] - m.v2_ss) ** 2)
+        return m.cost[t] == (
+            10 * (m.zc[t] - m.zc_ss) ** 2
+            + 2 * (m.zt[t] - m.zt_ss) ** 2
+            + (m.v1[t] - m.v1_ss) ** 2
+            + 0.5 * (m.v2[t] - m.v2_ss) ** 2
+        )
 
     @m.Constraint()
     def zc_init(m):
@@ -176,7 +189,9 @@ def test_gamma_follows_the_mesh_rule_and_option_overrides():
 
     m3 = ready_model()
     pyo.TransformationFactory(IH).apply_to(m3, gamma="rule")
-    assert pyo.value(m3.drto_infinite_horizon.gamma) == pytest.approx(pyo.value(m.drto_infinite_horizon.gamma))
+    assert pyo.value(m3.drto_infinite_horizon.gamma) == pytest.approx(
+        pyo.value(m.drto_infinite_horizon.gamma)
+    )
 
     m4 = ready_model()
     with pytest.raises(ValueError, match="'rule' .* or a number"):
@@ -193,7 +208,9 @@ def test_declared_terminal_cost_is_deactivated():
         return m.term == 10 * (m.z[tN] - m.z_ss) ** 2
 
     drto.tracking_terminal_cost(m.terminal)
-    pyo.TransformationFactory("dae.collocation").apply_to(m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU")
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
     pyo.TransformationFactory(IH).apply_to(m)
     # the tail owns the cost-to-go: V_f would double-count
     assert not m.terminal.active
@@ -264,14 +281,18 @@ def test_hicks_short_horizon_reproduces_the_long_one():
     ipopt = pyo.SolverFactory("ipopt")
 
     m50 = hicks(50)
-    pyo.TransformationFactory("dae.collocation").apply_to(m50, wrt=m50.t, nfe=50, ncp=3, scheme="LAGRANGE-RADAU")
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m50, wrt=m50.t, nfe=50, ncp=3, scheme="LAGRANGE-RADAU"
+    )
     pyo.TransformationFactory("cvp.parameterize").apply_to(m50)
     drto.build_objective(m50)
     r = ipopt.solve(m50)
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
 
     m5 = hicks(5)
-    pyo.TransformationFactory("dae.collocation").apply_to(m5, wrt=m5.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU")
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m5, wrt=m5.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
     pyo.TransformationFactory(IH).apply_to(m5)
     pyo.TransformationFactory("cvp.parameterize").apply_to(m5)
     drto.build_objective(m5)

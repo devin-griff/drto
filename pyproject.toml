@@ -49,10 +49,8 @@ packages = ["src/drto"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-# Long line length on purpose: model equations read as one line, not
-# wrapped fragments. String normalization and magic trailing commas stay
-# off, matching Pyomo upstream.
+# Mirrors Pyomo's own Black settings so formatting matches upstream exactly.
 [tool.black]
-line-length = 440
+line-length = 88
 skip-string-normalization = true
 skip-magic-trailing-comma = true

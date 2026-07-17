@@ -58,21 +58,34 @@ def hicks(N=5, h=1):
 
     @m.Constraint(m.t)
     def zc_ode(m, t):
-        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[
+            t
+        ] * pyo.exp(-m.ea / m.zt[t])
 
     @m.Constraint(m.t)
     def zt_ode(m, t):
-        return m.dzt[t] == ((m.ztf - m.zt[t]) / (m.u2sf * m.v2[t]) + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t]) - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw))
+        return m.dzt[t] == (
+            (m.ztf - m.zt[t]) / (m.u2sf * m.v2[t])
+            + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+            - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw)
+        )
 
     @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
     def stage(m, t):
-        return m.cost[t] == (10 * (m.zc[t] - m.zc_ss) ** 2 + 2 * (m.zt[t] - m.zt_ss) ** 2 + (m.v1[t] - m.v1_ss) ** 2 + 0.5 * (m.v2[t] - m.v2_ss) ** 2)
+        return m.cost[t] == (
+            10 * (m.zc[t] - m.zc_ss) ** 2
+            + 2 * (m.zt[t] - m.zt_ss) ** 2
+            + (m.v1[t] - m.v1_ss) ** 2
+            + 0.5 * (m.v2[t] - m.v2_ss) ** 2
+        )
 
     tN = m.t.last()
 
     @m.Constraint()  # the stage cost with the controls removed, at tN
     def terminal(m):
-        return m.term == (10 * (m.zc[tN] - m.zc_ss) ** 2 + 2 * (m.zt[tN] - m.zt_ss) ** 2)
+        return m.term == (
+            10 * (m.zc[tN] - m.zc_ss) ** 2 + 2 * (m.zt[tN] - m.zt_ss) ** 2
+        )
 
     @m.Constraint()
     def zc_init(m):

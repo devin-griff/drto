@@ -25,7 +25,9 @@ def test_bare_call_assembles_the_live_stage_cost():
 
 def test_stage_sum_stays_at_the_samples_after_discretization():
     m = declared_model()
-    pyo.TransformationFactory("dae.collocation").apply_to(m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU")
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
     obj = drto.build_objective(m)
     # cost members now exist at every collocation point, but only the
     # sample grid captured by horizon enters the sum
@@ -147,5 +149,8 @@ def test_both_cost_kinds_sum_together():
 
     drto.economic_stage_cost(m.econ)
     obj = drto.build_objective(m)
-    expected = ComponentSet([m.cost[t] for t in m.t if t != m.t.last()] + [m.ecost[t] for t in m.t if t != m.t.last()])
+    expected = ComponentSet(
+        [m.cost[t] for t in m.t if t != m.t.last()]
+        + [m.ecost[t] for t in m.t if t != m.t.last()]
+    )
     assert cost_vars(obj) == expected

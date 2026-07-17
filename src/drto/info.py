@@ -202,9 +202,22 @@ class Info:
         return "\n".join(lines)
 
     def _repr_html_(self):
-        rows = "".join(f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(text)}" "</code></td></tr>" for label, text in self._role_lines())
-        titems = "".join(f"<li><code>{html.escape(t)}</code></li>" for t in self._transformation_lines())
-        return "<div><b>drto registry</b>" f"<table><tbody>{rows}</tbody></table>" "<b>transformations</b>" + (f"<ol>{titems}</ol>" if titems else " (none)") + "</div>"
+        rows = "".join(
+            f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(text)}"
+            "</code></td></tr>"
+            for label, text in self._role_lines()
+        )
+        titems = "".join(
+            f"<li><code>{html.escape(t)}</code></li>"
+            for t in self._transformation_lines()
+        )
+        return (
+            "<div><b>drto registry</b>"
+            f"<table><tbody>{rows}</tbody></table>"
+            "<b>transformations</b>"
+            + (f"<ol>{titems}</ol>" if titems else " (none)")
+            + "</div>"
+        )
 
 
 def _component_category(comp):
@@ -223,7 +236,11 @@ def _entry(record, kind):
     comp = record["component"]
     # only short scalar metadata renders; structural payloads (e.g. a
     # cost_group's terms) stay out of the view
-    notes = [str(v) for k, v in record.items() if k != "component" and isinstance(v, (str, int, float, bool))]
+    notes = [
+        str(v)
+        for k, v in record.items()
+        if k != "component" and isinstance(v, (str, int, float, bool))
+    ]
     of = record.get("of")
     if of is not None:  # a target pair renders with its owner
         notes.append(f"of {of.name}")

@@ -125,7 +125,9 @@ def test_repr_falls_back_for_skip_guarded_rules():
 def test_repr_annotates_transformation_outcomes():
     m = declared_model()
     reg = drto.info(m)
-    reg.record_transformation("drto.dynamic_simulation", fixed="u", objective="zero", horizon="kept")
+    reg.record_transformation(
+        "drto.dynamic_simulation", fixed="u", objective="zero", horizon="kept"
+    )
     text = repr(reg)
     assert "drto.dynamic_simulation: fixed=u, objective=zero, horizon=kept" in text
 

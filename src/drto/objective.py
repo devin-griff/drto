@@ -60,7 +60,11 @@ def build_objective(m, zero=False):
     else:
         terms = list(_live_cost_terms(reg))
         if not terms:
-            raise ValueError("drto: build_objective found no live cost terms; declare a " "stage cost (feature 002), or pass zero=True for the " "simulation objective.")
+            raise ValueError(
+                "drto: build_objective found no live cost terms; declare a "
+                "stage cost (feature 002), or pass zero=True for the "
+                "simulation objective."
+            )
         expr = sum(w * v for v, w in terms)
         n_terms = len(terms)
 
@@ -69,7 +73,10 @@ def build_objective(m, zero=False):
     if m.component(_OBJECTIVE_NAME) is not None:
         m.del_component(_OBJECTIVE_NAME)
     m.add_component(_OBJECTIVE_NAME, Objective(expr=expr, sense=minimize))
-    reg.record_transformation("drto.build_objective", objective="zero" if zero else f"sum of {n_terms} weighted cost terms")
+    reg.record_transformation(
+        "drto.build_objective",
+        objective="zero" if zero else f"sum of {n_terms} weighted cost terms",
+    )
     return m.component(_OBJECTIVE_NAME)
 
 
@@ -102,7 +109,9 @@ def _live_cost_terms(reg):
                 # with the infinite-horizon tail
                 if stage and samples is not None and cd.index() not in samples:
                     continue
-                var, _ = _side_matching(cd, _is_var_member, "build_objective", "the cost variable")
+                var, _ = _side_matching(
+                    cd, _is_var_member, "build_objective", "the cost variable"
+                )
                 yield var, weight
     for record in reg.declarations("cost_group"):
         comp = record["component"]
@@ -112,7 +121,10 @@ def _live_cost_terms(reg):
             yield var, weight
 
 
-@TransformationFactory.register("drto.build_objective", doc="Assemble the objective from the live registered cost terms (drto).")
+@TransformationFactory.register(
+    "drto.build_objective",
+    doc="Assemble the objective from the live registered cost terms (drto).",
+)
 class BuildObjectiveTransformation(Transformation):
     """The transformation form of :func:`build_objective`.
 
@@ -124,7 +136,15 @@ class BuildObjectiveTransformation(Transformation):
     """
 
     CONFIG = ConfigDict("drto.build_objective")
-    CONFIG.declare("zero", ConfigValue(default=False, domain=bool, description="Install a constant-zero objective (the simulation " "outcome) instead of assembling the live cost terms."))
+    CONFIG.declare(
+        "zero",
+        ConfigValue(
+            default=False,
+            domain=bool,
+            description="Install a constant-zero objective (the simulation "
+            "outcome) instead of assembling the live cost terms.",
+        ),
+    )
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
