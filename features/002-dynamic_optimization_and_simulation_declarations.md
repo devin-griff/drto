@@ -5,10 +5,12 @@
 ## Description
 
 As a user of DRTO, I want to declare the pieces of my optimization or
-simulation problem by
-tagging the components I already built on my Pyomo model, so that DRTO can find
-and assemble them into the horizon problem without my restructuring the model
-or writing a separate DRTO model.
+simulation problem, either by tagging the components I already built on my
+Pyomo model or by wrapping the components as I build them, so that DRTO can
+find and assemble them into the horizon problem without my restructuring the
+model or writing a separate DRTO model.
+
+Tagging: build the model plainly, declare at the end.
 
 ```python
 import pyomo.environ as pyo
@@ -49,6 +51,44 @@ drto.steady_state(m.z, m.z_ss)
 drto.steady_state_control(m.u, m.u_ss)
 ```
 
+Wrapping: the same functions around the construction, declaring as the model
+is written, with the constraint-role declarations as decorators.
+
+```python
+import pyomo.environ as pyo
+from pyomo.dae import ContinuousSet, DerivativeVar
+from drto import (horizon, state, control, continuous_dynamics,
+                  tracking_stage_cost, initial_condition,
+                  steady_state, steady_state_control)
+
+m = pyo.ConcreteModel()
+m.t = horizon(ContinuousSet(initialize=range(11)))  # the sample grid, dt = 1
+m.z = state(pyo.Var(m.t))
+m.dzdt = DerivativeVar(m.z, wrt=m.t)
+m.u = control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")
+
+m.z_ss = steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))
+m.u_ss = steady_state_control(m.u, pyo.Param(initialize=0.3, mutable=True))
+m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
+
+m.cost = pyo.Var(m.t)
+
+@continuous_dynamics(m, m.t)
+def ode(m, t):
+    return m.dzdt[t] == -m.z[t] + m.u[t]
+
+@tracking_stage_cost(m, sorted(m.t)[:-1])  # the terminal cost owns the final time
+def stage(m, t):
+    return m.cost[t] == 10*(m.z[t] - m.z_ss)**2 + (m.u[t] - m.u_ss)**2
+
+@initial_condition(m)
+def init(m):
+    return m.z[0] == m.z_hat
+```
+
+The two styles mix freely: the same functions serve both, so a partly wrapped
+model can be finished by tagging and the reverse.
+
 Later features elide this as `# ... declared model m (feature 002) ...`.
 
 ## Benefit hypothesis
@@ -66,6 +106,16 @@ declarations rather than re-deriving them.
   (a Var, Constraint, Param, or Set), validates that the component is of the
   expected type and meets the declaration's convention, and records it in
   `drto.info(m)` (feature 001). An invalid target errors clearly.
+- Handed an unconstructed component instead, a declaration function wraps it:
+  it returns the component so it can sit in the `m.x = ...` assignment, and
+  validation and registration fire when Pyomo attaches it to the model. The
+  ordering rules are the same in both styles; a declaration's prerequisites
+  must be declared by the time it registers, which writing the model top-down
+  satisfies.
+- The constraint-role declarations (`continuous_dynamics`, the costs,
+  `initial_condition`, `terminal_constraint`) double as decorators taking the
+  model plus whatever `@m.Constraint` would take, building, attaching, and
+  declaring the constraint in one step.
 - Arity: `state`, `control`, `continuous_dynamics`, and
   `initial_condition` accept varargs or an
   indexed container (one declaration per container), since they scale with the
