@@ -25,9 +25,7 @@ Every model here follows these, and new models should too:
   the target.
 - **Unbounded cost variables.** The defining equality already fixes each
   cost value, and a `NonNegativeReals` bound puts the optimum exactly on the
-  bound wherever the cost vanishes, which drags interior-point solvers
-  (Hicks at N = 50: 43 ipopt iterations bounded, 6 unbounded, identical
-  solutions).
+  bound wherever the cost vanishes, which drags interior-point solvers.
 
 | Module | Builder | Model |
 | --- | --- | --- |
