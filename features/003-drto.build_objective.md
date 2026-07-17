@@ -53,6 +53,12 @@ it the same way every time.
   weights (`drto.infinite_horizon`, feature 004, registers its tail terms this
   way), and the assembly includes every registered group that is live: its
   backing components present and active on the model at assembly time.
+- Group weights are how the modes weight costs, not options here: the tracking
+  weight `drto.dynamic_optimization` accepts (feature 006) is recorded as the
+  tracking group's weight in the registry by that transform, and this routine
+  just sums the live groups by their weights. The zero option is the only flag
+  on the call, since an empty objective is the one outcome that cannot be
+  expressed as registry state.
 - It is also registered as `TransformationFactory('drto.build_objective')` so a
   user can apply it on its own. The transform calls the same function, and both
   `apply_to` (in place) and `create_using` (a clone) work.
