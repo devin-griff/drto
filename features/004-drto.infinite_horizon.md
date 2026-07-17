@@ -9,25 +9,6 @@ terminal segment to my declared dynamic model, so that a short-horizon dynamic
 optimization inherits infinite-horizon stability without my constructing a
 terminal cost or terminal region by hand.
 
-## Benefit hypothesis
-
-Terminal costs and terminal regions are the expert-only part of stabilizing
-NMPC, and computing them offline for nonlinear processes is formidable. The
-terminal segment of Dinh et al. (2025,
-[doi:10.1016/j.jprocont.2025.103565](https://doi.org/10.1016/j.jprocont.2025.103565))
-replaces that construction with discretization: the tail to infinity is
-compressed onto [0, 1] by the time transformation `tau = tanh(gamma*(t - tN))`
-and solved inside the same NLP, so the terminal cost is the actual tail cost
-and the terminal condition is an equilibrium the cost selects. Their case
-studies match long-horizon baselines with a fraction of the horizon and solve
-time. For drto this gives `dynamic_optimization` a stability story with no
-hand-built terminal ingredients. The mechanism is settled and verified in
-[`examples/hicks_inf.ipynb`](../examples/hicks_inf.ipynb): a 5-step horizon
-plus segment reproduces the 50-step policy to about 2 percent on the first
-move.
-
-## Example
-
 The usual path is through the mode transform, with the segment as its
 terminal strategy:
 
@@ -61,6 +42,23 @@ pyo.TransformationFactory("drto.infinite_horizon").apply_to(
     m, nfe=3, ncp=5, beta=1.2)  # gamma defaults to the mesh rule
 drto.build_objective(m)
 ```
+
+## Benefit hypothesis
+
+Terminal costs and terminal regions are the expert-only part of stabilizing
+NMPC, and computing them offline for nonlinear processes is formidable. The
+terminal segment of Dinh et al. (2025,
+[doi:10.1016/j.jprocont.2025.103565](https://doi.org/10.1016/j.jprocont.2025.103565))
+replaces that construction with discretization: the tail to infinity is
+compressed onto [0, 1] by the time transformation `tau = tanh(gamma*(t - tN))`
+and solved inside the same NLP, so the terminal cost is the actual tail cost
+and the terminal condition is an equilibrium the cost selects. Their case
+studies match long-horizon baselines with a fraction of the horizon and solve
+time. For drto this gives `dynamic_optimization` a stability story with no
+hand-built terminal ingredients. The mechanism is settled and verified in
+[`examples/hicks_inf.ipynb`](../examples/hicks_inf.ipynb): a 5-step horizon
+plus segment reproduces the 50-step policy to about 2 percent on the first
+move.
 
 ## Acceptance criteria
 
