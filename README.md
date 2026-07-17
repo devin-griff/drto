@@ -154,13 +154,32 @@ what separates it from a path constraint. The objective is drto's own: it
 sums the declared cost terms that are live in the current mode, so a mode
 drops a term just by leaving out its constraint.
 
-One modeling practice worth following: leave cost variables unbounded. The
-defining equality already fixes each cost value (a sum of squares is
-nonnegative without being told), and a `NonNegativeReals` bound puts the
-optimum exactly on the bound wherever the cost vanishes, at settled samples
-on long horizons or through an infinite-horizon tail at equilibrium, which
-drags interior-point solvers (measured on the Hicks example at N = 50: 43
-ipopt iterations bounded, 6 unbounded, identical solutions).
+### Preferences for writing Pyomo models
+
+The conventions above are enforced; these are the preferences the examples
+and the canonical models (`examples/models/`) follow, each earned the hard
+way:
+
+- **Decorator-style constraints.** Always `@m.Constraint(...)` (or the drto
+  constraint decorators), never `rule=lambda` or a `def` passed as `rule=`.
+- **Named mutable Params, no folded literals.** Physical constants, scale
+  factors, and setpoints are named mutable Params referenced by name in the
+  equations, so expressions render symbolically in `drto.info` and values
+  retune by `set_value`. Literals are for pure structure only (exponents,
+  cost weights).
+- **The sample grid is N and h.** `N` samples of sampling time `h`, built as
+  `ContinuousSet(initialize=pyo.RangeSet(0, N*h, h))`.
+- **Model-consistent setpoints.** The steady-state target pair must be a
+  true equilibrium of the dynamics, ideally derived from the model by the
+  steady-state solve. A hand-typed pair that is not a fixed point leaves the
+  controller settling at a weighted compromise instead of the target.
+- **Unbounded cost variables.** The defining equality already fixes each
+  cost value (a sum of squares is nonnegative without being told), and a
+  `NonNegativeReals` bound puts the optimum exactly on the bound wherever
+  the cost vanishes, at settled samples on long horizons or through an
+  infinite-horizon tail at equilibrium, which drags interior-point solvers
+  (measured on the Hicks example at N = 50: 43 ipopt iterations bounded, 6
+  unbounded, identical solutions).
 
 One thing you never declare, because it already lives in the model: the
 **path constraints** are the state variables' own upper and lower bounds.
