@@ -88,10 +88,12 @@ move.
   discretization's stored collocation nodes, since `pyomo.dae` stores nodes
   but no quadrature weights, and the result equals the paper's
   quadrature-state formulation exactly.
-- The segment controls are parameterized through pyomo-cvp: default
-  `('reduced_collocation', ncp)`, the accuracy-first class with `beta`
-  carrying the safety margin, and `piecewise_constant` as the conservative
-  option. Raw unparameterized copies are never left on the segment.
+- The segment controls are new variables with their own pyomo-cvp profile,
+  declared by the transform and independent of the profile declared on the
+  finite-horizon controls: default `('reduced_collocation', ncp)`, the
+  accuracy-first class with `beta` carrying the safety margin, and
+  `piecewise_constant` as the conservative option. Raw unparameterized copies
+  are never left on the segment.
 - `gamma` is a mutable Param, derived by default from the rule
   `tanh(gamma*dt) = tau_11`: the segment's first collocation point lands one
   sampling time past the junction, with `dt` read from the discretized
