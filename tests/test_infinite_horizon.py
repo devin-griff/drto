@@ -29,37 +29,52 @@ def hicks(n_samples):
     """The Hicks-Ray CSTR, declared, with an n_samples-step horizon."""
     m = pyo.ConcreteModel()
     m.t = ContinuousSet(initialize=range(n_samples + 1))
+    m.u1sf = pyo.Param(initialize=600, mutable=True)  # coolant-flow scale factor
+    m.u2sf = pyo.Param(initialize=40, mutable=True)  # residence-time scale factor
+    m.k0 = pyo.Param(initialize=300, mutable=True)  # Arrhenius pre-exponential
+    m.ea = pyo.Param(initialize=5, mutable=True)  # dimensionless activation energy
+    m.a0 = pyo.Param(initialize=1.95e-4, mutable=True)  # heat-transfer coefficient
+    m.ztcw = pyo.Param(initialize=0.38, mutable=True)  # coolant temperature
+    m.ztf = pyo.Param(initialize=0.395, mutable=True)  # feed temperature
+
+    m.zc_ss = pyo.Param(initialize=0.6416, mutable=True)  # steady-state targets
+    m.zt_ss = pyo.Param(initialize=0.5387, mutable=True)
+    m.v1_ss = pyo.Param(initialize=0.57828, mutable=True)
+    m.v2_ss = pyo.Param(initialize=0.49989, mutable=True)
+    m.zc_hat = pyo.Param(initialize=0.625, mutable=True)  # state feedback hooks
+    m.zt_hat = pyo.Param(initialize=0.525, mutable=True)
+
     m.zc = pyo.Var(m.t, bounds=(0, 1), initialize=0.6416)
     m.zt = pyo.Var(m.t, bounds=(0, None), initialize=0.5387)
     m.dzc = DerivativeVar(m.zc, wrt=m.t)
     m.dzt = DerivativeVar(m.zt, wrt=m.t)
     m.v1 = pyo.Var(m.t, bounds=(0.166666666666667, 1), initialize=0.57828)
     m.v2 = pyo.Var(m.t, bounds=(0.025, 1), initialize=0.49989)
-    m.zc_hat = pyo.Param(initialize=0.625, mutable=True)
-    m.zt_hat = pyo.Param(initialize=0.525, mutable=True)
     m.cost = pyo.Var(m.t, within=pyo.NonNegativeReals)
 
     @m.Constraint(m.t)
     def zc_ode(m, t):
-        return m.dzc[t] == (1 - m.zc[t]) / (40 * m.v2[t]) - 300 * m.zc[t] * pyo.exp(
-            -5 / m.zt[t]
-        )
+        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[
+            t
+        ] * pyo.exp(-m.ea / m.zt[t])
 
     @m.Constraint(m.t)
     def zt_ode(m, t):
-        return m.dzt[t] == (0.395 - m.zt[t]) / (40 * m.v2[t]) + 300 * m.zc[t] * pyo.exp(
-            -5 / m.zt[t]
-        ) - 0.000195 * 600 * m.v1[t] * (m.zt[t] - 0.38)
+        return m.dzt[t] == (
+            (m.ztf - m.zt[t]) / (m.u2sf * m.v2[t])
+            + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+            - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw)
+        )
 
     @m.Constraint(m.t)
     def stage(m, t):
         if t == m.t.last():
-            return pyo.Constraint.Skip
+            return pyo.Constraint.Skip  # the terminal cost owns the final time
         return m.cost[t] == (
-            10 * (m.zc[t] - 0.6416) ** 2
-            + 2 * (m.zt[t] - 0.5387) ** 2
-            + (m.v1[t] - 0.57828) ** 2
-            + 0.5 * (m.v2[t] - 0.49989) ** 2
+            10 * (m.zc[t] - m.zc_ss) ** 2
+            + 2 * (m.zt[t] - m.zt_ss) ** 2
+            + (m.v1[t] - m.v1_ss) ** 2
+            + 0.5 * (m.v2[t] - m.v2_ss) ** 2
         )
 
     @m.Constraint()
@@ -76,6 +91,8 @@ def hicks(n_samples):
     drto.declare_control(m.v1, m.v2, profile="piecewise_constant")
     drto.declare_tracking_stage_cost(m.stage)
     drto.declare_initial_condition(m.zc_init, m.zt_init)
+    drto.declare_steady_state(m.zc_ss, m.zt_ss)
+    drto.declare_steady_state_control(m.v1_ss, m.v2_ss)
     return m
 
 
