@@ -26,6 +26,42 @@ hand-built terminal ingredients. The mechanism is settled and verified in
 plus segment reproduces the 50-step policy to about 2 percent on the first
 move.
 
+## Example
+
+The usual path is through the mode transform, with the segment as its
+terminal strategy:
+
+```python
+import pyomo.environ as pyo
+import drto
+
+# ... build a pyomo.dae model: states m.z, controls m.u over ContinuousSet
+# m.t, dynamics m.ode, and a tracking stage cost m.stage_con ...
+
+drto.declare_time(m.t)
+drto.declare_state(m.z)
+drto.declare_continuous_dynamics(m.ode)
+drto.declare_control(m.u, profile="piecewise_constant")
+drto.declare_tracking_stage_cost(m.stage_con)
+
+pyo.TransformationFactory("dae.collocation").apply_to(
+    m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU")
+
+pyo.TransformationFactory("drto.dynamic_optimization").apply_to(
+    m, terminal="infinite_horizon")
+
+pyo.SolverFactory("ipopt").solve(m)
+```
+
+Applied on its own, the segment options are explicit and the objective is
+assembled afterward:
+
+```python
+pyo.TransformationFactory("drto.infinite_horizon").apply_to(
+    m, nfe=3, ncp=5, beta=1.2)  # gamma defaults to the mesh rule
+drto.build_objective(m)
+```
+
 ## Acceptance criteria
 
 - `TransformationFactory('drto.infinite_horizon')` requires `declare_time`,
