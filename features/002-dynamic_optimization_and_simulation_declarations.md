@@ -110,6 +110,12 @@ declarations rather than re-deriving them.
 - Handed an unconstructed component instead, a declaration function wraps it:
   it returns the component so it can sit in the `m.x = ...` assignment, and
   validation and registration fire when Pyomo attaches it to the model. The
+  wrap form takes exactly one component per call, since it returns it for a
+  single assignment; varargs are a tagging-only convenience. In both styles
+  the argument is always the component being declared, attached or fresh:
+  drto never constructs a component, so an index set where a component
+  belongs (for example `state(m.t)`) is a type error, not an implicit
+  construction. The
   ordering rules are the same in both styles; a declaration's prerequisites
   must be declared by the time it registers, which writing the model top-down
   satisfies.
@@ -117,6 +123,10 @@ declarations rather than re-deriving them.
   `initial_condition`, `terminal_constraint`) double as decorators taking the
   model plus whatever `@m.Constraint` would take, building, attaching, and
   declaring the constraint in one step.
+- The styles mix per component: the same functions serve tagging, wrapping,
+  and the decorators, so one model may declare some components one way and
+  some another (for example decorators for the constraints and tags for the
+  Vars).
 - Arity: `state`, `control`, `dynamics`, and
   `initial_condition` accept varargs or an
   indexed container (one declaration per container), since they scale with the
