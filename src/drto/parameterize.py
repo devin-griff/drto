@@ -15,10 +15,7 @@ from pyomo.core import Transformation, TransformationFactory
 from drto.info import info
 
 
-@TransformationFactory.register(
-    "drto.parameterize",
-    doc="Apply the declared control profiles (delegates to pyomo-cvp).",
-)
+@TransformationFactory.register("drto.parameterize", doc="Apply the declared control profiles (delegates to pyomo-cvp).")
 class ParameterizeTransformation(Transformation):
     """Apply every pending declared control profile; see the module docstring."""
 
@@ -34,10 +31,7 @@ class ParameterizeTransformation(Transformation):
         try:
             TransformationFactory("cvp.parameterize").apply_to(model)
         except RuntimeError as err:
-            raise ValueError(
-                "drto: no control profiles to apply: the declared profiles "
-                "were already applied."
-            ) from err
+            raise ValueError("drto: no control profiles to apply: the declared profiles " "were already applied.") from err
         # cvp replaced the control components; point the registry at the
         # live replacements so drto.info and later transforms see the model,
         # including the steady-state pairings that own a replaced control
@@ -51,10 +45,4 @@ class ParameterizeTransformation(Transformation):
             replacement = replaced.get(id(target.get("of")))
             if replacement is not None:
                 target["of"] = replacement
-        reg.record_transformation(
-            "drto.parameterize",
-            controls=", ".join(
-                f"{name} ({record.get('profile')})"
-                for record, name in zip(records, names)
-            ),
-        )
+        reg.record_transformation("drto.parameterize", controls=", ".join(f"{name} ({record.get('profile')})" for record, name in zip(records, names)))

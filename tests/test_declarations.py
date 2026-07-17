@@ -102,9 +102,7 @@ def test_full_surface_records_in_the_registry():
 
 def test_control_profile_reaches_pyomo_cvp():
     m = declared_model()
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
-    )
+    pyo.TransformationFactory("dae.collocation").apply_to(m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU")
     pyo.TransformationFactory("cvp.parameterize").apply_to(m)
     # piecewise constant: one free control value per finite element
     assert len(m.u) == 4
