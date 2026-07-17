@@ -29,10 +29,14 @@ move.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.infinite_horizon')` requires `declare_time`,
-  `declare_state`, `declare_continuous_dynamics`, `declare_control`, and a
-  declared tracking stage cost, and errors clearly if any is missing. An
-  economic stage cost alone is rejected: its tail integral does not converge
-  at the equilibrium, so the terminal segment is a tracking-cost device.
+  `declare_state`, `declare_continuous_dynamics`, `declare_control`, and
+  `declare_tracking_stage_cost`, and errors clearly if any is missing.
+- A cost declared with `declare_economic_stage_cost` may be present alongside.
+  The segment replicates only the tracking stage cost, and the economic terms
+  stay on the finite horizon: an economic stage cost is a nonzero constant at
+  the equilibrium, so its tail integral diverges and its quadrature would be
+  mesh-dependent rather than an approximation. For the same reason
+  `declare_economic_stage_cost` alone is rejected.
 - It applies to a model whose declared time set is already discretized. It
   builds a segment ContinuousSet on [0, 1] carrying the transformed time and
   discretizes it itself with Gauss-Legendre collocation (`nfe` and `ncp`
@@ -48,7 +52,7 @@ move.
 - The endpoint is a hard equilibrium constraint, `0 = f` at `tau = 1`. There
   are no setpoint pins: the stage cost selects the equilibrium. The
   soft-constrained endpoint (paper eq. 36) is a follow-on, out of scope here.
-- The tail cost uses no quadrature state. The declared stage cost is
+- The tail cost uses no quadrature state. The declared tracking stage cost is
   replicated at the segment collocation points and enters the objective as
   explicit weighted terms, `beta * h_i * omega_k * psi_ik /
   (gamma*(1 - tau_ik^2))`, assembled by `drto.build_objective` (feature 003)
