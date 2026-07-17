@@ -22,3 +22,17 @@ outcomes.
 
 The declarations (feature 002) write to the registry and the transformations
 read it, so it is the one place drto looks for the model's declared pieces.
+
+## The declarations
+
+The declaration surface (feature 002) tags the pieces of an optimization or
+simulation problem on a model you already built: `declare_time`,
+`declare_state`, `declare_continuous_dynamics`, `declare_control` (with its
+pyomo-cvp `profile`), the stage and terminal costs, `declare_initial_condition`
+(a state at the first time point equal to a mutable Param, the feedback hook),
+`declare_terminal_constraint`, and the steady-state targets. Each declaration
+validates its convention and records the component in the registry, where the
+transformations find it. Declarations that scale with the states and controls
+take varargs and accumulate; the one-of-each declarations error on a second,
+different object. Conventions are read from either side of the written
+equality, so `lhs == rhs` and `rhs == lhs` are equivalent.

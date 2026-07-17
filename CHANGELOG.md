@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The declaration surface (feature 002): `declare_time`, `declare_state`,
+  `declare_continuous_dynamics`, `declare_control` (profile via pyomo-cvp),
+  `declare_tracking_stage_cost`, `declare_economic_stage_cost`,
+  `declare_tracking_terminal_cost`, `declare_initial_condition`,
+  `declare_terminal_constraint`, `declare_steady_state`, and
+  `declare_steady_state_control`. Each validates its convention (either
+  orientation of the equality), enforces the arity and re-declaration rules,
+  and records in the registry.
+
 - `drto.info` (feature 001): the per-model registry. Records declarations by
   kind and an ordered transformation log, backed by `Block.private_data` so it
   survives `clone()`/`create_using` with remapped component references, and

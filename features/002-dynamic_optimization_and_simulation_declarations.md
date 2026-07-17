@@ -1,6 +1,6 @@
 # Dynamic optimization and simulation declarations
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
