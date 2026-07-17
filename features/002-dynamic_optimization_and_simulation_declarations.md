@@ -41,7 +41,7 @@ m.cost = pyo.Var(m.t)
 @m.Constraint(m.t)
 def ode(m, t):
     return m.dzdt[t] == -m.z[t] + m.u[t]
-drto.continuous_dynamics(m.ode)
+drto.dynamics(m.ode)
 
 @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
 def stage(m, t):
@@ -74,7 +74,7 @@ m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
 
 m.cost = pyo.Var(m.t)
 
-@drto.continuous_dynamics(m, m.t)
+@drto.dynamics(m, m.t)
 def ode(m, t):
     return m.dzdt[t] == -m.z[t] + m.u[t]
 
@@ -113,11 +113,11 @@ declarations rather than re-deriving them.
   ordering rules are the same in both styles; a declaration's prerequisites
   must be declared by the time it registers, which writing the model top-down
   satisfies.
-- The constraint-role declarations (`continuous_dynamics`, the costs,
+- The constraint-role declarations (`dynamics`, the costs,
   `initial_condition`, `terminal_constraint`) double as decorators taking the
   model plus whatever `@m.Constraint` would take, building, attaching, and
   declaring the constraint in one step.
-- Arity: `state`, `control`, `continuous_dynamics`, and
+- Arity: `state`, `control`, `dynamics`, and
   `initial_condition` accept varargs or an
   indexed container (one declaration per container), since they scale with the
   states and controls. `horizon`, `tracking_stage_cost`,
@@ -143,7 +143,7 @@ declarations rather than re-deriving them.
   declared time set via pyomo-cvp. The `profile` applies to the controls named in
   that call. A control that needs a different parameterization is declared in a
   separate call.
-- `continuous_dynamics(m.ode, ...)` tags one or more equality
+- `dynamics(m.ode, ...)` tags one or more equality
   Constraints whose left-hand sides are the DerivativeVars of declared states.
 - `tracking_stage_cost(m.con)` and `economic_stage_cost(m.con)`
   each tag a per-time-point equality Constraint whose left-hand side is the
