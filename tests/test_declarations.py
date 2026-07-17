@@ -17,7 +17,7 @@ def base_model():
     m.u = pyo.Var(m.t, bounds=(0, 1))
 
     m.z_ss = pyo.Param(initialize=0.5, mutable=True)
-    m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+    m.u_ss = pyo.Param(initialize=0.5, mutable=True)  # = z_ss: a true equilibrium pair
     m.z_hat = pyo.Param(initialize=0.4, mutable=True)
 
     m.cost = pyo.Var(m.t)
@@ -60,7 +60,7 @@ def wrapped_model():
     m.u = drto.control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")
 
     m.z_ss = drto.steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))
-    m.u_ss = drto.steady_state_control(m.u, pyo.Param(initialize=0.3, mutable=True))
+    m.u_ss = drto.steady_state_control(m.u, pyo.Param(initialize=0.5, mutable=True))
     m.z_hat = pyo.Param(initialize=0.4, mutable=True)
 
     m.cost = pyo.Var(m.t)

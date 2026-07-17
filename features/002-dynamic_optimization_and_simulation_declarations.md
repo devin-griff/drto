@@ -32,7 +32,7 @@ drto.control(m.u, profile="piecewise_constant")
 
 m.z_ss = pyo.Param(initialize=0.5, mutable=True)   # tracking targets
 drto.steady_state(m.z, m.z_ss)
-m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+m.u_ss = pyo.Param(initialize=0.5, mutable=True)  # = z_ss: dz/dt = 0 needs z = u
 drto.steady_state_control(m.u, m.u_ss)
 m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
 
@@ -69,7 +69,7 @@ m.dzdt = DerivativeVar(m.z, wrt=m.t)
 m.u = drto.control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")
 
 m.z_ss = drto.steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))
-m.u_ss = drto.steady_state_control(m.u, pyo.Param(initialize=0.3, mutable=True))
+m.u_ss = drto.steady_state_control(m.u, pyo.Param(initialize=0.5, mutable=True))
 m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
 
 m.cost = pyo.Var(m.t)
