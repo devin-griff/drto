@@ -202,9 +202,9 @@ class Info:
         return "\n".join(lines)
 
     def _repr_html_(self):
-        rows = "".join(f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(text)}" "</code></td></tr>" for label, text in self._role_lines())
+        rows = "".join(f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(text)}</code></td></tr>" for label, text in self._role_lines())
         titems = "".join(f"<li><code>{html.escape(t)}</code></li>" for t in self._transformation_lines())
-        return "<div><b>drto registry</b>" f"<table><tbody>{rows}</tbody></table>" "<b>transformations</b>" + (f"<ol>{titems}</ol>" if titems else " (none)") + "</div>"
+        return f"<div><b>drto registry</b><table><tbody>{rows}</tbody></table><b>transformations</b>" + (f"<ol>{titems}</ol>" if titems else " (none)") + "</div>"
 
 
 def _component_category(comp):

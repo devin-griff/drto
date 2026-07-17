@@ -99,7 +99,7 @@ def _wrap_form(components, fn):
     if all(comp.is_constructed() for comp in components):
         return False
     if len(components) != 1:
-        raise TypeError(f"drto: {fn}: the wrapping form takes exactly one component " f"(it is returned for a single assignment); varargs are for " f"tagging attached components.")
+        raise TypeError(f"drto: {fn}: the wrapping form takes exactly one component " f"(it is returned for a single assignment); varargs are for tagging attached components.")
     return True
 
 
@@ -120,7 +120,7 @@ def _defer(component, register, fn):
             # attachment to an AbstractModel does not construct, so the hook
             # survives into create_instance's clone, where it would construct
             # and register the original component instead of the instance's
-            raise ValueError(f"drto: {fn}: wrapping registers at attachment to a concrete " f"model, and " f"'{component.name or type(component).__name__}' belongs to " f"an AbstractModel. Declare by tagging on the instance after " f"create_instance().")
+            raise ValueError(f"drto: {fn}: wrapping registers at attachment to a concrete " f"model, and '{component.name or type(component).__name__}' belongs to " f"an AbstractModel. Declare by tagging on the instance after create_instance().")
         original(data)
         del component.construct
         register()
@@ -239,7 +239,7 @@ def horizon(component):
     fn = "horizon"
     _container(component, fn)
     if not isinstance(component, ContinuousSet):
-        raise TypeError(f"drto: horizon expects a pyomo.dae ContinuousSet, got " f"{type(component).__name__} '{component.name}'.")
+        raise TypeError(f"drto: horizon expects a pyomo.dae ContinuousSet, got {type(component).__name__} '{component.name}'.")
 
     def register():
         if component.get_discretization_info():
@@ -337,7 +337,7 @@ def control(*components, profile="piecewise_constant"):
         _container(comp, fn)
         _check_ctype(comp, "Var", fn)
     if not pyomo_cvp_available:
-        raise RuntimeError("drto: control requires pyomo-cvp for the control " "profile (pip install pyomo-cvp).")
+        raise RuntimeError("drto: control requires pyomo-cvp for the control profile (pip install pyomo-cvp).")
 
     def register(comps):
         reg = info(comps[0].model())
@@ -360,7 +360,7 @@ def _register_stage_cost(kind, component, fn):
     expected = list(samples[:-1])
     members = sorted(component.keys()) if component.is_indexed() else []
     if members != expected:
-        raise ValueError(f"drto: {fn}: '{component.name}' must have one member per sample " f"point except the final one, where only the terminal cost " f"applies: index it over the samples, for example " f"@m.Constraint(sorted(m.t)[:-1]).")
+        raise ValueError(f"drto: {fn}: '{component.name}' must have one member per sample " f"point except the final one, where only the terminal cost applies: index it over the samples, for example @m.Constraint(sorted(m.t)[:-1]).")
     for cd in _members(component):
         _side_matching(cd, _is_var_member, fn, "the scalar cost variable (the cost term)")
     _declare_single(kind, component, fn)
@@ -490,7 +490,7 @@ def terminal_constraint(*args, **kwargs):
         for cd in _members(component):
             for v in identify_variables(cd.body, include_fixed=True):
                 if not _declared_in(v.parent_component(), states) or v.index() != tN:
-                    raise ValueError(f"drto: {fn}: '{cd.name}' references '{v.name}'; a " f"terminal constraint may reference only declared states " f"at the final time point ({tN}).")
+                    raise ValueError(f"drto: {fn}: '{cd.name}' references '{v.name}'; a " f"terminal constraint may reference only declared states at the final time point ({tN}).")
         _declare_single("terminal_constraint", component, fn)
 
     if args and _is_block(args[0]):

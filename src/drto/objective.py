@@ -60,7 +60,7 @@ def build_objective(m, zero=False):
     else:
         terms = list(_live_cost_terms(reg))
         if not terms:
-            raise ValueError("drto: build_objective found no live cost terms; declare a " "stage cost (feature 002), or pass zero=True for the " "simulation objective.")
+            raise ValueError("drto: build_objective found no live cost terms; declare a stage cost (feature 002), or pass zero=True for the simulation objective.")
         expr = sum(w * v for v, w in terms)
         n_terms = len(terms)
 
@@ -124,7 +124,7 @@ class BuildObjectiveTransformation(Transformation):
     """
 
     CONFIG = ConfigDict("drto.build_objective")
-    CONFIG.declare("zero", ConfigValue(default=False, domain=bool, description="Install a constant-zero objective (the simulation " "outcome) instead of assembling the live cost terms."))
+    CONFIG.declare("zero", ConfigValue(default=False, domain=bool, description="Install a constant-zero objective (the simulation outcome) instead of assembling the live cost terms."))
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)

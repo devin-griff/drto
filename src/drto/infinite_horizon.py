@@ -54,7 +54,7 @@ def _is_derivative(node):
     return isinstance(parent, DerivativeVar)
 
 
-@TransformationFactory.register("drto.infinite_horizon", doc="Append the infinite-horizon terminal segment of Dinh et al. (2025) " "to a declared, discretized dynamic model (drto).")
+@TransformationFactory.register("drto.infinite_horizon", doc="Append the infinite-horizon terminal segment of Dinh et al. (2025) to a declared, discretized dynamic model (drto).")
 class InfiniteHorizonTransformation(Transformation):
     """Append the terminal segment; see the module docstring.
 
@@ -70,30 +70,30 @@ class InfiniteHorizonTransformation(Transformation):
     CONFIG = ConfigDict("drto.infinite_horizon")
     CONFIG.declare("nfe", ConfigValue(default=3, domain=PositiveInt, description="Finite elements on the terminal segment."))
     CONFIG.declare("ncp", ConfigValue(default=5, domain=PositiveInt, description="Gauss-Legendre collocation points per element."))
-    CONFIG.declare("beta", ConfigValue(default=1.2, domain=float, description="Tail overestimation safety factor, strictly " "greater than 1."))
-    CONFIG.declare("gamma", ConfigValue(default="rule", description="Time-compression rate: 'rule' (the default) derives " "it from the mesh rule, the segment's first collocation point " "one sampling time past the junction; a number overrides."))
-    CONFIG.declare("profile", ConfigValue(default="collocation", description="pyomo-cvp profile for the segment controls: " "'collocation' (default) or 'piecewise_constant'."))
+    CONFIG.declare("beta", ConfigValue(default=1.2, domain=float, description="Tail overestimation safety factor, strictly greater than 1."))
+    CONFIG.declare("gamma", ConfigValue(default="rule", description="Time-compression rate: 'rule' (the default) derives it from the mesh rule, the segment's first collocation point one sampling time past the junction; a number overrides."))
+    CONFIG.declare("profile", ConfigValue(default="collocation", description="pyomo-cvp profile for the segment controls: 'collocation' (default) or 'piecewise_constant'."))
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
         if config.beta <= 1:
-            raise ValueError(f"drto: infinite_horizon requires beta > 1 (the terminal " f"cost must overestimate the tail; the margin beta - 1 " f"covers the quadrature error). Got beta={config.beta}.")
+            raise ValueError(f"drto: infinite_horizon requires beta > 1 (the terminal cost must overestimate the tail; the margin beta - 1 covers the quadrature error). Got beta={config.beta}.")
         if not pyomo_cvp_available:
-            raise RuntimeError("drto: infinite_horizon requires pyomo-cvp for the segment " "control profiles (pip install pyomo-cvp).")
+            raise RuntimeError("drto: infinite_horizon requires pyomo-cvp for the segment control profiles (pip install pyomo-cvp).")
         if not numpy_available:
-            raise RuntimeError("drto: infinite_horizon requires numpy for the quadrature " "weights.")
+            raise RuntimeError("drto: infinite_horizon requires numpy for the quadrature weights.")
 
         reg = info(model)
         missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
         if "tracking_stage_cost" in missing and reg.has_declaration("economic_stage_cost"):
-            raise ValueError("drto: infinite_horizon requires a tracking stage cost. An " "economic stage cost alone is rejected: it is nonzero at the " "equilibrium, so its tail integral diverges and its " "quadrature would be mesh-dependent.")
+            raise ValueError("drto: infinite_horizon requires a tracking stage cost. An economic stage cost alone is rejected: it is nonzero at the equilibrium, so its tail integral diverges and its quadrature would be mesh-dependent.")
         if missing:
             raise ValueError("drto: infinite_horizon requires " + ", ".join(f"drto.{k}" for k in missing) + " first.")
         if reg.has_transformation("drto.infinite_horizon"):
             raise ValueError("drto: infinite_horizon was already applied to this model.")
         drto_obj = model.component("drto_objective")
         if drto_obj is not None and drto_obj.active:
-            raise ValueError("drto: the objective is already assembled; apply " "drto.infinite_horizon first, then rebuild with " "drto.build_objective.")
+            raise ValueError("drto: the objective is already assembled; apply drto.infinite_horizon first, then rebuild with drto.build_objective.")
 
         time = reg.components("horizon")[0]
         if not time.get_discretization_info():
@@ -109,10 +109,10 @@ class InfiniteHorizonTransformation(Transformation):
         stage_con = stage_record["component"]
 
         if reg.has_transformation("drto.parameterize"):
-            raise ValueError("drto: the control profiles are already applied; apply " "drto.infinite_horizon before drto.parameterize (it " "replicates the controls in their original time indexing).")
+            raise ValueError("drto: the control profiles are already applied; apply drto.infinite_horizon before drto.parameterize (it replicates the controls in their original time indexing).")
         for comp in states + controls:
             if comp.index_set() is not time:
-                raise ValueError(f"drto: infinite_horizon supports states and controls " f"indexed by the declared time set only; " f"'{comp.name}' is not.")
+                raise ValueError(f"drto: infinite_horizon supports states and controls indexed by the declared time set only; '{comp.name}' is not.")
 
         b = Block(concrete=True)
         model.add_component(_BLOCK_NAME, b)
@@ -145,9 +145,9 @@ class InfiniteHorizonTransformation(Transformation):
             for v in identify_variables(expr, include_fixed=True):
                 comp = v.parent_component()
                 if comp not in states and comp not in controls:
-                    raise ValueError(f"drto: infinite_horizon cannot replicate " f"'{where}': it references '{v.name}', which is " f"not a declared state or control.")
+                    raise ValueError(f"drto: infinite_horizon cannot replicate '{where}': it references '{v.name}', which is " f"not a declared state or control.")
                 if v.index() != t_rep:
-                    raise ValueError(f"drto: infinite_horizon cannot replicate " f"'{where}': it references '{v.name}' away from " f"the constraint's own time point.")
+                    raise ValueError(f"drto: infinite_horizon cannot replicate '{where}': it references '{v.name}' away from " f"the constraint's own time point.")
 
         # --- dilated dynamics at interior collocation points (eq. 25) ---
         rhs_templates = []
@@ -189,7 +189,7 @@ class InfiniteHorizonTransformation(Transformation):
             try:
                 gamma_val = float(config.gamma)
             except (TypeError, ValueError):
-                raise ValueError(f"drto: gamma must be 'rule' (derive from the mesh " f"rule) or a number; got {config.gamma!r}.") from None
+                raise ValueError(f"drto: gamma must be 'rule' (derive from the mesh rule) or a number; got {config.gamma!r}.") from None
         b.gamma.set_value(gamma_val)
 
         # --- the tracking stage cost, replicated as named Expressions at the

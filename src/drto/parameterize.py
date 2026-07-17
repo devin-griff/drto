@@ -31,7 +31,7 @@ class ParameterizeTransformation(Transformation):
         try:
             TransformationFactory("cvp.parameterize").apply_to(model)
         except RuntimeError as err:
-            raise ValueError("drto: no control profiles to apply: the declared profiles " "were already applied.") from err
+            raise ValueError("drto: no control profiles to apply: the declared profiles were already applied.") from err
         # cvp replaced the control components; point the registry at the
         # live replacements so drto.info and later transforms see the model,
         # including the steady-state pairings that own a replaced control
