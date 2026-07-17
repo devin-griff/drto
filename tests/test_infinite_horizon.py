@@ -83,14 +83,16 @@ def hicks(n_samples):
     def zt_init(m):
         return m.zt[0] == m.zt_hat
 
-    drto.declare_time(m.t)
-    drto.declare_state(m.zc, m.zt)
-    drto.declare_continuous_dynamics(m.zc_ode, m.zt_ode)
-    drto.declare_control(m.v1, m.v2, profile="piecewise_constant")
-    drto.declare_tracking_stage_cost(m.stage)
-    drto.declare_initial_condition(m.zc_init, m.zt_init)
-    drto.declare_steady_state(m.zc_ss, m.zt_ss)
-    drto.declare_steady_state_control(m.v1_ss, m.v2_ss)
+    drto.horizon(m.t)
+    drto.state(m.zc, m.zt)
+    drto.dynamics(m.zc_ode, m.zt_ode)
+    drto.control(m.v1, m.v2, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.zc_init, m.zt_init)
+    drto.steady_state(m.zc, m.zc_ss)
+    drto.steady_state(m.zt, m.zt_ss)
+    drto.steady_state_control(m.v1, m.v1_ss)
+    drto.steady_state_control(m.v2, m.v2_ss)
     return m
 
 
@@ -99,7 +101,7 @@ def hicks(n_samples):
 # ----------------------------------------------------------------------
 def test_requires_the_declarations():
     m = base_model()
-    with pytest.raises(ValueError, match="declare_time"):
+    with pytest.raises(ValueError, match="horizon"):
         pyo.TransformationFactory(IH).apply_to(m)
 
 
@@ -111,11 +113,11 @@ def test_economic_alone_is_rejected():
     def econ(m, t):
         return m.ecost[t] == -m.u[t]
 
-    drto.declare_time(m.t)
-    drto.declare_state(m.z)
-    drto.declare_continuous_dynamics(m.ode)
-    drto.declare_control(m.u)
-    drto.declare_economic_stage_cost(m.econ)
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u)
+    drto.economic_stage_cost(m.econ)
     with pytest.raises(ValueError, match="tail integral diverges"):
         pyo.TransformationFactory(IH).apply_to(m)
 

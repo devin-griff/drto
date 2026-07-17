@@ -2,22 +2,39 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The dynamic optimization and simulation declarations (feature 002).
 
-Each ``declare_*`` function tags a Pyomo component the user already wrote,
-validates that it is of the expected type and meets the declaration's
-convention, and records it in the model's registry (``drto.info``, feature
-001), where the transformations find it. Declarations are the public surface:
-drto bolts onto an existing model rather than replacing how the user builds
-one.
+Each declaration function tags a Pyomo component, validates that it is of the
+expected type and meets the declaration's convention, and records it in the
+model's registry (``drto.info``, feature 001), where the transformations find
+it. Declarations are the public surface: drto bolts onto an existing model
+rather than replacing how the user builds one.
 
-Arity follows the spec: the declarations that scale with the states and
-controls (``declare_state``, ``declare_control``,
-``declare_continuous_dynamics``, ``declare_initial_condition``,
-``declare_steady_state``, ``declare_steady_state_control``) take varargs and
-accumulate across calls, rejecting duplicates. The one-of-each declarations
-(``declare_time``, the stage and terminal costs, the terminal constraint)
-take exactly one object and error on a second call with a different one.
+Every function serves two calling styles. Tagging: handed a component already
+attached to the model, it registers immediately, so a finished model is
+declared after the fact, interleaved or in one block. Wrapping: handed a
+fresh (unconstructed) component, it returns it so it can sit in the
+``m.x = ...`` assignment, and validation and registration fire when Pyomo
+attaches it. The argument is always the component being declared, attached or
+fresh: drto never constructs a component, so an index set where a component
+belongs (``state(m.t)``) is a type error. The constraint-role declarations
+additionally double as decorators, ``@drto.dynamics(m, m.t)`` taking the
+model plus whatever ``@m.Constraint`` would take and building, attaching, and
+declaring the constraint in one step. The styles mix freely per component;
+the one rule, in every style, is that a declaration's prerequisites must be
+declared by the time it registers, which writing the model top-down
+satisfies.
+
+Arity: the declarations that scale with the states and controls (``state``,
+``control``, ``dynamics``, ``initial_condition``) take varargs when tagging
+and accumulate across calls, rejecting duplicates; the wrapping form takes
+exactly one component, since it is returned for a single assignment. The
+one-of-each declarations (``horizon``, the stage and terminal costs, the
+terminal constraint) take exactly one object and error on a second call with
+a different one. ``steady_state`` and ``steady_state_control`` take one
+(state or control, target Param) pair per call and accumulate.
 """
 from pyomo.common.dependencies import attempt_import
+from pyomo.core import Constraint
+from pyomo.core.base.block import BlockData
 from pyomo.core.expr import identify_variables
 from pyomo.core.expr.relational_expr import EqualityExpression
 from pyomo.dae import ContinuousSet, DerivativeVar
@@ -58,6 +75,103 @@ def _check_ctype(component, ctype_name, fn):
         )
 
 
+def _is_block(obj):
+    """Return whether ``obj`` is a block (the decorator form's first arg)."""
+    return isinstance(obj, BlockData)
+
+
+def _single(args, fn):
+    """Return the one component of a one-of-each declaration call."""
+    if len(args) != 1:
+        raise TypeError(f"drto: {fn} takes exactly one component; got {len(args)}.")
+    return args[0]
+
+
+def _declared_in(component, components):
+    """Identity membership over a component tuple.
+
+    Pyomo components overload ``==`` (a scalar Var's builds a relational
+    expression, and ``bool()`` on it raises), so ``in`` is never safe here.
+    """
+    return any(c is component for c in components)
+
+
+def _no_kwargs(kwargs, fn):
+    """Reject keyword arguments outside the decorator form."""
+    if kwargs:
+        raise TypeError(
+            f"drto: {fn} got unexpected keyword arguments {sorted(kwargs)}: "
+            f"keywords pass through to Constraint in the decorator form only."
+        )
+
+
+def _wrap_form(components, fn):
+    """Return whether the call is the wrapping form: one fresh component."""
+    if all(comp.is_constructed() for comp in components):
+        return False
+    if len(components) != 1:
+        raise TypeError(
+            f"drto: {fn}: the wrapping form takes exactly one component "
+            f"(it is returned for a single assignment); varargs are for "
+            f"tagging attached components."
+        )
+    return True
+
+
+def _defer(component, register, fn):
+    """Wrap a fresh component: run ``register`` when Pyomo attaches it.
+
+    Attachment (``m.x = component``) constructs the component, so the hook
+    shadows ``construct``, runs the original, removes itself, and registers,
+    at which point the component has its model and name.
+    """
+    if "construct" in component.__dict__:
+        raise ValueError(
+            f"drto: {fn}: "
+            f"'{component.name or type(component).__name__}' is already "
+            f"wrapped by a declaration."
+        )
+    original = component.construct
+
+    def construct(data=None):
+        model = component.model()
+        if type(model).__name__ == "AbstractModel":
+            # attachment to an AbstractModel does not construct, so the hook
+            # survives into create_instance's clone, where it would construct
+            # and register the original component instead of the instance's
+            raise ValueError(
+                f"drto: {fn}: wrapping registers at attachment to a concrete "
+                f"model, and "
+                f"'{component.name or type(component).__name__}' belongs to "
+                f"an AbstractModel. Declare by tagging on the instance after "
+                f"create_instance()."
+            )
+        original(data)
+        del component.construct
+        register()
+
+    component.construct = construct
+    return component
+
+
+def _constraint_decorator(block, sets, register_one, kwargs=None):
+    """The construction form of a constraint-role declaration.
+
+    ``@drto.<fn>(m, *sets, **kwargs)`` builds the Constraint from the
+    decorated rule, exactly as ``@m.Constraint(*sets, **kwargs)`` would,
+    attaches it under the rule's name, declares it, and returns the
+    component.
+    """
+
+    def decorate(rule):
+        con = Constraint(*sets, rule=rule, **(kwargs or {}))
+        setattr(block, rule.__name__, con)
+        register_one(con)
+        return con
+
+    return decorate
+
+
 def _declare_single(kind, component, fn, **metadata):
     """Record a one-of-each declaration, enforcing the re-declaration rule."""
     reg = info(component.model())
@@ -77,10 +191,16 @@ def _declare_many(kind, components, fn, **metadata):
     """Record an accumulating declaration, rejecting duplicates."""
     if not components:
         raise TypeError(f"drto: {fn} needs at least one component.")
-    reg = info(_container(components[0], fn).model())
+    model = _container(components[0], fn).model()
+    reg = info(model)
     for comp in components:
         _container(comp, fn)
-        if comp in reg.components(kind):
+        if comp.model() is not model:
+            raise ValueError(
+                f"drto: {fn}: '{comp.name}' is on a different model than "
+                f"'{components[0].name}'; declare each model separately."
+            )
+        if _declared_in(comp, reg.components(kind)):
             raise ValueError(
                 f"drto: '{comp.name}' is already declared as a "
                 f"{kind.replace('_', ' ')}."
@@ -90,11 +210,11 @@ def _declare_many(kind, components, fn, **metadata):
     return reg
 
 
-def _declared_time(reg, fn):
+def _declared_horizon(reg, fn):
     """Return the declared time set, erroring clearly if there is none."""
-    time_sets = reg.components("time")
+    time_sets = reg.components("horizon")
     if not time_sets:
-        raise ValueError(f"drto: {fn} requires declare_time first.")
+        raise ValueError(f"drto: {fn} requires the horizon (drto.horizon) first.")
     return time_sets[0]
 
 
@@ -146,65 +266,96 @@ def _members(con):
 # ----------------------------------------------------------------------
 # the declaration surface
 # ----------------------------------------------------------------------
-def declare_time(component):
+def horizon(component):
     """Declare the horizon time set, a ``pyomo.dae`` ContinuousSet.
 
     The root handle for the moving-horizon machinery. The set is initialized
     with the sample grid (the sampling instants), and declaring it captures
     that grid in the registry: the samples define the stage-cost sum (feature
     003) and the sampling time. Exactly one per model, declared before the
-    set is discretized.
+    set is discretized. Tags an attached set or wraps a fresh one.
     """
-    _container(component, "declare_time")
+    fn = "horizon"
+    _container(component, fn)
     if not isinstance(component, ContinuousSet):
         raise TypeError(
-            f"drto: declare_time expects a pyomo.dae ContinuousSet, got "
+            f"drto: horizon expects a pyomo.dae ContinuousSet, got "
             f"{type(component).__name__} '{component.name}'."
         )
-    if component.get_discretization_info():
-        raise ValueError(
-            f"drto: declare_time must be called before '{component.name}' is "
-            f"discretized: the set's points are captured as the sample grid."
-        )
-    samples = tuple(sorted(component))
-    if len(samples) < 2:
-        raise ValueError(
-            f"drto: initialize '{component.name}' with the sample grid (the "
-            f"sampling instants); it holds {len(samples)} point(s)."
-        )
-    _declare_single("time", component, "declare_time", samples=samples)
+
+    def register():
+        if component.get_discretization_info():
+            raise ValueError(
+                f"drto: horizon must be called before '{component.name}' is "
+                f"discretized: the set's points are captured as the sample grid."
+            )
+        # a constructed ContinuousSet always holds at least two points
+        # (Pyomo enforces it), so the grid is the set's points as written
+        samples = tuple(sorted(component))
+        _declare_single("horizon", component, fn, samples=samples)
+
+    if not component.is_constructed():
+        return _defer(component, register, fn)
+    register()
+    return component
 
 
-def declare_state(*components):
+def state(*components):
     """Declare one or more state Vars.
 
     A state carries a DerivativeVar only in a dynamic model, so no derivative
-    is required here: a steady-state model's states qualify as written.
+    is required here: a steady-state model's states qualify as written. Tags
+    attached Vars or wraps one fresh Var.
     """
+    fn = "state"
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
     for comp in components:
-        _container(comp, "declare_state")
-        _check_ctype(comp, "Var", "declare_state")
-    _declare_many("state", components, "declare_state")
+        _container(comp, fn)
+        _check_ctype(comp, "Var", fn)
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: _declare_many("state", (comp,), fn), fn)
+    _declare_many("state", components, fn)
+    return components[0] if len(components) == 1 else None
 
 
-def declare_continuous_dynamics(*components):
-    """Declare one or more continuous-dynamics equality Constraints.
+def dynamics(*components, **kwargs):
+    """Declare one or more dynamics equality Constraints.
 
-    One side of each member is the DerivativeVar of a declared state, taken
-    with respect to the declared time set. Requires ``declare_time`` and
-    ``declare_state`` first.
+    Currently continuous-time: one side of each member is the DerivativeVar
+    of a declared state, taken with respect to the declared time set.
+    Requires ``horizon`` and ``state`` first. Tags attached Constraints,
+    wraps a fresh one, or builds one as a decorator:
+    ``@drto.dynamics(m, m.t)``.
     """
-    fn = "declare_continuous_dynamics"
+    fn = "dynamics"
+    if components and _is_block(components[0]):
+        block, sets = components[0], components[1:]
+        return _constraint_decorator(
+            block, sets, lambda c: _register_dynamics((c,)), kwargs
+        )
+    _no_kwargs(kwargs, fn)
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
     for comp in components:
         _container(comp, fn)
         _check_ctype(comp, "Constraint", fn)
-    if not components:
-        raise TypeError(f"drto: {fn} needs at least one component.")
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: _register_dynamics((comp,)), fn)
+    _register_dynamics(components)
+    return components[0] if len(components) == 1 else None
+
+
+def _register_dynamics(components):
+    """Validate and record dynamics Constraints (attached and constructed)."""
+    fn = "dynamics"
     reg = info(components[0].model())
-    time = _declared_time(reg, fn)
+    time = _declared_horizon(reg, fn)
     states = reg.components("state")
     if not states:
-        raise ValueError(f"drto: {fn} requires declare_state first.")
+        raise ValueError(f"drto: {fn} requires drto.state first.")
     for comp in components:
         for cd in _members(comp):
             deriv, _ = _side_matching(
@@ -217,51 +368,58 @@ def declare_continuous_dynamics(*components):
             )
             dv = deriv.parent_component()
             state = dv.get_state_var()
-            if state not in states:
+            if not _declared_in(state, states):
                 raise ValueError(
                     f"drto: {fn}: '{cd.name}' differentiates "
                     f"'{state.name}', which is not a declared state."
                 )
-            if time not in dv.get_continuousset_list():
+            if not _declared_in(time, dv.get_continuousset_list()):
                 raise ValueError(
                     f"drto: {fn}: '{dv.name}' is not differentiated with "
                     f"respect to the declared time set '{time.name}'."
                 )
-    _declare_many("continuous_dynamics", components, fn)
+    _declare_many("dynamics", components, fn)
 
 
-def declare_control(*components, profile="piecewise_constant"):
+def control(*components, profile="piecewise_constant"):
     """Declare one or more manipulated-input Vars and their profile.
 
     The ``profile`` (a pyomo-cvp profile) parameterizes the named controls
     over the declared time set; it applies to the controls in this call, so a
     control needing a different parameterization is declared separately.
-    Requires ``declare_time`` first and pyomo-cvp installed.
+    Requires ``horizon`` first and pyomo-cvp installed. Tags attached Vars or
+    wraps one fresh Var.
     """
-    fn = "declare_control"
+    fn = "control"
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
     for comp in components:
         _container(comp, fn)
         _check_ctype(comp, "Var", fn)
-    if not components:
-        raise TypeError(f"drto: {fn} needs at least one component.")
     if not pyomo_cvp_available:
         raise RuntimeError(
-            "drto: declare_control requires pyomo-cvp for the control "
+            "drto: control requires pyomo-cvp for the control "
             "profile (pip install pyomo-cvp)."
         )
-    reg = info(components[0].model())
-    time = _declared_time(reg, fn)
-    _declare_many("control", components, fn, profile=profile)
-    pyomo_cvp.declare_profile(*components, wrt=time, profile=profile)
+
+    def register(comps):
+        reg = info(comps[0].model())
+        time = _declared_horizon(reg, fn)
+        _declare_many("control", comps, fn, profile=profile)
+        pyomo_cvp.declare_profile(*comps, wrt=time, profile=profile)
+
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: register((comp,)), fn)
+    register(components)
+    return components[0] if len(components) == 1 else None
 
 
-def _declare_stage_cost(kind, component, fn):
-    """Shared validation for the per-time-point stage-cost declarations."""
-    _container(component, fn)
-    _check_ctype(component, "Constraint", fn)
+def _register_stage_cost(kind, component, fn):
+    """Validate and record a stage cost (attached and constructed)."""
     reg = info(component.model())
-    _declared_time(reg, fn)
-    samples = reg.declarations("time")[0]["samples"]
+    _declared_horizon(reg, fn)
+    samples = reg.declarations("horizon")[0]["samples"]
     expected = list(samples[:-1])
     members = sorted(component.keys()) if component.is_indexed() else []
     if members != expected:
@@ -278,64 +436,119 @@ def _declare_stage_cost(kind, component, fn):
     _declare_single(kind, component, fn)
 
 
-def declare_tracking_stage_cost(component):
+def _declare_stage_cost(kind, args, fn, kwargs):
+    """Dispatch a stage-cost declaration across the three calling styles."""
+    if args and _is_block(args[0]):
+        block, sets = args[0], args[1:]
+        return _constraint_decorator(
+            block, sets, lambda c: _register_stage_cost(kind, c, fn), kwargs
+        )
+    _no_kwargs(kwargs, fn)
+    component = _single(args, fn)
+    _container(component, fn)
+    _check_ctype(component, "Constraint", fn)
+    if not component.is_constructed():
+        return _defer(component, lambda: _register_stage_cost(kind, component, fn), fn)
+    _register_stage_cost(kind, component, fn)
+    return component
+
+
+def tracking_stage_cost(*args, **kwargs):
     """Declare the tracking stage cost, a per-time-point equality.
 
     One side of each member is the scalar running-cost variable; the other
-    defines the cost. One per model.
+    defines the cost. One per model, indexed over the samples minus the
+    final time (the terminal cost owns it). Tags, wraps, or builds as a
+    decorator: ``@drto.tracking_stage_cost(m, sorted(m.t)[:-1])``.
     """
-    _declare_stage_cost("tracking_stage_cost", component, "declare_tracking_stage_cost")
+    return _declare_stage_cost(
+        "tracking_stage_cost", args, "tracking_stage_cost", kwargs
+    )
 
 
-def declare_economic_stage_cost(component):
+def economic_stage_cost(*args, **kwargs):
     """Declare the economic stage cost, a per-time-point equality.
 
     One side of each member is the scalar running-cost variable; the other
-    defines the cost. One per model.
+    defines the cost. One per model. Tags, wraps, or builds as a decorator.
     """
-    _declare_stage_cost("economic_stage_cost", component, "declare_economic_stage_cost")
+    return _declare_stage_cost(
+        "economic_stage_cost", args, "economic_stage_cost", kwargs
+    )
 
 
-def declare_tracking_terminal_cost(component):
+def tracking_terminal_cost(*args, **kwargs):
     """Declare the terminal tracking cost, a scalar equality.
 
     One side is the scalar terminal-cost variable; the other defines the
-    cost. One per model.
+    cost. One per model. Tags, wraps, or builds as a decorator:
+    ``@drto.tracking_terminal_cost(m)``.
     """
-    fn = "declare_tracking_terminal_cost"
+    fn = "tracking_terminal_cost"
+
+    def register(component):
+        if component.is_indexed():
+            raise ValueError(
+                f"drto: {fn}: '{component.name}' must be a scalar Constraint "
+                f"(the terminal cost applies at the final time only)."
+            )
+        _side_matching(
+            component, _is_var_member, fn, "the scalar terminal-cost variable"
+        )
+        _declare_single("tracking_terminal_cost", component, fn)
+
+    if args and _is_block(args[0]):
+        return _constraint_decorator(args[0], args[1:], register, kwargs)
+    _no_kwargs(kwargs, fn)
+    component = _single(args, fn)
     _container(component, fn)
     _check_ctype(component, "Constraint", fn)
-    if component.is_indexed():
-        raise ValueError(
-            f"drto: {fn}: '{component.name}' must be a scalar Constraint "
-            f"(the terminal cost applies at the final time only)."
-        )
-    _side_matching(component, _is_var_member, fn, "the scalar terminal-cost variable")
-    _declare_single("tracking_terminal_cost", component, fn)
+    if not component.is_constructed():
+        return _defer(component, lambda: register(component), fn)
+    register(component)
+    return component
 
 
-def declare_initial_condition(*components):
+def initial_condition(*components, **kwargs):
     """Declare one or more initial-condition equality Constraints.
 
     One side of each is a declared state at the first time point; the other
     is a mutable Param, the state feedback hook the loop writes measurements
-    into.
+    into. Tags attached Constraints, wraps a fresh one, or builds one as a
+    decorator: ``@drto.initial_condition(m)``.
     """
-    fn = "declare_initial_condition"
+    fn = "initial_condition"
+    if components and _is_block(components[0]):
+        block, sets = components[0], components[1:]
+        return _constraint_decorator(
+            block, sets, lambda c: _register_initial_condition((c,)), kwargs
+        )
+    _no_kwargs(kwargs, fn)
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
     for comp in components:
         _container(comp, fn)
         _check_ctype(comp, "Constraint", fn)
-    if not components:
-        raise TypeError(f"drto: {fn} needs at least one component.")
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: _register_initial_condition((comp,)), fn)
+    _register_initial_condition(components)
+    return components[0] if len(components) == 1 else None
+
+
+def _register_initial_condition(components):
+    """Validate and record initial conditions (attached and constructed)."""
+    fn = "initial_condition"
     reg = info(components[0].model())
-    time = _declared_time(reg, fn)
+    time = _declared_horizon(reg, fn)
     states = reg.components("state")
     t0 = time.first()
     for comp in components:
         for cd in _members(comp):
             state_side, param_side = _side_matching(
                 cd,
-                lambda s: _is_var_member(s) and s.parent_component() in states,
+                lambda s: _is_var_member(s)
+                and _declared_in(s.parent_component(), states),
                 fn,
                 "a declared state",
             )
@@ -359,55 +572,113 @@ def declare_initial_condition(*components):
     _declare_many("initial_condition", components, fn)
 
 
-def declare_terminal_constraint(component):
+def terminal_constraint(*args, **kwargs):
     """Declare the terminal constraint, referencing only final-time states.
 
     A single Constraint whose variables are all declared states at the final
-    time point, which is what separates it from a path constraint.
+    time point, which is what separates it from a path constraint. Tags,
+    wraps, or builds as a decorator: ``@drto.terminal_constraint(m)``.
     """
-    fn = "declare_terminal_constraint"
+    fn = "terminal_constraint"
+
+    def register(component):
+        reg = info(component.model())
+        time = _declared_horizon(reg, fn)
+        states = reg.components("state")
+        tN = time.last()
+        for cd in _members(component):
+            for v in identify_variables(cd.body, include_fixed=True):
+                if not _declared_in(v.parent_component(), states) or v.index() != tN:
+                    raise ValueError(
+                        f"drto: {fn}: '{cd.name}' references '{v.name}'; a "
+                        f"terminal constraint may reference only declared states "
+                        f"at the final time point ({tN})."
+                    )
+        _declare_single("terminal_constraint", component, fn)
+
+    if args and _is_block(args[0]):
+        return _constraint_decorator(args[0], args[1:], register, kwargs)
+    _no_kwargs(kwargs, fn)
+    component = _single(args, fn)
     _container(component, fn)
     _check_ctype(component, "Constraint", fn)
-    reg = info(component.model())
-    time = _declared_time(reg, fn)
-    states = reg.components("state")
-    tN = time.last()
-    for cd in _members(component):
-        for v in identify_variables(cd.body, include_fixed=True):
-            if v.parent_component() not in states or v.index() != tN:
-                raise ValueError(
-                    f"drto: {fn}: '{cd.name}' references '{v.name}'; a "
-                    f"terminal constraint may reference only declared states "
-                    f"at the final time point ({tN})."
-                )
-    _declare_single("terminal_constraint", component, fn)
+    if not component.is_constructed():
+        return _defer(component, lambda: register(component), fn)
+    register(component)
+    return component
 
 
-def _declare_targets(kind, components, fn):
-    """Shared validation for the steady-state target declarations."""
-    for comp in components:
-        _container(comp, fn)
-        _check_ctype(comp, "Param", fn)
-        if not comp.mutable:
+def _declare_target(kind, owner, target, fn, owner_kind):
+    """Pair a declared state or control with its setpoint target Param."""
+    _container(owner, fn)
+    _check_ctype(owner, "Var", fn)
+    if not owner.is_constructed():
+        raise ValueError(
+            f"drto: {fn}: declare the {owner_kind} first; "
+            f"'{owner.name}' is not attached to a model yet."
+        )
+    reg = info(owner.model())
+    if not _declared_in(owner, reg.components(owner_kind)):
+        raise ValueError(
+            f"drto: {fn}: '{owner.name}' is not a declared {owner_kind}; "
+            f"drto.{owner_kind} first."
+        )
+    _container(target, fn)
+    _check_ctype(target, "Param", fn)
+    if not target.mutable:
+        raise ValueError(
+            f"drto: {fn}: Param '{target.name}' must be mutable so the "
+            f"steady-state solve can populate it."
+        )
+
+    def register():
+        if target.model() is not owner.model():
             raise ValueError(
-                f"drto: {fn}: Param '{comp.name}' must be mutable so the "
-                f"steady-state solve can populate it."
+                f"drto: {fn}: target '{target.name}' is on a different "
+                f"model than '{owner.name}'."
             )
-    _declare_many(kind, components, fn)
+        # a target Param serves exactly one owner, in either target kind
+        for a_kind in ("steady_state", "steady_state_control"):
+            for rec in reg.declarations(a_kind):
+                if a_kind == kind and rec["of"] is owner:
+                    if rec["component"] is target:
+                        return  # idempotent re-declaration of the same pair
+                    raise ValueError(
+                        f"drto: {fn}: '{owner.name}' already has the target "
+                        f"'{rec['component'].name}'."
+                    )
+                if rec["component"] is target:
+                    raise ValueError(
+                        f"drto: '{target.name}' is already declared as a "
+                        f"{a_kind.replace('_', ' ')} target, of "
+                        f"'{rec['of'].name}'."
+                    )
+        reg.record_declaration(kind, target, of=owner)
+
+    if not target.is_constructed():
+        return _defer(target, register, fn)
+    register()
+    return target
 
 
-def declare_steady_state(*components):
-    """Declare one or more mutable Params holding the state setpoints.
+def steady_state(owner, target):
+    """Pair a declared state with the mutable Param holding its setpoint.
 
-    The targets the tracking costs drive toward, populated by the
-    steady-state/RTO solve.
+    The target the tracking costs drive toward, populated by the
+    steady-state/RTO solve (feature 009), which is why the pairing is
+    recorded: drto writes each solved state value into its target. One pair
+    per call; returns the target, so a fresh Param wraps:
+    ``m.z_ss = drto.steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))``.
     """
-    _declare_targets("steady_state", components, "declare_steady_state")
+    return _declare_target("steady_state", owner, target, "steady_state", "state")
 
 
-def declare_steady_state_control(*components):
-    """Declare one or more mutable Params holding the control setpoints.
+def steady_state_control(owner, target):
+    """Pair a declared control with the mutable Param holding its setpoint.
 
-    The control targets the tracking costs drive toward.
+    The control target the tracking costs drive toward. One pair per call;
+    returns the target, so a fresh Param wraps.
     """
-    _declare_targets("steady_state_control", components, "declare_steady_state_control")
+    return _declare_target(
+        "steady_state_control", owner, target, "steady_state_control", "control"
+    )

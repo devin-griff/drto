@@ -21,7 +21,7 @@ pyo.TransformationFactory("drto.parameterize").apply_to(m)
 
 ## Benefit hypothesis
 
-`declare_control(profile=...)` records the profile; something must apply it.
+`control(profile=...)` records the profile; something must apply it.
 The mode transforms will do it as a step, but a standalone workflow (the
 feature 004 example, the Hicks notebook) otherwise has to call
 `cvp.parameterize` itself, leaking the dependency into user code. Wrapping it
@@ -35,7 +35,7 @@ at detached components.
   control profile by delegating to pyomo-cvp's declaration-mode
   `cvp.parameterize`.
 - It requires declared controls and errors clearly when there is nothing to
-  apply: no `declare_control` yet, or the profiles were already applied.
+  apply: no `control` yet, or the profiles were already applied.
 - After application it refreshes the registry: each control record points at
   the live replacement component, found by name, so `drto.info` and later
   transforms see the real model.

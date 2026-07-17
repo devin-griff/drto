@@ -26,9 +26,9 @@ _DRTO_SCOPE = "drto"
 #: surface (feature 002). Unknown kinds render after these, labeled by their
 #: raw kind string, so the registry does not need updating for new kinds.
 _KIND_LABELS = (
-    ("time", "time"),
+    ("horizon", "horizon"),
     ("state", "states"),
-    ("continuous_dynamics", "dynamics"),
+    ("dynamics", "dynamics"),
     ("control", "controls"),
     ("tracking_stage_cost", "tracking stage cost"),
     ("economic_stage_cost", "economic stage cost"),
@@ -68,7 +68,7 @@ def info(m):
 class Info:
     """The drto registry: declarations by kind plus a transformation log.
 
-    Declarations are recorded by the ``declare_*`` functions (feature 002)
+    Declarations are recorded by the declaration functions (feature 002)
     and read back by the transformations. Transformations record themselves,
     with an outcome annotation, in application order. Displaying the object
     (console ``repr`` or Jupyter) renders the drto-aware view of the model.
@@ -88,7 +88,7 @@ class Info:
         ----------
         kind : str
             The declaration kind, e.g. ``'state'`` or ``'control'``. By
-            convention the ``declare_<kind>`` suffix.
+            convention the declaration function name.
         component : Component or ComponentData
             The declared Pyomo component.
         **metadata
@@ -241,6 +241,9 @@ def _entry(record, kind):
         for k, v in record.items()
         if k != "component" and isinstance(v, (str, int, float, bool))
     ]
+    of = record.get("of")
+    if of is not None:  # a target pair renders with its owner
+        notes.append(f"of {of.name}")
     if _component_category(comp) == "set":
         points = f"{len(comp)} points" if len(comp) else "no points"
         notes.append(f"{type(comp).__name__}, {points}")

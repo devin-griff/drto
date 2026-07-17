@@ -31,8 +31,8 @@ used across the modes.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.steady_state_simulation')` requires
-  `declare_state`, and errors clearly if it is missing. `declare_time` and
-  `declare_continuous_dynamics` are optional, since the user may define either a
+  `state`, and errors clearly if it is missing. `horizon` and
+  `dynamics` are optional, since the user may define either a
   steady-state or dynamic model initially.
 - If the model is dynamic (time and continuous dynamics declared), it reduces to
   a single equilibrium point by composing `drto.dynamic_to_steady_state`

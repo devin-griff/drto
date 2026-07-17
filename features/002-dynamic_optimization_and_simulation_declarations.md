@@ -1,6 +1,6 @@
 # Dynamic optimization and simulation declarations
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![shipped](https://img.shields.io/badge/shipped-brightgreen)
 
 ## Description
 
@@ -144,7 +144,8 @@ declarations rather than re-deriving them.
   initialized with the sample grid (the sampling instants). Declaring it
   captures that grid in the registry: the samples define the stage-cost sum
   (feature 003) and the sampling time `dt`, so `horizon` errors if the
-  set holds fewer than two points or is already discretized.
+  set is already discretized (Pyomo itself enforces the two-point minimum
+  at construction).
 - `state(m.z, ...)` tags one or more state Vars. A state carries a
   `DerivativeVar` for its dynamics only in a dynamic model, so a steady-state
   model's states need not have one and `state` does not require it.
@@ -173,14 +174,17 @@ declarations rather than re-deriving them.
 - `steady_state(m.z, m.z_ss)` pairs a declared state with the mutable Param
   holding its setpoint; `steady_state_control(m.u, m.u_ss)` pairs a declared
   control with its setpoint Param. One pair per call, accumulating across
-  calls; a state or control that already has a target is rejected as a
-  duplicate, and the first argument must already be declared. The pairing is
+  calls; re-declaring the same pair is idempotent, a different target for
+  a state or control that already has one is rejected, a target Param
+  cannot serve two owners (in either target kind), and the first argument
+  must already be declared. The pairing is
   recorded in the registry so the steady-state/RTO solve (feature 009) knows
   which target Param each solved state or control value populates. The
   function returns the target Param.
-- The scalar-left-hand-side conventions (the cost and initial-condition
-  constraints) are read from the constraint body's canonical form, so they hold
-  regardless of how the user wrote the equality.
+- The scalar-side conventions (the cost and initial-condition constraints)
+  are read from the written equality's sides, either orientation, so
+  `lhs == rhs` and `rhs == lhs` are equivalent; the constraint must be
+  written as an explicit equality.
 - Path constraints are not declared; they are the state variables' own bounds.
 - The estimation declarations (measurements, disturbances, arrival cost, and the
   estimation costs) are out of scope here and are specced with the estimation

@@ -28,8 +28,8 @@ validation runs rely on.
 
 ## Acceptance criteria
 
-- `TransformationFactory('drto.dynamic_simulation')` requires `declare_time`,
-  `declare_state`, `declare_continuous_dynamics`, and `declare_control`, and
+- `TransformationFactory('drto.dynamic_simulation')` requires `horizon`,
+  `state`, `dynamics`, and `control`, and
   errors clearly if any is missing.
 - The declared controls are fixed, so the mode frees nothing and solves the
   model as declared over the horizon. A control-profile option sets the values

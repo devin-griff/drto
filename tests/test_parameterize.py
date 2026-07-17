@@ -44,7 +44,7 @@ def test_records_in_the_transformation_log():
 
 def test_errors_without_declared_controls():
     m = pyo.ConcreteModel()
-    with pytest.raises(ValueError, match="declare_control first"):
+    with pytest.raises(ValueError, match="control first"):
         pyo.TransformationFactory("drto.parameterize").apply_to(m)
 
 
@@ -62,3 +62,13 @@ def test_create_using_leaves_the_source_alone():
     assert len(m.u) > 4  # the source keeps every collocation copy
     assert drto.info(m2).has_transformation("drto.parameterize")
     assert not drto.info(m).has_transformation("drto.parameterize")
+
+
+def test_refreshes_the_steady_state_pairing_too():
+    m = discretized()
+    reg = drto.info(m)
+    pyo.TransformationFactory("drto.parameterize").apply_to(m)
+    (target,) = reg.declarations("steady_state_control")
+    assert target["of"] is m.u  # the live replacement, not the detached Var
+    (state_target,) = reg.declarations("steady_state")
+    assert state_target["of"] is m.z

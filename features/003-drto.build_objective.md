@@ -46,7 +46,7 @@ it the same way every time.
 - The cost objective is the sum of the live registered cost groups, each with
   its group's weights. The declared stage costs are the uniform-weight group:
   each live stage cost's cost var summed at the sample points, the grid
-  captured by `declare_time` (feature 002), plus each live terminal-cost var.
+  captured by `horizon` (feature 002), plus each live terminal-cost var.
   For samples 0..N, the stage-cost sum runs over 0..N-1 and a live terminal
   cost applies at N. Cost-var members at interior collocation points exist
   after discretization but do not enter the sum: the samples are the sum's

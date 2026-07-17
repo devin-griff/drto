@@ -25,15 +25,29 @@ read it, so it is the one place drto looks for the model's declared pieces.
 
 ## The declarations
 
-The declaration surface (feature 002) tags the pieces of an optimization or
-simulation problem on a model you already built: `declare_time`,
-`declare_state`, `declare_continuous_dynamics`, `declare_control` (with its
-pyomo-cvp `profile`), the stage and terminal costs, `declare_initial_condition`
+The declaration surface (feature 002) declares the pieces of an optimization
+or simulation problem: `horizon`,
+`state`, `dynamics`, `control` (with its
+pyomo-cvp `profile`), the stage and terminal costs, `initial_condition`
 (a state at the first time point equal to a mutable Param, the feedback hook),
-`declare_terminal_constraint`, and the steady-state targets. Each declaration
+`terminal_constraint`, and the steady-state targets, each a
+`steady_state(m.z, m.z_ss)` pair of a declared state (or control) with its
+setpoint Param. Each declaration
 validates its convention and records the component in the registry, where the
-transformations find it. Declarations that scale with the states and controls
-take varargs and accumulate; the one-of-each declarations error on a second,
+transformations find it.
+
+Every function serves two calling styles. Tagging: on a model you already
+built, an attached component registers immediately, interleaved or in one
+block. Wrapping: a fresh component, `m.z = state(pyo.Var(m.t))`, is returned
+for the assignment and registers when Pyomo attaches it. The constraint-role
+declarations also work as decorators, `@drto.dynamics(m, m.t)` taking what
+`@m.Constraint` would. The styles mix per component; in every style a
+declaration's prerequisites must be declared by the time it registers, which
+writing the model top-down satisfies.
+
+Declarations that scale with the states and controls
+take varargs when tagging and accumulate; the wrap form takes exactly one
+component; the one-of-each declarations error on a second,
 different object. Conventions are read from either side of the written
 equality, so `lhs == rhs` and `rhs == lhs` are equivalent.
 
@@ -66,7 +80,7 @@ between solves; `gamma` defaults to the mesh rule and `beta` must exceed 1.
 
 ## Applying the profiles: `drto.parameterize`
 
-`declare_control(profile=...)` records a profile; `drto.parameterize` applies
+`control(profile=...)` records a profile; `drto.parameterize` applies
 every pending one by delegating to pyomo-cvp, then repairs the registry so
 the control records point at the live replacement components. The mode
 transforms run it as one of their steps; standalone workflows call it after

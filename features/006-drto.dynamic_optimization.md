@@ -35,9 +35,9 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
 
 ## Acceptance criteria
 
-- `TransformationFactory('drto.dynamic_optimization')` requires `declare_time`,
-  `declare_state`, `declare_continuous_dynamics`, `declare_control`, and at
-  least one of `declare_tracking_stage_cost` or `declare_economic_stage_cost`,
+- `TransformationFactory('drto.dynamic_optimization')` requires `horizon`,
+  `state`, `dynamics`, `control`, and at
+  least one of `tracking_stage_cost` or `economic_stage_cost`,
   and errors clearly if any is missing.
 - It targets continuous dynamics. Discrete-time (difference-equation)
   optimization is a separate topic, out of scope for this transform.
@@ -48,8 +48,8 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
   cost are declared, both are summed into the objective, with a weight applied
   to the tracking stage cost. The transform accepts that weight as an argument,
   used only when both are present.
-- `declare_tracking_terminal_cost`, `declare_terminal_constraint`, and the
-  steady-state targets (`declare_steady_state`, `declare_steady_state_control`)
+- `tracking_terminal_cost`, `terminal_constraint`, and the
+  steady-state targets (`steady_state`, `steady_state_control`)
   are optional. The transform uses them if declared.
 - Any estimation-category declarations on the model (measurements,
   disturbances, arrival cost, estimation stage and terminal costs, estimated

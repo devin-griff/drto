@@ -71,12 +71,13 @@ Short plain sentences. Comments state present-tense constraints and
 rationale, not development history. Design history lives in `dev-notes/` and
 `DESIGN.md`, not in code comments.
 
-## Intended module map (aspirational, grows from DESIGN.md)
+## Intended module map (grows from DESIGN.md)
 
-Not built yet; recorded so the first code lands in the right shape:
-
-- The declaration surface (`declare_state`, `declare_control`, the cost and
-  boundary declarations, the estimation declarations) is the public API.
+- The declaration surface (bare nouns: `horizon`, `state`, `dynamics`,
+  `control`, the cost and boundary declarations, the paired steady-state
+  targets, later the estimation declarations) is the public API. Each
+  function serves tagging, wrapping, and (constraint roles) the decorator
+  form; see feature 002.
 - One receding-horizon loop underlies the six modes (steady-state / dynamic
   by simulation / optimization / estimation); the ideal / nonideal /
   advanced-step execution variants are variants of dynamic optimization, not

@@ -33,15 +33,15 @@ many modes" promise.
 
 ## Acceptance criteria
 
-- `TransformationFactory('drto.dynamic_to_steady_state')` requires `declare_time`,
-  `declare_state`, and `declare_continuous_dynamics` on the model, and errors
+- `TransformationFactory('drto.dynamic_to_steady_state')` requires `horizon`,
+  `state`, and `dynamics` on the model, and errors
   clearly if any is missing.
-- It validates that each continuous-dynamics constraint's left-hand side is the
+- It validates that each dynamics constraint's left-hand side is the
   DerivativeVar of a declared state, and errors clearly otherwise.
 - It removes, if present, the declared initial condition, terminal constraint,
   and both terminal costs (the tracking terminal cost and the estimation
   terminal cost).
-- For each continuous-dynamics constraint, it adds a constraint fixing that
+- For each dynamics constraint, it adds a constraint fixing that
   state's DerivativeVar to zero (`dz/dt == 0`).
 - It removes the time index from every variable and constraint, collapsing the
   model to a single point (so a per-time-point stage cost becomes the

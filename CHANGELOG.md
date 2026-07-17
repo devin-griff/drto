@@ -31,7 +31,7 @@ All notable changes to this project are documented here. The format is based on
   as the tail cost vanishes (192/154/66-iteration solves drop to 177/139/8
   on the Hicks study).
 
-- `declare_time` captures the sample grid (the ContinuousSet's initialized
+- `horizon` captures the sample grid (the ContinuousSet's initialized
   points) and requires an undiscretized set with at least two points; the
   stage-cost sum in `build_objective` runs at the samples, keeping the finite
   horizon commensurate with the infinite-horizon tail.
@@ -42,12 +42,17 @@ All notable changes to this project are documented here. The format is based on
   registered `cost_group` records); `zero=True` is the marked simulation
   outcome. Also registered as `TransformationFactory('drto.build_objective')`.
 
-- The declaration surface (feature 002): `declare_time`, `declare_state`,
-  `declare_continuous_dynamics`, `declare_control` (profile via pyomo-cvp),
-  `declare_tracking_stage_cost`, `declare_economic_stage_cost`,
-  `declare_tracking_terminal_cost`, `declare_initial_condition`,
-  `declare_terminal_constraint`, `declare_steady_state`, and
-  `declare_steady_state_control`. Each validates its convention (either
+- The declaration surface (feature 002), bare nouns: `horizon`, `state`,
+  `dynamics`, `control` (profile via pyomo-cvp),
+  `tracking_stage_cost`, `economic_stage_cost`,
+  `tracking_terminal_cost`, `initial_condition`,
+  `terminal_constraint`, and the paired targets
+  `steady_state(m.z, m.z_ss)` and `steady_state_control(m.u, m.u_ss)`.
+  Each function serves tagging (an attached component registers
+  immediately) and wrapping (a fresh component is returned for the
+  `m.x = ...` assignment and registers at attachment), and the
+  constraint-role declarations double as decorators
+  (`@drto.dynamics(m, m.t)`). Each validates its convention (either
   orientation of the equality), enforces the arity and re-declaration rules,
   and records in the registry.
 

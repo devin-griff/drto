@@ -30,7 +30,7 @@ def test_stage_sum_stays_at_the_samples_after_discretization():
     )
     obj = drto.build_objective(m)
     # cost members now exist at every collocation point, but only the
-    # sample grid captured by declare_time enters the sum
+    # sample grid captured by horizon enters the sum
     expected = ComponentSet(m.cost[t] for t in (0, 2.5, 5, 7.5))
     assert cost_vars(obj) == expected
 
@@ -43,7 +43,7 @@ def test_terminal_cost_var_joins_the_sum():
     def term_def(m):
         return m.term == 10 * (m.z[10] - m.z_ss) ** 2
 
-    drto.declare_tracking_terminal_cost(m.term_def)
+    drto.tracking_terminal_cost(m.term_def)
     obj = drto.build_objective(m)
     assert m.term in cost_vars(obj)
 
@@ -147,7 +147,7 @@ def test_both_cost_kinds_sum_together():
     def econ(m, t):
         return m.ecost[t] == -m.u[t]
 
-    drto.declare_economic_stage_cost(m.econ)
+    drto.economic_stage_cost(m.econ)
     obj = drto.build_objective(m)
     expected = ComponentSet(
         [m.cost[t] for t in m.t if t != m.t.last()]

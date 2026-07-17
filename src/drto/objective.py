@@ -89,7 +89,7 @@ def _live_cost_terms(reg):
     record's ``weight`` entry (default 1) scales its group.
     """
     samples = None
-    time_records = reg.declarations("time")
+    time_records = reg.declarations("horizon")
     if time_records:
         samples = set(time_records[0]["samples"])
     for kind in _STAGE_KINDS + _TERMINAL_KINDS:

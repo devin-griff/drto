@@ -19,9 +19,9 @@ def declared_model():
         return m.dzdt[t] == -m.z[t] + m.u[t]
 
     reg = drto.info(m)
-    reg.record_declaration("time", m.t)
+    reg.record_declaration("horizon", m.t)
     reg.record_declaration("state", m.z)
-    reg.record_declaration("continuous_dynamics", m.ode)
+    reg.record_declaration("dynamics", m.ode)
     reg.record_declaration("control", m.u, profile="piecewise_constant")
     return m
 
@@ -49,17 +49,12 @@ def test_declarations_recorded_and_read_back():
     reg = drto.info(m)
     assert reg.components("state") == (m.z,)
     assert reg.components("control") == (m.u,)
-    assert reg.has_declaration("time")
+    assert reg.has_declaration("horizon")
     assert not reg.has_declaration("terminal_constraint")
     assert reg.components("terminal_constraint") == ()
     (control,) = reg.declarations("control")
     assert control["profile"] == "piecewise_constant"
-    assert set(reg.declarations()) == {
-        "time",
-        "state",
-        "continuous_dynamics",
-        "control",
-    }
+    assert set(reg.declarations()) == {"horizon", "state", "dynamics", "control"}
 
 
 def test_transformation_log_is_ordered_and_queryable():
@@ -92,7 +87,7 @@ def test_registry_survives_clone_with_remapped_references():
 def test_repr_groups_by_role():
     m = declared_model()
     text = repr(drto.info(m))
-    assert "time: t (ContinuousSet, 5 points)" in text
+    assert "horizon: t (ContinuousSet, 5 points)" in text
     assert "states: z (free)" in text
     assert "controls: u (piecewise_constant, free)" in text
     assert "transformations: (none)" in text

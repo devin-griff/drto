@@ -98,51 +98,54 @@ and boundary declarations tag Constraints; the measurement and steady-state
 targets tag Params. The control-scope declaration surface (the
 estimation-side surface follows below):
 
-- `declare_time(m.t)`: tags the time set, the moving-horizon dimension
+- `horizon(m.t)`: tags the time set, the moving-horizon dimension
   shared by every dynamic mode. It may be a `pyomo.dae` ContinuousSet
   (continuous-time) or a discrete Set (discrete-time, difference equations),
   so drto does not assume continuity (USER DECISION 2026-07-14). Continuous
   time is the current build scope, and the discrete-time path (a discrete Set
-  plus `declare_discrete_dynamics` below) is deferred, kept in this design for
-  later (USER DECISION 2026-07-16). Declaring
+  plus the discrete dynamics declaration below) is deferred, kept in this
+  design for later (USER DECISION 2026-07-16). Declaring
   it is the root handle for the moving-horizon machinery: t0 and tN come off
   its bounds, the warm shift advances along it, and the discretization lives
   on it. The dynamics are declared (below), not scanned for, so drto does
-  not hunt for DerivativeVars; it validates that a continuous-dynamics LHS
+  not hunt for DerivativeVars; it validates that a dynamics constraint's LHS
   DerivativeVar is taken with respect to this set, which is what separates
   time from a spatial axis in a PDE model.
-- `declare_state(m.z1, m.z2, ...)`: tags the state Vars.
+- `state(m.z1, m.z2, ...)`: tags the state Vars.
   Varargs, indexed-container-aware (one call declares all members). The
   state role is declared; its dynamics are declared separately, by
-  `declare_continuous_dynamics` or `declare_discrete_dynamics` below (USER
+  `dynamics` below (USER
   DECISION 2026-07-14, revising the earlier auto-pickup-from-DerivativeVar
   plan: declaring the dynamics explicitly is uniform across continuous and
   discrete time and matches the LHS convention). A state carries a
   DerivativeVar only in a dynamic model. A model the user built as
-  steady-state has states with no derivative, so `declare_state` does not
+  steady-state has states with no derivative, so `state` does not
   require one (USER DECISION 2026-07-16).
-- `declare_continuous_dynamics(m.ode_con)`: tags the equality Constraint of
-  a continuous-time ODE. Its LHS is the DerivativeVar of a state (dz/dt),
+- `dynamics(m.ode_con)`: tags the equality Constraint of the state
+  dynamics, currently a continuous-time ODE. Its LHS is the DerivativeVar of
+  a state (dz/dt),
   read via `con.expr.args[0]`; drto gets the state from the DerivativeVar
   (`get_state_var`) and checks it is a declared state and is taken with
   respect to the declared time set (verified against Pyomo 6.10). That check
-  is why `declare_state` earns its place even though the dynamics carry the
-  DerivativeVar. USER DECISION 2026-07-14.
-- `declare_discrete_dynamics(m.diff_con)` (deferred, continuous is the current
-  scope, see `declare_time`): tags the equality Constraint of a
-  discrete-time difference equation. Its LHS is a state at the next time
-  point (z[k+1]), read the same way; drto gets the state (a plain Var, which
-  distinguishes it from the continuous case) and advances it along the
-  declared discrete time set. Same object as the continuous case, a
-  Constraint; only the LHS differs (USER DECISION 2026-07-14).
-- `declare_control(m.u, ..., profile=...)`: tags the manipulated-input
+  is why `state` earns its place even though the dynamics carry the
+  DerivativeVar. USER DECISION 2026-07-14. Renamed from
+  `continuous_dynamics` (USER DECISION 2026-07-17).
+- The discrete-time dynamics declaration (deferred, see `horizon`) tags the
+  equality Constraint of a difference equation. Its LHS is a state at the
+  next time point (z[k+1]), read the same way; drto gets the state (a plain
+  Var, which distinguishes it from the continuous case) and advances it
+  along the declared discrete time set. Same object as the continuous case,
+  a Constraint; only the LHS differs (USER DECISION 2026-07-14). Its name is
+  undecided and out of scope for now: it may share `dynamics`, since the
+  LHS tells the cases apart, or take its own name such as `difference`.
+- `control(m.u, ..., profile=...)`: tags the manipulated-input
   Vars, the free decision variables. No `wrt` argument: drto uses the
   declared time set, so the control's parameterization is over that set
   (USER DECISION 2026-07-14). The `profile` flag folds in the
-  parameterization: `declare_control` calls pyomo-cvp's `declare_profile`
+  parameterization: `control` calls pyomo-cvp's `declare_profile`
   automatically. One call declares the control and its parameterization; cvp
   stays the dependency that implements it underneath.
-- `declare_tracking_stage_cost(m.tracking_stage_con)`: tags the equality
+- `tracking_stage_cost(m.tracking_stage_con)`: tags the equality
   Constraint defining the setpoint-tracking running cost per time point (the
   ||z - z_ss|| + ||u - u_ss|| regulation penalty). It is indexed over time:
   the LHS is a scalar cost Var at each time point (L[t]), the RHS is the
@@ -150,10 +153,10 @@ estimation-side surface follows below):
   it assembles (USER DECISION 2026-07-14, revising the earlier accumulated
   scalar form; the per-point form is what lets the steady-state reduction
   drop the time index to leave the single-point cost). The tracking targets
-  are the declared steady-state Params (`declare_steady_state` /
-  `declare_steady_state_control` below), populated by the steady-state/RTO
+  are the declared steady-state Params (`steady_state` /
+  `steady_state_control` below), populated by the steady-state/RTO
   solve.
-- `declare_economic_stage_cost(m.economic_stage_con)`: tags the equality
+- `economic_stage_cost(m.economic_stage_con)`: tags the equality
   Constraint defining the economic running cost phi(z, u), same per-point
   time-indexed form as the tracking stage cost. Its single-point
   steady-state form is the economic-RTO objective; the tracking stage cost
@@ -161,14 +164,14 @@ estimation-side surface follows below):
   declaration serves economic NMPC and RTO both (economic NMPC is post-v1;
   RTO uses it in v1). USER DECISION 2026-07-14: split the running cost into
   tracking and economic terms so a mode selects which is live.
-- `declare_tracking_terminal_cost(m.tracking_terminal_con)`: tags the
+- `tracking_terminal_cost(m.tracking_terminal_con)`: tags the
   equality Constraint defining the terminal (Mayer) tracking cost
   V_f(z(tN)), the terminal regulation penalty. Same LHS-scalar convention;
   drto adds the terminal-cost Var to the objective. Dropped in
-  steady-state (see the objective note below). Renamed from
-  `declare_terminal_cost` for clarity against the economic term (USER
-  DECISION 2026-07-14).
-- `declare_initial_condition(m.init_con)`: tags the equality Constraint
+  steady-state (see the objective note below). Carries the `tracking_`
+  qualifier for clarity against the economic term (USER DECISION
+  2026-07-14).
+- `initial_condition(m.init_con)`: tags the equality Constraint
   anchoring the initial state, LHS the anchored state at t0. If the RHS is
   a mutable Param, that Param is the feedback-injection point drto updates
   each step, so this convention doubles as the state-feedback hook (z_hat)
@@ -176,8 +179,8 @@ estimation-side surface follows below):
   (an equality), a different job from a boundary set. This is the exact
   seam where MHE will diverge, since its initial anchor is the soft
   arrival cost, not a hard equality, so a soft mode or a separate
-  `declare_arrival_cost` is the estimation follow-on, not this.
-- `declare_terminal_constraint(m.terminal_con)`: tags the Constraint
+  `arrival_cost` is the estimation follow-on, not this.
+- `terminal_constraint(m.terminal_con)`: tags the Constraint
   (equality or inequality) defining the terminal set/region z(tN) in X_f.
   Requirement (USER DECISION 2026-07-14): every Var it references is a
   declared state at tN, the final time; a control at tN is excluded, the
@@ -185,14 +188,19 @@ estimation-side surface follows below):
   which is what separates it from a path constraint (present at every t).
   "Constraint" not "condition" because it restricts to a set rather than
   pinning a value.
-- `declare_steady_state(m.z_ss, ...)`: tags the Params holding the
-  steady-state state target z_ss. The tracking costs drive toward these
-  (z - z_ss); the steady-state/RTO mode populates them from its solve (or
-  they are set directly, since they are Params), so the target is
-  model-derived rather than hand-typed (the Hicks CSTR lesson above).
-- `declare_steady_state_control(m.u_ss, ...)`: tags the Params holding the
-  steady-state control target u_ss, driven toward the same way (u - u_ss)
-  and populated the same way (USER DECISION 2026-07-14).
+- `steady_state(m.z, m.z_ss)`: pairs a declared state with the mutable
+  Param holding its steady-state target z_ss. The tracking costs drive
+  toward the targets (z - z_ss); the steady-state/RTO mode populates them
+  from its solve (or they are set directly, since they are Params), so the
+  target is model-derived rather than hand-typed (the Hicks CSTR lesson
+  above). The pairing is what makes the populate step possible: drto knows
+  which target Param each solved state value writes into (USER DECISION
+  2026-07-17, revising the earlier unpaired bag-of-Params form). One pair
+  per call, accumulating; the call returns the target.
+- `steady_state_control(m.u, m.u_ss)`: pairs a declared control with the
+  mutable Param holding its target u_ss, driven toward the same way
+  (u - u_ss) and populated the same way (USER DECISION 2026-07-14; paired
+  2026-07-17).
 
 Convention on the declared constraints (verified
 against Pyomo 6.10):
@@ -218,14 +226,19 @@ constraint rather than a bare expression: the pair is one handle drto can
 find and drop.
 
 Naming: fully-written-out, not abbreviated
-(`declare_terminal_cost` not `declare_term_cost`,
-`declare_initial_condition` not `declare_init_con`). These are setup-time
+(`tracking_terminal_cost` not `term_cost`,
+`initial_condition` not `init_con`). These are setup-time
 calls, never hot-path, so brevity buys nothing; `con` is ambiguous
 between condition and constraint, the exact distinction that matters; the
 full forms are the OCP literature's own vocabulary, so a reader who knows
 the theory maps straight on; and spelling them out forces the precise
 concept (condition vs constraint vs set) rather than hiding behind an
-abbreviation.
+abbreviation. The declarations are bare nouns, no `declare_` prefix (USER
+DECISION 2026-07-17: the prefix read long and repetitive at every call
+site, and the same functions now serve construction-time wrapping, where
+a verb reads wrong in `m.z = state(...)`). `declare_time` became
+`horizon` in the same pass: `time` would shadow the stdlib module on a
+bare import, and horizon is the better word for the role.
 
 Not declared, by design:
 
@@ -236,18 +249,28 @@ Not declared, by design:
 Moving-horizon data hooks now have homes: the state anchor z_hat is the
 mutable Param on the RHS of the initial-condition constraint; the tracking
 setpoint is the declared steady-state Params z_ss/u_ss; the measurements
-are the mutable Param stream in `declare_measurement` below. Each is
-updated each step. Dynamics are declared, not auto-detected:
-`declare_continuous_dynamics` (LHS a DerivativeVar) for continuous time and
-`declare_discrete_dynamics` (LHS the next-step state) for discrete time,
-above.
+are the mutable Param stream in `measurement` below. Each is
+updated each step. Dynamics are declared, not auto-detected: `dynamics`
+(LHS a DerivativeVar) for continuous time, and the deferred discrete-time
+declaration (LHS the next-step state, name undecided) above.
 
 Shared conventions:
 
 - Each declaration has an explicit call-time form as well (the
   declared/explicit duality established in pyomo-cvp and pyomo-pounce).
-- Family conventions locked in pounce#203: varargs on every declaration,
-  keyword options (e.g. `group=`) apply to every component in the call.
+- Family conventions locked in pounce#203: varargs on the declarations
+  that scale with states and controls, keyword options (e.g. `group=`)
+  apply to every component in the call. The steady-state targets are the
+  exception: one (owner, target) pair per call (USER DECISION 2026-07-17).
+- Every declaration serves two moments (USER DECISION 2026-07-17): tagging
+  an attached component registers immediately; a fresh component is
+  wrapped, returned for the `m.x = ...` assignment, and registered at
+  attachment. The argument is always the component being declared: drto
+  never constructs one (`state(m.t)` is a type error, the implicit-
+  construction form was considered and rejected). The constraint-role
+  declarations also work as decorators, `@drto.dynamics(m, m.t)` taking
+  what `@m.Constraint` would. Styles mix per component; prerequisites
+  must be declared by the time a declaration registers.
 
 Estimation-side surface (surface designed now,
 built with the MHE follow-on). MHE is the dual of the control problem, so
@@ -255,32 +278,32 @@ the same conventions hold (each tags a Var or a Constraint; cost
 constraints are equalities with the scalar on the LHS; drto assembles the
 estimation objective from the live cost-term Vars):
 
-- `declare_estimated_parameter(m.theta, ...)`: tags the Vars for unknown
+- `estimated_parameter(m.theta, ...)`: tags the Vars for unknown
   model parameters to estimate, constant over the window. Shared with the
   steady-state data-reconciliation mode.
-- `declare_disturbance(m.w, ...)`: tags the process-noise Vars w in
+- `disturbance(m.w, ...)`: tags the process-noise Vars w in
   dz/dt = f + w, the free variables the estimator adjusts to reconcile the
   model with the data, penalized by their inverse covariance in the
   estimation stage cost. It is noise, not a manipulated input: unrelated to
-  `declare_control`, with no profile parameterization (USER DECISION
+  `control`, with no profile parameterization (USER DECISION
   2026-07-14).
-- `declare_measurement(m.y_meas, ...)`: tags the measurement Param(s), the
+- `measurement(m.y_meas, ...)`: tags the measurement Param(s), the
   measured values y_meas that appear in the estimation cost residuals
   (||y_meas - h(z)||). Like the z_hat feedback hook, it is a mutable Param
   drto refreshes each step, here the incoming measurements over the window.
   Nothing else to tag: h(z) is written inline in the cost, so there is no
   output Var or defining constraint (USER DECISION 2026-07-14).
-- `declare_estimation_stage_cost(m.est_stage_con)`: tags the equality
+- `estimation_stage_cost(m.est_stage_con)`: tags the equality
   Constraint for the running estimation cost over the window, the
   measurement residual ||y_meas - h(z)|| plus the process-noise penalty
   ||w||, weighted by inverse covariances. LHS-scalar convention.
-- `declare_estimation_terminal_cost(m.est_terminal_con)`: tags the equality
+- `estimation_terminal_cost(m.est_terminal_con)`: tags the equality
   Constraint for the current-time (window-present) term, the current-state
   measurement residual ||y_meas(tN) - h(z(tN))|| with no process noise
   (nothing leads out of the last point), which is why it is a distinct
   terminal term rather than part of the stage sum. This IS a standard MHE
   term (USER correction 2026-07-14).
-- `declare_arrival_cost(m.arrival_con)`: tags the equality Constraint for
+- `arrival_cost(m.arrival_con)`: tags the equality Constraint for
   the soft prior on the window's initial state, ||z(t0) - z_prior||
   weighted by the arrival-cost inverse covariance. The dual of the
   control-side initial condition, but SOFT (a cost, not a hard equality).

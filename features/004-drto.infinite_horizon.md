@@ -16,11 +16,11 @@ import drto
 # ... build a pyomo.dae model: states m.z, controls m.u over ContinuousSet
 # m.t, dynamics m.ode, and a tracking stage cost m.stage_con ...
 
-drto.declare_time(m.t)
-drto.declare_state(m.z)
-drto.declare_continuous_dynamics(m.ode)
-drto.declare_control(m.u, profile="piecewise_constant")
-drto.declare_tracking_stage_cost(m.stage_con)
+drto.horizon(m.t)
+drto.state(m.z)
+drto.dynamics(m.ode)
+drto.control(m.u, profile="piecewise_constant")
+drto.tracking_stage_cost(m.stage_con)
 
 pyo.TransformationFactory("dae.collocation").apply_to(
     m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU")
@@ -58,15 +58,15 @@ move.
 
 ## Acceptance criteria
 
-- `TransformationFactory('drto.infinite_horizon')` requires `declare_time`,
-  `declare_state`, `declare_continuous_dynamics`, `declare_control`, and
-  `declare_tracking_stage_cost`, and errors clearly if any is missing.
-- A cost declared with `declare_economic_stage_cost` may be present alongside.
+- `TransformationFactory('drto.infinite_horizon')` requires `horizon`,
+  `state`, `dynamics`, `control`, and
+  `tracking_stage_cost`, and errors clearly if any is missing.
+- A cost declared with `economic_stage_cost` may be present alongside.
   The segment replicates only the tracking stage cost, and the economic terms
   stay on the finite horizon: an economic stage cost is a nonzero constant at
   the equilibrium, so its tail integral diverges and its quadrature would be
   mesh-dependent rather than an approximation. For the same reason
-  `declare_economic_stage_cost` alone is rejected.
+  `economic_stage_cost` alone is rejected.
 - It applies to a model whose declared time set is already discretized. It
   builds a segment ContinuousSet on [0, 1] carrying the transformed time and
   discretizes it itself with Gauss-Legendre collocation (`nfe` and `ncp`
@@ -105,7 +105,7 @@ move.
 - `gamma` is a mutable Param set by an option whose default, `'rule'`,
   derives it from the mesh rule `tanh(gamma*dt) = tau_11`: the segment's
   first collocation point lands one sampling time past the junction, with
-  `dt` read from the sample grid captured by `declare_time`. A number
+  `dt` read from the sample grid captured by `horizon`. A number
   overrides the rule.
 - `beta` is a mutable Param set by an option, default 1.2, and must satisfy
   `beta > 1` (paper section 4.1.2): the terminal cost must overestimate the

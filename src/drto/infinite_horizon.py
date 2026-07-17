@@ -40,7 +40,7 @@ from drto.info import info
 _BLOCK_NAME = "drto_infinite_horizon"
 
 #: The declarations the transform requires.
-_REQUIRED = ("time", "state", "continuous_dynamics", "control", "tracking_stage_cost")
+_REQUIRED = ("horizon", "state", "dynamics", "control", "tracking_stage_cost")
 
 
 def _gauss_weights(nodes):
@@ -155,7 +155,7 @@ class InfiniteHorizonTransformation(Transformation):
         if missing:
             raise ValueError(
                 "drto: infinite_horizon requires "
-                + ", ".join(f"declare_{k}" for k in missing)
+                + ", ".join(f"drto.{k}" for k in missing)
                 + " first."
             )
         if reg.has_transformation("drto.infinite_horizon"):
@@ -170,19 +170,19 @@ class InfiniteHorizonTransformation(Transformation):
                 "drto.build_objective."
             )
 
-        time = reg.components("time")[0]
+        time = reg.components("horizon")[0]
         if not time.get_discretization_info():
             raise ValueError(
                 f"drto: discretize the declared time set '{time.name}' "
                 f"(dae.collocation) before applying infinite_horizon."
             )
-        samples = reg.declarations("time")[0]["samples"]
+        samples = reg.declarations("horizon")[0]["samples"]
         dt = samples[1] - samples[0]
         t_end = time.last()
 
         states = reg.components("state")
         controls = reg.components("control")
-        dynamics = reg.components("continuous_dynamics")
+        dynamics = reg.components("dynamics")
         (stage_record,) = reg.declarations("tracking_stage_cost")
         stage_con = stage_record["component"]
 

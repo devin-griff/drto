@@ -127,22 +127,26 @@ drto is declaration-first, and each declaration tags a Pyomo component you
 already wrote: a Variable, a Constraint, a Parameter, or a Set. You build your dynamic model as
 an ordinary Pyomo model, then point the declarations at its pieces;
 drto assembles the horizon problem and runs the loop. It bolts onto an
-existing model rather than replacing how you build one. The pieces are the
+existing model rather than replacing how you build one. The same functions
+also wrap construction (`m.z = state(pyo.Var(m.t))` registers at
+attachment), and the constraint-role declarations double as decorators
+(`@drto.dynamics(m, m.t)`); the styles mix freely per component (feature
+002 shows both in full). The pieces are the
 object types of a dynamic optimization or simulation problem:
 
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
-| Time set | Set | `declare_time(m.t)` | The moving-horizon dimension. A `pyomo.dae` ContinuousSet, the root handle for the horizon. Dynamics are declared separately, below. |
-| State | Variable | `declare_state(m.z, ...)` | A state variable. In a dynamic model it carries a DerivativeVar, with its dynamics declared separately below. In a steady-state model it need not have one. |
-| Continuous dynamics | Constraint | `declare_continuous_dynamics(m.ode_con)` | Equality ODE; its left-hand side is the state's DerivativeVar (dz/dt). |
-| Control | Variable | `declare_control(m.u, ..., profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp, over the declared time set. |
-| Tracking stage cost | Constraint | `declare_tracking_stage_cost(m.tracking_stage_con)` | Per-time-point equality for the setpoint-tracking running cost; drto sums its left-hand-side cost var over time in the objective. |
-| Economic stage cost | Constraint | `declare_economic_stage_cost(m.economic_stage_con)` | Per-time-point equality for the economic running cost; its single-point steady-state form is the RTO objective. |
-| Tracking terminal cost | Constraint | `declare_tracking_terminal_cost(m.tracking_terminal_con)` | Equality defining the terminal tracking cost; its left-hand-side scalar goes in the objective. |
-| Initial condition | Constraint | `declare_initial_condition(m.init_con)` | Equality anchoring the initial state; left-hand side is the state at t0, right-hand side the feedback. |
-| Terminal constraint | Constraint | `declare_terminal_constraint(m.terminal_con)` | Constraint on the states at the final time; the terminal set the final state must lie in. |
-| Steady-state target | Parameter | `declare_steady_state(m.z_ss)` | The state setpoint the tracking costs drive toward; populated by the steady-state/RTO solve. |
-| Steady-state control target | Parameter | `declare_steady_state_control(m.u_ss)` | The control setpoint the tracking costs drive toward. |
+| Time set | Set | `horizon(m.t)` | The moving-horizon dimension. A `pyomo.dae` ContinuousSet, the root handle for the horizon. Dynamics are declared separately, below. |
+| State | Variable | `state(m.z, ...)` | A state variable. In a dynamic model it carries a DerivativeVar, with its dynamics declared separately below. In a steady-state model it need not have one. |
+| Dynamics | Constraint | `dynamics(m.ode_con)` | Equality ODE; its left-hand side is the state's DerivativeVar (dz/dt). |
+| Control | Variable | `control(m.u, ..., profile=...)` | A manipulated input, the decision variable. The `profile` flag sets its parameterization (piecewise-constant, ...) via pyomo-cvp, over the declared time set. |
+| Tracking stage cost | Constraint | `tracking_stage_cost(m.tracking_stage_con)` | Per-time-point equality for the setpoint-tracking running cost; drto sums its left-hand-side cost var over time in the objective. |
+| Economic stage cost | Constraint | `economic_stage_cost(m.economic_stage_con)` | Per-time-point equality for the economic running cost; its single-point steady-state form is the RTO objective. |
+| Tracking terminal cost | Constraint | `tracking_terminal_cost(m.tracking_terminal_con)` | Equality defining the terminal tracking cost; its left-hand-side scalar goes in the objective. |
+| Initial condition | Constraint | `initial_condition(m.init_con)` | Equality anchoring the initial state; left-hand side is the state at t0, right-hand side the feedback. |
+| Terminal constraint | Constraint | `terminal_constraint(m.terminal_con)` | Constraint on the states at the final time; the terminal set the final state must lie in. |
+| Steady-state target | Parameter | `steady_state(m.z, m.z_ss)` | The state setpoint the tracking costs drive toward, paired with its state so the steady-state/RTO solve knows which target to populate. |
+| Steady-state control target | Parameter | `steady_state_control(m.u, m.u_ss)` | The control setpoint the tracking costs drive toward, paired with its control the same way. |
 
 Conventions drto enforces on those constraints: the cost and
 initial-condition constraints are equalities whose left-hand side is the
@@ -174,12 +178,12 @@ the live cost terms.
 
 | DRTO object type | Pyomo object type | Declaration | What it is |
 | --- | --- | --- | --- |
-| Estimated parameter | Variable | `declare_estimated_parameter(m.theta, ...)` | Unknown model parameters to estimate, constant over the window. Shared with steady-state data reconciliation. |
-| Disturbance | Variable | `declare_disturbance(m.w, ...)` | Process-noise variables (`dz/dt = f + w`) the estimator adjusts to fit the data, penalized by their covariance. |
-| Measurement | Parameter | `declare_measurement(m.y_meas, ...)` | The measured values in the estimation cost residuals; a mutable Param drto refreshes each step. |
-| Estimation stage cost | Constraint | `declare_estimation_stage_cost(m.est_stage_con)` | Equality defining the running estimation cost: measurement residual plus process-noise penalty over the window. |
-| Estimation terminal cost | Constraint | `declare_estimation_terminal_cost(m.est_terminal_con)` | Equality for the current-time measurement residual (no process noise leads out of the last point). |
-| Arrival cost | Constraint | `declare_arrival_cost(m.arrival_con)` | Equality for the soft prior on the window's initial state; its weight is updated by covariance propagation. |
+| Estimated parameter | Variable | `estimated_parameter(m.theta, ...)` | Unknown model parameters to estimate, constant over the window. Shared with steady-state data reconciliation. |
+| Disturbance | Variable | `disturbance(m.w, ...)` | Process-noise variables (`dz/dt = f + w`) the estimator adjusts to fit the data, penalized by their covariance. |
+| Measurement | Parameter | `measurement(m.y_meas, ...)` | The measured values in the estimation cost residuals; a mutable Param drto refreshes each step. |
+| Estimation stage cost | Constraint | `estimation_stage_cost(m.est_stage_con)` | Equality defining the running estimation cost: measurement residual plus process-noise penalty over the window. |
+| Estimation terminal cost | Constraint | `estimation_terminal_cost(m.est_terminal_con)` | Equality for the current-time measurement residual (no process noise leads out of the last point). |
+| Arrival cost | Constraint | `arrival_cost(m.arrival_con)` | Equality for the soft prior on the window's initial state; its weight is updated by covariance propagation. |
 
 The arrival cost is the soft dual of the control side's initial condition,
 and the estimation stage and terminal costs are the measurement-fitting
