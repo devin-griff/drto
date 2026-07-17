@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.infinite_horizon` re-declares each control's profile with cvp's
+  `final_node='keep'`: with the tail attached, the grid's final instant is
+  the linking time, not an end, and the control there is the held last
+  move. The segment's own controls are parameterized the same way (through
+  cvp's explicit form), so the equilibrium references the profile at
+  tau = 1 for every profile. `drto.parameterize` stays a plain apply.
+  Requires pyomo-cvp >= 0.6.2.
 - `drto.infinite_horizon` handles states with extra index sets and DAE
   models: algebraic variables and equations are discovered structurally
   (no declaration) and replicated on the segment.

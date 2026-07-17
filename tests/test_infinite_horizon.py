@@ -355,10 +355,7 @@ def dae_model():
     drto.horizon(m.t)
     drto.state(m.z)
     drto.dynamics(m.ode)
-    # the continuous profile: an algebraic equation referencing a
-    # piecewise-constant control at the final node names no real decision
-    # (the cvp final-node convention), so this model uses 'collocation'
-    drto.control(m.u, profile="collocation")
+    drto.control(m.u, profile="piecewise_constant")
     drto.tracking_stage_cost(m.stage)
     drto.initial_condition(m.init)
     return m
