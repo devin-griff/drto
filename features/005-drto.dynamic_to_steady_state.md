@@ -16,8 +16,9 @@ import drto
 # ... declared dynamic model m (feature 002) ...
 
 ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
-# ss is the steady-state system: time collapsed to a single point,
-# dz/dt = 0 added, initial and terminal pieces removed; m is unchanged
+# ss is the steady-state system: time collapsed to a single point, every
+# dz/dt reference replaced by zero and the DerivativeVars deleted, initial
+# and terminal pieces removed; m is unchanged
 drto.build_objective(ss)              # e.g. the single-point cost
 pyo.SolverFactory("ipopt").solve(ss)
 ```
@@ -36,13 +37,20 @@ many modes" promise.
 - `TransformationFactory('drto.dynamic_to_steady_state')` requires `horizon`,
   `state`, and `dynamics` on the model, and errors
   clearly if any is missing.
-- It validates that each dynamics constraint's left-hand side is the
-  DerivativeVar of a declared state, and errors clearly otherwise.
+- It validates that one side of each dynamics constraint is the
+  DerivativeVar of a declared state (either orientation of the equality),
+  and errors clearly otherwise. Derivative references outside the dynamics
+  (an index-reduced energy balance) are permitted; they get the zero
+  substitution like every other reference.
 - It removes, if present, the declared initial condition, terminal constraint,
   and both terminal costs (the tracking terminal cost and the estimation
   terminal cost).
-- For each dynamics constraint, it adds a constraint fixing that
-  state's DerivativeVar to zero (`dz/dt == 0`).
+- Every reference to a declared state's DerivativeVar, in the dynamics and
+  in any algebraic equation carrying one, is replaced by zero, and the
+  DerivativeVars are deleted: elimination by substitution, no `dz/dt == 0`
+  rows and no vestigial variables (USER DECISION 2026-07-18). The dynamics
+  become `0 = f(z, u)`, and a derivative-carrying energy balance collapses
+  to its quasi-static form.
 - It removes the time index from every variable and constraint, collapsing the
   model to a single point (so a per-time-point stage cost becomes the
   single-point cost).
