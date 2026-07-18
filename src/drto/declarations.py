@@ -433,7 +433,15 @@ def control(*components, profile="piecewise_constant"):
 def _register_stage_cost(kind, component, fn):
     """Validate and record a stage cost (attached and constructed)."""
     reg = info(component.model())
-    _declared_horizon(reg, fn)
+    time = _declared_horizon(reg, fn)
+    if any(s is time for s in component.index_set().subsets()):
+        raise ValueError(
+            f"drto: {fn}: '{component.name}' is indexed by the time set "
+            f"'{time.name}': discretization expands such a family to every "
+            f"collocation point, dragging the cost off the sample grid. "
+            f"Index it over the samples, for example "
+            f"@m.Constraint(sorted(m.t)[:-1])."
+        )
     samples = reg.declarations("horizon")[0]["samples"]
     expected = list(samples[:-1])
     members = sorted(component.keys()) if component.is_indexed() else []

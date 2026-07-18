@@ -179,8 +179,10 @@ declarations rather than re-deriving them.
   stage cost does not apply at the final time point, where only the terminal
   cost applies, so it is indexed over the sample grid minus the final point
   (for example `sorted(m.t)[:-1]`), one member per sample: a member at the
-  final time, or a missing sample, is rejected. Indexing by a plain list also
-  keeps the discretization from expanding it beyond the samples.
+  final time, or a missing sample, is rejected. The family may not be indexed
+  by the time set itself, even with Skip members: discretization expands such
+  a family to every collocation point, dragging the cost off the sample grid,
+  so declaration rejects the index outright.
 - `tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable.
 - `initial_condition(m.con, ...)` tags one or more equality Constraints

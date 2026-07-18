@@ -246,7 +246,7 @@ def test_control_requires_time_first():
         drto.control(m.u)
 
 
-def test_stage_cost_must_be_indexed_by_the_time_set():
+def test_stage_cost_must_be_indexed_over_the_samples():
     m = base_model()
     drto.horizon(m.t)
 
@@ -282,7 +282,7 @@ def test_stage_cost_needs_a_cost_variable_side():
         drto.tracking_stage_cost(m.no_var)
 
 
-def test_stage_cost_must_skip_the_final_time():
+def test_stage_cost_rejects_a_time_set_index():
     m = base_model()
     drto.horizon(m.t)
 
@@ -290,8 +290,26 @@ def test_stage_cost_must_skip_the_final_time():
     def full_span(m, t):
         return m.cost[t] == m.z[t] ** 2
 
-    with pytest.raises(ValueError, match="one member per sample"):
+    with pytest.raises(ValueError, match="indexed by the time set"):
         drto.tracking_stage_cost(m.full_span)
+
+
+def test_stage_cost_rejects_a_time_set_index_with_skip():
+    # before discretization the Skip variant has exactly the right members,
+    # but the family still expands with the grid afterward: the index itself
+    # is the error, not the member count
+    m = base_model()
+    drto.horizon(m.t)
+    tN = sorted(m.t)[-1]
+
+    @m.Constraint(m.t)
+    def skip_stage(m, t):
+        if t == tN:
+            return pyo.Constraint.Skip
+        return m.cost[t] == m.z[t] ** 2
+
+    with pytest.raises(ValueError, match="indexed by the time set"):
+        drto.tracking_stage_cost(m.skip_stage)
 
 
 def test_terminal_cost_must_be_scalar():
@@ -499,9 +517,9 @@ def test_decorator_validation_still_applies():
     m = base_model()
     drto.horizon(m.t)
     drto.state(m.z)
-    with pytest.raises(ValueError, match="one member per sample"):
+    with pytest.raises(ValueError, match="indexed by the time set"):
 
-        @drto.tracking_stage_cost(m, m.t)  # spans the final time
+        @drto.tracking_stage_cost(m, m.t)  # the time set itself
         def bad_stage(m, t):
             return m.cost[t] == m.z[t] ** 2
 
