@@ -69,9 +69,10 @@ registered as `TransformationFactory('drto.build_objective')`.
 Appends the terminal segment of Dinh et al. (2025): the tail of the horizon
 to infinity, compressed onto [0, 1] by `tau = tanh(gamma*(t - tN))`. The
 segment carries copies of the declared states and controls (states may carry index sets besides time; undeclared algebraic variables and equations ride along automatically), the dilated
-dynamics at interior Gauss-Legendre points, a hard equilibrium endpoint the
-stage cost selects, and the tracking stage cost replicated as the tail
-integrand. The tail enters the objective as explicit Gauss-weighted terms,
+dynamics at interior Gauss-Legendre points, and the tracking stage cost
+replicated as the tail integrand. No terminal condition is imposed: the
+tail weights are singular at the endpoint, so the cost itself drives the
+trajectory to settle. The tail enters the objective as explicit Gauss-weighted terms,
 the paper's `(beta/dt)*phi_f`, registered as a cost group that
 `drto.build_objective` picks up wherever it runs: applying this transform
 before the mode transform is the whole composition. `beta` and `gamma` are

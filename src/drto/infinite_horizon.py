@@ -9,29 +9,27 @@ of the horizon to t = infinity, compressed onto [0, 1] by the transformation
 doi:10.1016/j.jprocont.2025.103565). The segment carries copies of the
 declared states and controls, the declared dynamics dilated by the
 transformation Jacobian ``gamma*(1 - tau^2)`` at interior Gauss-Legendre
-collocation points, a hard equilibrium endpoint ``0 = f`` at ``tau = 1``, and
-the declared tracking stage cost replicated at the segment's collocation
+collocation points, and the declared tracking stage cost replicated at those
 points. The tail cost enters the objective as explicit Gauss-weighted terms,
 the paper's ``(beta/dt)*phi_f`` with the quadrature state eliminated,
 registered as a ``cost_group`` that ``drto.build_objective`` (feature 003)
 picks up wherever it runs. There is no coupling option: applying this
 transform before the mode transform is the whole composition.
 
-States may carry index sets besides time; copies, linking, equilibrium, and
-replication run per member. Algebraic variables and equations ride along
-without being declared: any time-indexed variable the replicated equations
-reference that is not a declared state or control gets a segment copy, and
-every active time-indexed constraint not declared as something else (and not
-a discretization artifact) is replicated at the interior points plus the
-endpoint, which pins the algebraic values the equilibrium references at
-``tau = 1``. A variable copied to the segment with no replicated equation
-involving it is an error, not a silent free variable.
+No terminal condition is imposed. The quadrature weights are singular at
+the endpoint, so a tail that fails to settle at the zero-cost equilibrium
+is punished without bound: the cost is its own terminal enforcement, and
+the endpoint state values (the Legendre extrapolation) settle as close to
+the setpoint as the horizon's freedoms allow.
 
-With the tail attached, the finite grid's final instant is the linking
-time, not an end, so the transform re-declares each declared control's cvp
-profile with ``final_node='keep'``: the control there is the held last
-move, and the model's equations at that instant may reference it. The
-segment's own control copies are parameterized the same way.
+States may carry index sets besides time; copies, linking, and replication
+run per member. Algebraic variables and equations ride along without being
+declared: any time-indexed variable the replicated equations reference that
+is not a declared state or control gets a segment copy, and every active
+time-indexed constraint not declared as something else (and not a
+discretization artifact) is replicated at the interior collocation points.
+A variable copied to the segment with no replicated equation involving it
+is an error, not a silent free variable.
 """
 import math
 from itertools import product
@@ -445,8 +443,8 @@ class InfiniteHorizonTransformation(Transformation):
             b.add_component(con.local_name, Constraint(*others, b.tau, rule=dyn_rule))
 
         # --- algebraic equations, replicated as written at the interior
-        # points plus the endpoint (they pin the algebraic values the
-        # equilibrium references at tau = 1); no boundary values ---------
+        # collocation points, where the dilated dynamics reference their
+        # variables; no boundary or endpoint values ----------------------
         for con in alg_cons:
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
@@ -454,8 +452,7 @@ class InfiniteHorizonTransformation(Transformation):
             def alg_rule(blk, *idx, _entries=alg_reps[con]):
                 s = idx[-1]
                 o = tuple(idx[:-1])
-                fe_pts = blk.tau.get_finite_elements()
-                if (s in fe_pts and s != fe_pts[-1]) or o not in _entries:
+                if s in blk.tau.get_finite_elements() or o not in _entries:
                     return Constraint.Skip
                 expr, t_rep = _entries[o]
                 return replace_expressions(expr, _emap(t_rep, s))
@@ -522,32 +519,6 @@ class InfiniteHorizonTransformation(Transformation):
             rule=lambda blk, s: replace_expressions(psi, _emap(t_rep_cost, s)),
         )
         b.add_component(cost_var.local_name, seg_cost)
-
-        # --- hard equilibrium endpoint, 0 = f at tau = 1 (eq. 21c). The
-        # state values at tau = 1 come from the Legendre extrapolation, the
-        # algebraic values from the replicated equations at the endpoint,
-        # and the control values from the segment profile at the endpoint
-        # (the segment is parameterized with final_node='keep': the tail
-        # continues to t = infinity, where the last move is held) ---
-        for con in dynamics:
-            pos, subs = _time_index(con, time)
-            others = [s_ for n, s_ in enumerate(subs) if n != pos]
-
-            def eq_rule(blk, *o, _entries=dyn_reps[con]):
-                o = tuple(v for v in o if v is not None)  # scalar rules get None
-                if o not in _entries:
-                    return Constraint.Skip
-                _, _, rhs, t_rep = _entries[o]
-                return 0 == replace_expressions(rhs, _emap(t_rep, 1))
-
-            b.add_component(
-                con.local_name + "_equilibrium",
-                (
-                    Constraint(*others, rule=eq_rule)
-                    if others
-                    else Constraint(rule=eq_rule)
-                ),
-            )
 
         # --- segment control profiles: applied now, so raw unparameterized
         # copies are never left on the segment ---

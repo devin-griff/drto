@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.infinite_horizon` imposes no terminal condition: the equilibrium
+  constraints at the segment endpoint are removed. The quadrature weights
+  are singular there, so the cost itself enforces settling, and the
+  removal restores the correct degree-of-freedom count for models with
+  many states. Algebraic equations replicate at the interior collocation
+  points only.
 - `drto.infinite_horizon` no longer re-declares control profiles or passes
   `final_node`: pyomo-cvp 0.6.3.1 resolves control references by what
   contains them, so equations at the linking time take the last move with

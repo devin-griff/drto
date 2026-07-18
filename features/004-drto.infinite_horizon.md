@@ -79,9 +79,14 @@ move.
   extrapolation.
 - Linking constraints stitch the segment's initial state to the declared
   states at the end of the horizon.
-- The endpoint is a hard equilibrium constraint, `0 = f` at `tau = 1`. There
-  are no setpoint pins: the stage cost selects the equilibrium. The
-  soft-constrained endpoint (paper eq. 36) is a follow-on, out of scope here.
+- No terminal condition is imposed (USER DECISION 2026-07-17). The
+  quadrature weights are singular at the endpoint, so a tail that fails to
+  settle at the zero-cost equilibrium is punished without bound: the cost
+  is its own terminal enforcement, and the endpoint values (the
+  discretization's extrapolation) settle as close to the setpoint as the
+  horizon's freedoms allow. The paper's endpoint constraint (eq. 21c, the
+  evaluated endpoint pinned to the setpoint, softened as eq. 36) is theory
+  the stability proof uses, not a constraint the NLP needs.
 - The tail cost uses no quadrature state and adds no variables or
   constraints: the declared tracking stage cost is replicated at the segment
   collocation points as named Expressions (a replicated cost Var would sit on
@@ -115,26 +120,23 @@ move.
   the dilated dynamics and both in the tail weights, never baked in as
   numbers, so `set_value` retunes either between solves with the dynamics and
   the objective staying consistent, no re-apply needed.
-- States may carry index sets besides time: segment copies, linking,
-  equilibrium, and replication run per member. Controls stay indexed by time
-  alone.
+- States may carry index sets besides time: segment copies, linking, and
+  replication run per member. Controls stay indexed by time alone.
 - Algebraic variables and equations ride along without being declared. Any
   time-indexed variable referenced by the replicated equations that is not a
   declared state or control gets a segment copy, and every active
   time-indexed constraint that is not declared as something else and is not
   a discretization artifact (the collocation and continuity equations) is
-  replicated on the segment at the interior collocation points and the
-  endpoint, which is what pins the algebraic values the equilibrium
-  ``0 = f`` references at ``tau = 1``. Algebraic copies get no
+  replicated on the segment at the interior collocation points, where the
+  dilated dynamics reference its variables. Algebraic copies get no
   element-boundary values and no linking.
 - A variable copied to the segment with no replicated equation involving it
   errors, naming the variable: a silently free variable there is a wrong
   tail the solver exploits.
-- The finite grid's final instant becomes the linking time, so the
-  transform re-declares each declared control's pyomo-cvp profile with
-  ``final_node='keep'``: the control at that instant is the held last move,
-  and equations there may reference it. On a plain finite horizon (no
-  tail), the declaration default ``'remove'`` stands.
+- The finite grid's final instant becomes the linking time. Model
+  equations there reference the last move, which pyomo-cvp (0.6.3.1)
+  resolves by the constraint's own structure: no convention is declared or
+  flipped.
 - A declared tracking terminal cost is deactivated on application: the tail
   integral is the cost-to-go, so V_f would double-count. The deactivation is
   noted in the transformation outcome.
@@ -148,4 +150,4 @@ move.
 - Acceptance tests mirror the reference notebook: the short-horizon-plus-
   segment solution reproduces a long-horizon baseline, the explicit-weight
   tail equals the quadrature-state tail to machine precision, and the
-  endpoint reaches the setpoint equilibrium with no pins.
+  endpoint settles at the setpoint equilibrium driven by the cost alone.

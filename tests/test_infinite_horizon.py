@@ -167,8 +167,8 @@ def test_segment_structure():
     # dilated dynamics at interior collocation points only
     assert all(s not in b.ode for s in fe)
     assert len(b.ode) == 15  # 3 elements x 5 points
-    # equilibrium endpoint and linking present
-    assert b.component("ode_equilibrium") is not None
+    # linking present; no terminal condition is imposed
+    assert b.component("ode_equilibrium") is None
     assert b.component("z_link") is not None
     # segment control parameterized: free values at collocation points only
     assert len(b.u) == 15
@@ -372,7 +372,6 @@ def test_indexed_state_segment_structure():
     assert len(b.x) == 2 * ntau  # a copy member per (i, tau)
     assert len(b.ode) == 2 * 15  # dilated dynamics per member
     assert len(b.x_link) == 2  # linked per member
-    assert len(b.ode_equilibrium) == 2
 
 
 @needs_ipopt
@@ -400,10 +399,10 @@ def test_algebraic_variables_are_discovered_and_replicated():
     b = m.drto_infinite_horizon
     # the algebraic copy exists without a declaration
     assert b.component("w") is not None
-    # its equation holds at the interior points plus the endpoint only
+    # its equation holds at the interior collocation points only
     fe = b.tau.get_finite_elements()
-    assert len(b.w_def) == 15 + 1
-    assert 1 in b.w_def and not any(s in b.w_def for s in fe[:-1])
+    assert len(b.w_def) == 15
+    assert not any(s in b.w_def for s in fe)
     (ih_rec,) = [r for r in drto.info(m).transformations if r["name"] == IH]
     assert "1 component " in ih_rec["outcome"]["algebraic"] + " "
 
