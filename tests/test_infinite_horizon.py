@@ -434,6 +434,45 @@ def test_legendre_discretized_horizon_applies():
     assert m.drto_infinite_horizon.component("z_link") is not None
 
 
+def test_derivative_reference_in_an_algebraic_equation_dilates():
+    # the index-reduced energy-balance case: a replicated equation that
+    # references a declared state's derivative maps it to the segment
+    # derivative with the dilation factor, the same rewrite the dynamics get
+    m = dae_model()
+    m.del_component(m.w_def)
+
+    @m.Constraint(m.t)
+    def w_def(m, t):
+        return m.w[t] == 0.5 * (m.z[t] + m.u[t]) + 0.1 * m.dz[t]
+
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_infinite_horizon
+    s = sorted(b.tau)[1]  # an interior collocation point
+    text = str(b.w_def[s].expr)
+    assert "z_dtau" in text and "gamma" in text
+    assert "dz[" not in text  # no reference back to the finite grid
+
+
+def test_an_undeclared_states_derivative_still_errors():
+    m = dae_model()
+    m.w2 = pyo.Var(m.t, initialize=0.0)
+    m.dw2 = DerivativeVar(m.w2, wrt=m.t)
+    m.del_component(m.w_def)
+
+    @m.Constraint(m.t)
+    def w_def(m, t):
+        return m.w[t] == m.dw2[t] + m.z[t]
+
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    with pytest.raises(ValueError, match="not a declared state's derivative"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
 def test_unpinned_algebraic_copy_errors():
     # a variable copied to the segment with no replicated equation would be
     # free there; the transform stops instead of letting the solver exploit it

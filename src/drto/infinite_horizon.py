@@ -28,6 +28,9 @@ declared: any time-indexed variable the replicated equations reference that
 is not a declared state or control gets a segment copy, and every active
 time-indexed constraint not declared as something else (and not a
 discretization artifact) is replicated at the interior collocation points.
+A replicated equation may reference a declared state's derivative (the
+index-reduced energy-balance case): the reference maps to the segment
+derivative with the dilation factor, the same rewrite the dynamics get.
 A variable copied to the segment with no replicated equation involving it
 is an error, not a silent free variable.
 """
@@ -326,11 +329,21 @@ class InfiniteHorizonTransformation(Transformation):
             for v in identify_variables(expr, include_fixed=True):
                 comp = v.parent_component()
                 if isinstance(comp, DerivativeVar):
-                    raise ValueError(
-                        f"drto: infinite_horizon cannot replicate "
-                        f"'{where}': it references the derivative "
-                        f"'{v.name}' outside its own dynamics equation."
-                    )
+                    # a declared state's time derivative is allowed: the
+                    # replication maps it to the segment derivative with
+                    # the dilation factor, the same rewrite the dynamics
+                    # get (an index-reduced energy balance is the real case)
+                    if (
+                        comp.get_state_var() not in states_set
+                        or comp.get_continuousset_list() != [time]
+                    ):
+                        raise ValueError(
+                            f"drto: infinite_horizon cannot replicate "
+                            f"'{where}': it references the derivative "
+                            f"'{v.name}', which is not a declared state's "
+                            f"derivative with respect to the declared time "
+                            f"set."
+                        )
                 pos, subs = _time_index(comp, time)
                 if pos is None:
                     continue  # time-invariant: shared with the segment as-is
@@ -341,7 +354,11 @@ class InfiniteHorizonTransformation(Transformation):
                         f"'{where}': it references '{v.name}' away from "
                         f"the constraint's own time point."
                     )
-                if comp not in states_set and comp not in controls_set:
+                if (
+                    comp not in states_set
+                    and comp not in controls_set
+                    and not isinstance(comp, DerivativeVar)
+                ):
                     algebraic.add(comp)
 
         dyn_reps = {}
@@ -414,18 +431,38 @@ class InfiniteHorizonTransformation(Transformation):
             v = seg[comp]
             return v[tuple(o) + (s,)] if o else v[s]
 
+        # the model DerivativeVar of each declared state, for mapping
+        # derivative references inside replicated equations
+        model_derivs = {}
+        for dv in model.component_objects(Var, active=True):
+            if (
+                isinstance(dv, DerivativeVar)
+                and dv.get_state_var() in states_set
+                and dv.get_continuousset_list() == [time]
+            ):
+                model_derivs[dv.get_state_var()] = dv
+
         _emaps = {}
 
         def _emap(t_rep, s):
             """Model members at ``t_rep`` mapped to segment members at
             ``s``, cached: the map depends only on the two time points,
-            never on the member the replication rule is building."""
+            never on the member the replication rule is building. A state
+            derivative maps to the segment derivative with the dilation
+            factor, the same rewrite the dilated dynamics apply."""
             key = (t_rep, s)
             if key not in _emaps:
                 mmap = {}
                 for comp in seg:
                     for o in _combos(comp):
                         mmap[id(_member(comp, o, t_rep))] = _seg_at(comp, o, s)
+                for z, dv in model_derivs.items():
+                    dvd = derivs[z]
+                    for o in _combos(z):
+                        seg_deriv = dvd[tuple(o) + (s,)] if o else dvd[s]
+                        mmap[id(_member(dv, o, t_rep))] = (
+                            b.gamma * (1 - s**2) * seg_deriv
+                        )
                 _emaps[key] = mmap
             return _emaps[key]
 
