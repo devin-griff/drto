@@ -8,3 +8,4 @@ extend-exclude = ["*.ipynb"]
 [default.extend-words]
 # Domain terms, not misspellings.
 RTO = "RTO"  # real-time optimization
+pn = "pn"  # the n-propanol vapor pressure (binary column)
