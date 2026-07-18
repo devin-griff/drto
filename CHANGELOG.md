@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-17
+
+### Added
+
+- The double column DAE example: the declared two-column model
+  (`examples/models/double_column.py` and its reference data), the two-case
+  example notebook, and an initialization helper (`examples/initialize.py`)
+  that ramps the states from the initial condition to the steady state and
+  computes the algebraic and cost variables from the model's own equations.
+
 ### Changed
 
 - `drto.infinite_horizon` imposes no terminal condition: the equilibrium
@@ -14,10 +24,20 @@ All notable changes to this project are documented here. The format is based on
   removal restores the correct degree-of-freedom count for models with
   many states. Algebraic equations replicate at the interior collocation
   points only.
-- `drto.infinite_horizon` no longer re-declares control profiles or passes
+- `drto.infinite_horizon` does not re-declare control profiles or pass
   `final_node`: pyomo-cvp 0.6.3.1 resolves control references by what
   contains them, so equations at the linking time take the last move with
   no convention to flip. Requires pyomo-cvp >= 0.6.3.1.
+- `drto.infinite_horizon` handles states with extra index sets and DAE
+  models: algebraic variables and equations are discovered structurally
+  (no declaration) and replicated on the segment.
+- The initial-condition and terminal-constraint validations handle states
+  indexed by time plus other sets.
+- `drto.infinite_horizon` deactivates a declared tracking terminal cost:
+  the tail integral is the cost-to-go, so V_f would double-count. Recorded
+  in the transformation outcome.
+- The example models (`examples/models/`) include a tracking terminal cost:
+  the stage cost with the controls removed, at the final time.
 
 ### Fixed
 
@@ -29,26 +49,11 @@ All notable changes to this project are documented here. The format is based on
   variable in the tail.
 - An invalid `profile` errors before the model is touched, not midway
   through the segment construction.
-
-### Changed
-
-- `drto.infinite_horizon` re-declares each control's profile with cvp's
-  `final_node='keep'`: with the tail attached, the grid's final instant is
-  the linking time, not an end, and the control there is the held last
-  move. The segment's own controls are parameterized the same way (through
-  cvp's explicit form), so the equilibrium references the profile at
-  tau = 1 for every profile. `drto.parameterize` stays a plain apply.
-  Requires pyomo-cvp >= 0.6.2.
-- `drto.infinite_horizon` handles states with extra index sets and DAE
-  models: algebraic variables and equations are discovered structurally
-  (no declaration) and replicated on the segment.
-- The initial-condition and terminal-constraint validations handle states
-  indexed by time plus other sets.
-- `drto.infinite_horizon` deactivates a declared tracking terminal cost:
-  the tail integral is the cost-to-go, so V_f would double-count. Recorded
-  in the transformation outcome.
-- The example models (`examples/models/`) include a tracking terminal cost:
-  the stage cost with the controls removed, at the final time.
+- A stage cost indexed by the time set itself passed declaration when its
+  members skipped the final time, then expanded to every collocation point
+  at discretization, dragging the cost off the sample grid.
+  `tracking_stage_cost` and `economic_stage_cost` now reject a family
+  indexed by the time set outright.
 
 ## [0.1.0] - 2026-07-17
 
