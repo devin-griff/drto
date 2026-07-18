@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """drto-aware plotting for the example notebooks.
 
-Both functions read everything from the model's registry (``drto.info``): the
+The functions read everything from the model's registry (``drto.info``): the
 declared horizon and its sample grid, the declared states or controls, and
 the paired steady-state targets for the dotted setpoint lines. If the model
 carries an infinite-horizon terminal segment (``drto_infinite_horizon``), the
@@ -213,6 +213,31 @@ def plot_states(m, states=None, t_max=50):
     time = reg.components("horizon")[0]
     panels = _select(reg.components("state"), states, "state", time)
     return _draw(m, panels, _targets(reg, "steady_state"), slice(None), t_max, boundary_squares=True)
+
+
+def plot_stage_cost(m, t_max=50):
+    """Plot the tracking stage cost, one fixed-size panel.
+
+    The cost variable is read off the declared stage-cost equality
+    (whichever side of it is the scalar). Finite values sit at the samples
+    minus the final time, where only the terminal cost applies. On the
+    tail the replicated stage-cost Expressions carry the values, drawn
+    open at the interior collocation points. Returns the panel axes.
+    """
+    reg = drto.info(m)
+    cons = reg.components("tracking_stage_cost")
+    if not cons:
+        raise ValueError("no tracking stage cost is declared on this model.")
+    member = next(iter(cons[0].values()))
+    cost = None
+    for side in (member.expr.args[0], member.expr.args[1]):
+        if getattr(side, "is_variable_type", lambda: False)():
+            cost = side.parent_component()
+            break
+    if cost is None:
+        raise ValueError("no scalar cost variable side on the stage cost.")
+    panels = [(cost, (), cost.local_name)]
+    return _draw(m, panels, {}, slice(None, -1), t_max, boundary_squares=False)
 
 
 def plot_controls(m, controls=None, t_max=50):
