@@ -30,7 +30,7 @@ classifiers = [
 # pyomo-cvp parameterizes the declared controls; numpy derives the
 # infinite-horizon quadrature weights. Both are guarded by attempt_import so
 # the bare package still imports without them.
-dependencies = ["pyomo>=6.8.1", "pyomo-cvp>=0.6.2", "numpy"]
+dependencies = ["pyomo>=6.8.1", "pyomo-cvp>=0.6.3.1", "numpy"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "pyomo-ripopt"]

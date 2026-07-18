@@ -553,7 +553,7 @@ class InfiniteHorizonTransformation(Transformation):
         # copies are never left on the segment ---
         for u in controls:
             TransformationFactory("cvp.parameterize").apply_to(
-                b, var=seg[u], contset=b.tau, profile=config.profile, final_node="keep"
+                b, var=seg[u], contset=b.tau, profile=config.profile
             )
 
         # --- the tail cost: explicit Gauss weights, (beta/dt) * phi_f with
@@ -569,18 +569,6 @@ class InfiniteHorizonTransformation(Transformation):
                 weight = b.beta * (h * float(w)) / (b.gamma * dt * (1 - p**2))
                 terms.append((seg_cost[p], weight))
         reg.record_declaration("cost_group", b, terms=tuple(terms))
-
-        # the tail continues past the grid, so the finite horizon's final
-        # instant is the linking time, not an end: re-declare each control's
-        # profile with final_node='keep' (the held last move exists there),
-        # which drto.parameterize applies later
-        for record in reg.declarations("control"):
-            pyomo_cvp.declare_profile(
-                record["component"],
-                wrt=time,
-                profile=record["profile"],
-                final_node="keep",
-            )
 
         # the tail integral IS the cost-to-go, so a declared terminal cost
         # would double-count: deactivate it (build_objective's liveness rule

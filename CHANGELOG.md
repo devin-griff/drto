@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- `drto.infinite_horizon` no longer re-declares control profiles or passes
+  `final_node`: pyomo-cvp 0.6.3.1 resolves control references by what
+  contains them, so equations at the linking time take the last move with
+  no convention to flip. Requires pyomo-cvp >= 0.6.3.1.
+
 ### Fixed
 
 - `drto.infinite_horizon` no longer fails on a LAGRANGE-LEGENDRE-discretized
