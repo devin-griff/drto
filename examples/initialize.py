@@ -20,6 +20,8 @@ Usage from a notebook in ``examples/``::
     initialize_column(m)         # the double (ternary) column
     initialize_binary_column(m)  # the binary column
 """
+import logging
+
 import pyomo.environ as pyo
 from pyomo.util.calc_var_value import calculate_variable_from_constraint
 
@@ -100,6 +102,24 @@ def initialize_binary_column(m):
         _solve_pairs(seg, _BC_PAIRS)
 
 
+def initialize_asu(m):
+    """The ASU: the nominal point is steady, so no interpolation.
+
+    The model builds initialized at the nominal data; only the derivatives
+    (zero at steady state) and the cost variables need values. On the
+    segment the derivative copies are zero.
+    """
+    for name in ("dMh", "dMl", "dxh", "dxl"):
+        for v in m.component(name).values():
+            v.set_value(0.0)
+    _solve_pairs(m, [("cost", "stage"), ("term", "terminal")])
+    seg = m.component("drto_infinite_horizon")
+    if seg is not None:
+        for name in ("Mh", "Ml", "xh", "xl"):
+            for v in seg.component(name + "_dtau").values():
+                v.set_value(0.0)
+
+
 def _interpolate_states(m, states):
     tN = m.t.last()
     for var_name, hat_name, ss_name in states:
@@ -112,9 +132,23 @@ def _interpolate_states(m, states):
 
 
 def _solve_pairs(blk, pairs):
-    for var_name, con_name in pairs:
-        var, con = blk.component(var_name), blk.component(con_name)
-        if var is None or con is None:  # the segment carries no cost vars
-            continue
-        for cd in con.values():
-            calculate_variable_from_constraint(var[cd.index()], cd)
+    # a Newton solve mid-ramp can legitimately pass outside a Var's bounds;
+    # the value is clamped back in, and Pyomo's outside-bounds warnings are
+    # quieted for the duration instead of flooding the notebook
+    logger = logging.getLogger("pyomo.core")
+    level = logger.level
+    logger.setLevel(logging.ERROR)
+    try:
+        for var_name, con_name in pairs:
+            var, con = blk.component(var_name), blk.component(con_name)
+            if var is None or con is None:  # the segment carries no cost vars
+                continue
+            for cd in con.values():
+                v = var[cd.index()]
+                calculate_variable_from_constraint(v, cd)
+                if v.lb is not None and v.value < v.lb:
+                    v.set_value(v.lb)
+                elif v.ub is not None and v.value > v.ub:
+                    v.set_value(v.ub)
+    finally:
+        logger.setLevel(level)

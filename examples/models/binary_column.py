@@ -138,14 +138,18 @@ def binary_column(N=20, h=60):
     m.Tdot = pyo.Var(m.tray, m.t, initialize=0.0)  # dT/dt, the chain-rule companion
     m.y = pyo.Var(m.tray_v, m.t, bounds=(0, 1), initialize=lambda m, k, t: ref["y"][k - 1])
     m.V = pyo.Var(m.tray_v, m.t, bounds=(0, 1.0e3), initialize=lambda m, k, t: ref["V"][k - 1])
-    m.L = pyo.Var(m.tray, m.t, bounds=(0, 1.0e3), initialize=1.0)
-    m.Mv = pyo.Var(m.tray, m.t, initialize=1.0)  # volume holdup, carries the weir minimums
+    # reference values for the volume holdup and weir flow, so every Var
+    # starts inside its bounds (the transform copies values onto the tail)
+    def _vm_num(x, T):
+        return x * ((1 / 2288) * 0.2685 ** (1 + (1 - T / 512.4) ** 0.2453)) + (1 - x) * ((1 / 1235) * 0.27136 ** (1 + (1 - T / 536.4) ** 0.24))
+
+    _weir = {k: (8.5 if k == 1 else (0.17 if k == NT else 0.155)) for k in range(1, NT + 1)}
+    _mv_ref = {k: _vm_num(ref["x"][k - 1], ref["T"][k - 1]) * ref["M"][k - 1] for k in range(1, NT + 1)}
+    _l_ref = {k: 0.166 * max(_mv_ref[k] - _weir[k], 1e-6) ** 1.5 / _vm_num(ref["x"][k - 1], ref["T"][k - 1]) for k in range(1, NT + 1)}
+
+    m.L = pyo.Var(m.tray, m.t, bounds=(0, 1.0e3), initialize=lambda m, k, t: _l_ref[k])
+    m.Mv = pyo.Var(m.tray, m.t, bounds=lambda m, k, t: (_weir[k] + 1e-6, 1.0e4), initialize=lambda m, k, t: _mv_ref[k])  # volume holdup, carries the weir minimums
     m.Qc = pyo.Var(m.t, bounds=(0, 1.0e2), initialize=ref["Qc"])
-    for k in m.tray:
-        lo = m.Mv0r if k == 1 else (m.Mv0c if k == NT else m.Mv0t)
-        for t in m.t:
-            m.Mv[k, t].setlb(pyo.value(lo) + 1e-6)
-            m.Mv[k, t].setub(1.0e4)
     # unbounded cost vars: a cost var pinned at a bound drags ipopt
     m.cost = pyo.Var(m.t)
     m.term = pyo.Var()
