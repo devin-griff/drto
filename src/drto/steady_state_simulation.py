@@ -68,6 +68,11 @@ class SteadyStateSimulationTransformation(Transformation):
                 dropped.append(kind.split("_")[0])
             # same-package registry surgery, matching the reduction's removals
             reg._declarations.pop(kind, None)
+        # the steady-state pairings serve the costs, the endpoint pin, and
+        # the optimization mode's write-back, none of which a simulation
+        # has: the records go, the target Params stay (the user's components)
+        for kind in ("steady_state", "steady_state_control"):
+            reg._declarations.pop(kind, None)
 
         # resolve the requested values against THIS model: create_using
         # hands keys from the source model, and the reduction above replaces

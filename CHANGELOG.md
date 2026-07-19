@@ -22,9 +22,10 @@ All notable changes to this project are documented here. The format is based on
 - `drto.steady_state_simulation` (feature 008): reduce to steady state,
   fix the declared controls (at supplied values or the values they hold,
   components resolving by name so `create_using` accepts source-model
-  keys), drop the declared stage costs (a simulation carries no cost
-  equations), and install the simulation's zero objective: the square
-  fixed-input equilibrium solve. A dynamic model composes the feature 005
+  keys), drop the declared stage costs and the steady-state pairings (a
+  simulation carries no cost equations and nothing reads the pairings;
+  the target Params stay), and install the simulation's zero objective:
+  the square fixed-input equilibrium solve. A dynamic model composes the feature 005
   reduction; a model authored directly as steady-state skips it. With
   that, `drto.control` on a model with no declared horizon registers
   without a profile, so a steady-state model declares through the same

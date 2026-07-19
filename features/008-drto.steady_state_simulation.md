@@ -49,6 +49,10 @@ used across the modes.
 - The declared stage costs (tracking and economic) are dropped from the
   model and the registry: a simulation carries no cost equations, and the
   cost variables they defined are left unused (USER DECISION 2026-07-18).
+- The steady-state pairings are dropped from the registry too: they serve
+  the costs, the endpoint pin, and the optimization mode's write-back,
+  none of which a simulation has. The target Params stay on the model,
+  the user's components (USER DECISION 2026-07-18).
 - Solving the transformed model gives an equilibrium that satisfies the dynamics
   at rest and the model's algebraic relations.
 - It works through both `apply_to` (in place) and `create_using` (a transformed

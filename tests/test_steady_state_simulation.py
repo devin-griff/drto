@@ -74,6 +74,17 @@ def test_stage_cost_is_dropped():
     assert not drto.info(m).has_declaration("tracking_stage_cost")
 
 
+def test_steady_state_pairings_are_dropped():
+    # nothing in a simulation reads the pairings; the Params stay
+    m = declared_model()
+    pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
+        m, controls={m.u: 0.3}
+    )
+    assert not drto.info(m).has_declaration("steady_state")
+    assert not drto.info(m).has_declaration("steady_state_control")
+    assert m.component("z_ss") is not None  # the user's Param remains
+
+
 def test_unknown_control_errors():
     m = declared_model()
     m.w = pyo.Var()
