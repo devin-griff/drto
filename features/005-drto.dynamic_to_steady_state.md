@@ -1,6 +1,6 @@
 # drto.dynamic_to_steady_state
 
-**Status:** ![shipped](https://img.shields.io/badge/shipped-brightgreen)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 

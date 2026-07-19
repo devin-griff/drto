@@ -1,6 +1,6 @@
 # drto.steady_state_simulation
 
-**Status:** ![shipped](https://img.shields.io/badge/shipped-brightgreen)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
