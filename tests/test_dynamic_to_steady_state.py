@@ -22,9 +22,34 @@ def test_requires_the_declarations():
         pyo.TransformationFactory(SS).apply_to(m)
 
 
-def test_refuses_a_discretized_horizon():
-    m = ready_model()
-    with pytest.raises(ValueError, match="before discretization"):
+def snapshot(m):
+    return sorted(
+        f"{c.name}: {c.expr}"
+        for c in m.component_data_objects(pyo.Constraint, active=True)
+    )
+
+
+def test_a_discretized_model_reduces_to_the_same_steady_system():
+    plain = pyo.TransformationFactory(SS).create_using(declared_model())
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    ss = pyo.TransformationFactory(SS).create_using(m)
+    assert snapshot(ss) == snapshot(plain)
+    # the discretization artifacts are discarded, not collapsed
+    assert not any("_disc_" in c.name for c in ss.component_objects(pyo.Constraint))
+    rec = [r for r in drto.info(ss).transformations if r["name"] == SS][0]
+    assert "discretization artifacts" in rec["outcome"]["discarded"]
+
+
+def test_applied_drto_transforms_still_error():
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("drto.parameterize").apply_to(m)
+    with pytest.raises(ValueError, match="before any drto"):
         pyo.TransformationFactory(SS).apply_to(m)
 
 

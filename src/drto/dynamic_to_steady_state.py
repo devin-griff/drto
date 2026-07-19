@@ -12,9 +12,12 @@ quasi-static form), and a per-sample stage cost becomes the single-point
 cost that ``drto.build_objective`` assembles for the steady modes.
 
 Elimination is by substitution: no ``dz/dt == 0`` rows and no vestigial
-variables. The transform applies to the declared model only, before
-discretization and before any drto transformation: the steady reduction
-and the dynamic transforms are sibling branches of the same declarations.
+variables. The transform applies to the declared or discretized model,
+before any drto transformation: applied control profiles or an attached
+terminal segment error, the sibling-branch rule. On a discretized model
+the discretization artifacts (the collocation equations and continuity
+rows pyomo.dae adds) are discarded, grid machinery rather than model
+content, and the reduction gives the same steady system either way.
 Objective assembly is not performed here; an existing objective only has
 its references collapsed.
 """
@@ -69,13 +72,6 @@ class DynamicToSteadyStateTransformation(Transformation):
                 f"{', '.join(_REQUIRED)}; missing: {', '.join(missing)}."
             )
         time = reg.components("horizon")[0]
-        if time.get_discretization_info():
-            raise ValueError(
-                "drto: dynamic_to_steady_state applies to the declared model "
-                "before discretization: the steady reduction and the dynamic "
-                "transforms are sibling branches of the same declarations, "
-                "not a pipeline."
-            )
         for name in ("drto.infinite_horizon", "drto.parameterize"):
             if reg.has_transformation(name):
                 raise ValueError(
@@ -112,6 +108,15 @@ class DynamicToSteadyStateTransformation(Transformation):
             # same-package registry surgery: the records describe components
             # that no longer exist on the reduced model
             reg._declarations.pop(kind, None)
+
+        # --- discretization artifacts are grid machinery, not model
+        # content: discarded, so a discretized model reduces to the same
+        # steady system as the declared one ------------------------------
+        n_artifacts = 0
+        for con in list(model.component_objects(Constraint, active=True)):
+            if "_disc_" in con.local_name or con.local_name.endswith("_cont_eq"):
+                con.parent_block().del_component(con)
+                n_artifacts += 1
 
         # --- no member may span more than one time point ----------------
         for con in model.component_objects(Constraint, active=True):
@@ -171,13 +176,19 @@ class DynamicToSteadyStateTransformation(Transformation):
                 submap[id(vd)] = new[o] if o else new
 
         # --- every derivative reference becomes zero ---------------------
-        # pre-discretization a DerivativeVar is its own ctype, not Var
-        derivs = [
-            dv
-            for dv in model.component_objects(DerivativeVar)
-            if dv.get_continuousset_list() == [time]
-            and dv.get_state_var() in states_set
-        ]
+        # a DerivativeVar is its own ctype before discretization and is
+        # reclassified to Var by pyomo.dae afterward: scan both
+        seen, derivs = set(), []
+        for query in (DerivativeVar, Var):
+            for dv in model.component_objects(query):
+                if (
+                    isinstance(dv, DerivativeVar)
+                    and id(dv) not in seen
+                    and dv.get_continuousset_list() == [time]
+                    and dv.get_state_var() in states_set
+                ):
+                    seen.add(id(dv))
+                    derivs.append(dv)
         for dv in derivs:
             for vd in dv.values():
                 submap[id(vd)] = 0
@@ -254,4 +265,9 @@ class DynamicToSteadyStateTransformation(Transformation):
             f"single point",
             derivatives=f"{sum(len(dv) for dv in derivs)} derivative "
             f"references replaced by zero",
+            **(
+                {"discarded": f"{n_artifacts} discretization artifacts"}
+                if n_artifacts
+                else {}
+            ),
         )
