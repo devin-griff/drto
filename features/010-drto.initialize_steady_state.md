@@ -69,5 +69,17 @@ carry today.
   initialization is `pyomo_pounce.initialize` called directly.
 - It populates variable values only: no components are added or removed,
   and variable fixed flags are restored after the pipeline. It is a plain
-  function, with no `apply_to` or `create_using` form, and returns the
-  pipeline's report on success.
+  function, with no `apply_to` or `create_using` form.
+- The return value tells the user what happened, printable in a notebook:
+  the steady path returns the pipeline's `InitializeReport` as-is (fills,
+  projection outcome, block counts); the dynamic path returns a thin drto
+  wrapper around it that adds the broadcast line, the variables seeded
+  across the grid points and the derivatives zeroed (USER DECISION
+  2026-07-19).
+- pyomo-pounce is an optional dependency, not a requirement of drto: it
+  lives in the `pounce` extras group (`pip install drto[pounce]`, shared
+  with the future pounce-backed features, e.g. the advanced-step
+  controller and sensitivities), the import happens inside the function so
+  `import drto` never touches it, and a missing install raises the
+  house-style error naming the extra (USER DECISION 2026-07-19). drto's
+  core stays solver-agnostic.
