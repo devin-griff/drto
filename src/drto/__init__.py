@@ -23,6 +23,7 @@ from drto.declarations import (
     tracking_terminal_cost,
 )
 from drto.info import Info, info
+from drto.initialize_steady_state import SteadyStateInitReport, initialize_steady_state
 from drto.objective import build_objective
 
 # importing registers the drto.* transformations
@@ -40,6 +41,8 @@ __all__ = [
     "Info",
     "info",
     "build_objective",
+    "initialize_steady_state",
+    "SteadyStateInitReport",
     "horizon",
     "state",
     "dynamics",

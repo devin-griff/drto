@@ -23,7 +23,7 @@ alongside the CHANGELOG section rename.
 | [007 drto.dynamic_simulation](007-drto.dynamic_simulation.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [008 drto.steady_state_simulation](008-drto.steady_state_simulation.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [009 drto.steady_state_optimization](009-drto.steady_state_optimization.md) | ![ready](https://img.shields.io/badge/ready-blue) |
-| [010 drto.initialize_steady_state](010-drto.initialize_steady_state.md) | ![ready](https://img.shields.io/badge/ready-blue) |
+| [010 drto.initialize_steady_state](010-drto.initialize_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [011 drto.cold_start_dynamic](011-drto.cold_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [012 drto.advanced_step_controller](012-drto.advanced_step_controller.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [013 drto.warm_start_dynamic](013-drto.warm_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |

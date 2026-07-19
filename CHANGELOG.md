@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.initialize_steady_state` (feature 010): initialize a model from
+  its steady state. A steady-state model (authored, or a feature 005
+  reduction) initializes in place through pyomo-pounce's fill, project,
+  block-solve pipeline with the declared controls as the decisions; a
+  discretized dynamic model reduces a throwaway clone, solves there, and
+  broadcasts the equilibrium flat across the grid with the derivatives at
+  zero, returning a printable report with the broadcast counts. Runs
+  before the dynamic transforms, which carry the values forward. A
+  non-square steady system raises, naming the unmatched variables and
+  constraints. pyomo-pounce is optional: the `pounce` extra
+  (`pip install drto[pounce]`), imported at call time.
+
 - `drto.dynamic_to_steady_state` (feature 005): reduces a declared dynamic
   model to its steady-state form. Time collapses to a single point, every
   reference to a declared state's derivative is replaced by zero
@@ -16,9 +28,11 @@ All notable changes to this project are documented here. The format is based on
   and terminal cost leave the model, and a per-sample stage cost becomes
   the single-point cost `build_objective` assembles. Derivative-carrying
   algebraic equations collapse to their quasi-static forms. Applies to
-  the declared model only, before discretization and before any drto
-  transformation: the steady reduction and the dynamic transforms are
-  sibling branches of the same declarations. The refreshed control
+  the declared or discretized model, before any drto transformation (the
+  steady reduction and the dynamic transforms are sibling branches of the
+  same declarations); on a discretized model the discretization artifacts
+  are discarded, and the reduction gives the same steady system either
+  way. The refreshed control
   records drop their profile annotation: a single-point control has no
   profile.
 - `drto.steady_state_simulation` (feature 008): reduce to steady state,
@@ -49,6 +63,7 @@ All notable changes to this project are documented here. The format is based on
   original model; `initialize.py` gains the binary column helper.
 
 ### Changed
+
 
 - `drto.infinite_horizon` replicates algebraic equations that reference a
   declared state's derivative (the index-reduced energy-balance case): the

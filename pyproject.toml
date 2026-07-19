@@ -33,7 +33,8 @@ classifiers = [
 dependencies = ["pyomo>=6.8.1", "pyomo-cvp>=0.7.0", "numpy"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "pyomo-ripopt"]
+dev = ["pytest", "pytest-cov", "pyomo-ripopt", "pyomo-pounce>=0.8.0"]
+pounce = ["pyomo-pounce>=0.8.0"]
 examples = ["numpy", "matplotlib", "jupyter"]
 docs = ["sphinx", "myst-nb", "sphinx-book-theme", "sphinx-copybutton"]
 
