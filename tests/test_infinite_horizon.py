@@ -538,7 +538,7 @@ def test_hicks_short_horizon_reproduces_the_long_one():
 
 
 # ----------------------------------------------------------------------
-# the terminal endpoint pin (Dinh et al. 2025, eq 21c hard / eq 36 soft)
+# the terminal endpoint pin (Dinh et al. 2025, eq 36 soft)
 # ----------------------------------------------------------------------
 def test_default_is_soft_pin():
     m = ready_model()
@@ -554,26 +554,16 @@ def test_default_is_soft_pin():
     assert rec["outcome"]["terminal"].startswith("soft")
 
 
-def test_hard_pin_adds_one_equality_per_state():
-    m = ready_model()
-    pyo.TransformationFactory(IH).apply_to(m, terminal="hard")
-    b = m.drto_infinite_horizon
-    assert b.component("z_pin") is not None and len(b.z_pin) == 1
-    # the hard form adds no slacks, no penalty, no extra cost group
-    assert b.component("z_pin_up") is None and b.component("mu") is None
-    assert len(drto.info(m).declarations("cost_group")) == 1
-    (rec,) = [r for r in drto.info(m).transformations if r["name"] == IH]
-    assert rec["outcome"]["terminal"].startswith("hard")
-
-
-def test_hard_pin_is_per_member_for_indexed_states():
+def test_soft_pin_is_per_member_for_indexed_states():
     m = indexed_model()
     pyo.TransformationFactory("dae.collocation").apply_to(
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
     )
-    pyo.TransformationFactory(IH).apply_to(m, terminal="hard")
+    pyo.TransformationFactory(IH).apply_to(m)  # default terminal='soft'
     b = m.drto_infinite_horizon
-    assert len(b.x_pin) == 2  # one endpoint equality per i, like x_link
+    # one relaxed endpoint equality and one slack pair per member i, like x_link
+    assert len(b.x_pin_eq) == 2
+    assert len(b.x_pin_up) == 2 and len(b.x_pin_lo) == 2
 
 
 def test_soft_pin_slacks_are_nonnegative_and_reach_the_objective():
@@ -609,20 +599,23 @@ def test_soft_pin_mu_retunes_without_reapply():
 
 
 @needs_ipopt
-def test_hard_pin_lands_the_endpoint_exactly_on_the_setpoint():
+def test_soft_pin_lands_the_endpoint_on_the_setpoint():
     m = hicks(5)
     pyo.TransformationFactory("dae.collocation").apply_to(
         m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
     )
-    pyo.TransformationFactory(IH).apply_to(m, terminal="hard")
+    pyo.TransformationFactory(IH).apply_to(m)  # default terminal='soft'
     pyo.TransformationFactory("cvp.parameterize").apply_to(m)
     drto.build_objective(m)
     r = pyo.SolverFactory("ipopt").solve(m)
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
     b = m.drto_infinite_horizon
-    # the hard pin holds the extrapolated endpoint on the setpoint exactly
+    # the L1 penalty is exact: at the default mu the slacks vanish and the
+    # extrapolated endpoint lands on the setpoint (soft reproduces the pin)
     assert pyo.value(b.zc[b.tau.last()]) == pytest.approx(0.6416, abs=1e-6)
     assert pyo.value(b.zt[b.tau.last()]) == pytest.approx(0.5387, abs=1e-6)
+    assert pyo.value(b.zc_pin_up) == pytest.approx(0.0, abs=1e-6)
+    assert pyo.value(b.zc_pin_lo) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_pin_requires_steady_state_targets():
@@ -643,8 +636,10 @@ def test_pin_requires_steady_state_targets():
     assert m.component("drto_infinite_horizon") is None
 
 
-def test_bad_terminal_value_errors_before_the_model_is_touched():
+@pytest.mark.parametrize("bad", ["always", "hard"])
+def test_bad_terminal_value_errors_before_the_model_is_touched(bad):
+    # 'hard' was removed; only 'soft' and 'none' remain, so it now errors too
     m = ready_model()
     with pytest.raises(ValueError, match="terminal"):
-        pyo.TransformationFactory(IH).apply_to(m, terminal="always")
+        pyo.TransformationFactory(IH).apply_to(m, terminal=bad)
     assert m.component("drto_infinite_horizon") is None

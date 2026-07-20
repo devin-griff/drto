@@ -21,8 +21,7 @@ eq 36). The endpoint ``z(tau=1)`` is the Legendre extrapolation of the last
 element (Pyomo's continuity equation), the paper's evaluated endpoint z_e.
 ``terminal='soft'`` (the default) adds, per state, the relaxed endpoint
 equality ``z(tau=1) + eps_up - eps_lo == z_s`` with an L1 penalty
-``mu*(eps_up + eps_lo)`` in the objective; ``terminal='hard'`` imposes the
-plain equality ``z(tau=1) == z_s`` (eq 21c); ``terminal='none'`` imposes no
+``mu*(eps_up + eps_lo)`` in the objective; ``terminal='none'`` imposes no
 endpoint condition, leaving the singular tail cost as the only terminal
 enforcement (the endpoint settles as close to the setpoint as the horizon's
 freedoms allow). A pin requires a declared ``drto.steady_state`` target for
@@ -137,8 +136,8 @@ class InfiniteHorizonTransformation(Transformation):
     ``'collocation'``, with ``'piecewise_constant'`` the conservative
     alternative). ``terminal`` pins the segment endpoint to the steady state:
     ``'soft'`` (the default, eq 36, L1-penalized with weight ``mu``, default
-    1000), ``'hard'`` (eq 21c, a plain equality), or ``'none'`` (no pin). A
-    pin requires a ``drto.steady_state`` target for every state.
+    1000) or ``'none'`` (no pin). A pin requires a ``drto.steady_state``
+    target for every state.
     """
 
     CONFIG = ConfigDict("drto.infinite_horizon")
@@ -188,13 +187,13 @@ class InfiniteHorizonTransformation(Transformation):
         "terminal",
         ConfigValue(
             default="soft",
-            domain=In(("none", "hard", "soft")),
+            domain=In(("none", "soft")),
             description="Endpoint pin on the extrapolated segment endpoint "
             "z(tau=1). 'soft' (the default): eq 36, z(tau=1) + eps_up - eps_lo "
             "== z_s with an L1 penalty mu*(eps_up + eps_lo) in the objective. "
-            "'hard': eq 21c, z(tau=1) == z_s. 'none': no pin, the singular "
-            "tail cost is the only terminal enforcement. A pin requires a "
-            "drto.steady_state target for every state.",
+            "'none': no pin, the singular tail cost is the only terminal "
+            "enforcement. A pin requires a drto.steady_state target for every "
+            "state.",
         ),
     )
     CONFIG.declare(
@@ -205,8 +204,8 @@ class InfiniteHorizonTransformation(Transformation):
             description="L1 penalty weight for the soft endpoint pin "
             "(terminal='soft'); ignored otherwise. A mutable Param on the "
             "segment, so it retunes with set_value and no re-apply. The paper "
-            "requires mu above the endpoint multiplier norm for the soft "
-            "solution to match the hard one.",
+            "requires mu above the endpoint multiplier norm for the penalty to "
+            "be exact, driving the endpoint onto the setpoint.",
         ),
     )
 
@@ -646,65 +645,49 @@ class InfiniteHorizonTransformation(Transformation):
         # references only states (cvp never replaces those), so it is order-free
         # relative to the control parameterization above ---
         if config.terminal != "none":
+            # 'soft': the L1-relaxed endpoint of eq 36, split-nonneg slacks
             tau_end = b.tau.last()
 
             def _tgt(z, o):
                 p = ss_target[id(z)]
                 return p[tuple(o)] if o else p
 
-            if config.terminal == "hard":
-                for z in states:
-                    _, others = _layout(z)
+            b.mu = Param(initialize=config.mu, mutable=True)
+            pin_terms = []
+            for z in states:
+                _, others = _layout(z)
+                up = (
+                    Var(*others, domain=NonNegativeReals)
+                    if others
+                    else Var(domain=NonNegativeReals)
+                )
+                lo = (
+                    Var(*others, domain=NonNegativeReals)
+                    if others
+                    else Var(domain=NonNegativeReals)
+                )
+                b.add_component(z.local_name + "_pin_up", up)
+                b.add_component(z.local_name + "_pin_lo", lo)
 
-                    def pin_rule(blk, *o, _z=z):
-                        o = tuple(v for v in o if v is not None)
-                        return _seg_at(_z, o, tau_end) == _tgt(_z, o)
+                def soft_rule(blk, *o, _z=z, _up=up, _lo=lo):
+                    o = tuple(v for v in o if v is not None)
+                    eu = _up[tuple(o)] if o else _up
+                    el = _lo[tuple(o)] if o else _lo
+                    return _seg_at(_z, o, tau_end) + eu - el == _tgt(_z, o)
 
-                    b.add_component(
-                        z.local_name + "_pin",
-                        (
-                            Constraint(*others, rule=pin_rule)
-                            if others
-                            else Constraint(rule=pin_rule)
-                        ),
-                    )
-            else:  # 'soft': the L1-relaxed endpoint of eq 36, split-nonneg slacks
-                b.mu = Param(initialize=config.mu, mutable=True)
-                pin_terms = []
-                for z in states:
-                    _, others = _layout(z)
-                    up = (
-                        Var(*others, domain=NonNegativeReals)
+                b.add_component(
+                    z.local_name + "_pin_eq",
+                    (
+                        Constraint(*others, rule=soft_rule)
                         if others
-                        else Var(domain=NonNegativeReals)
-                    )
-                    lo = (
-                        Var(*others, domain=NonNegativeReals)
-                        if others
-                        else Var(domain=NonNegativeReals)
-                    )
-                    b.add_component(z.local_name + "_pin_up", up)
-                    b.add_component(z.local_name + "_pin_lo", lo)
-
-                    def soft_rule(blk, *o, _z=z, _up=up, _lo=lo):
-                        o = tuple(v for v in o if v is not None)
-                        eu = _up[tuple(o)] if o else _up
-                        el = _lo[tuple(o)] if o else _lo
-                        return _seg_at(_z, o, tau_end) + eu - el == _tgt(_z, o)
-
-                    b.add_component(
-                        z.local_name + "_pin_eq",
-                        (
-                            Constraint(*others, rule=soft_rule)
-                            if others
-                            else Constraint(rule=soft_rule)
-                        ),
-                    )
-                    for o in _combos(z):
-                        pin_terms.append((up[tuple(o)] if o else up, b.mu))
-                        pin_terms.append((lo[tuple(o)] if o else lo, b.mu))
-                # a separate cost_group keeps liveness independent of the tail
-                reg.record_declaration("cost_group", b, terms=tuple(pin_terms))
+                        else Constraint(rule=soft_rule)
+                    ),
+                )
+                for o in _combos(z):
+                    pin_terms.append((up[tuple(o)] if o else up, b.mu))
+                    pin_terms.append((lo[tuple(o)] if o else lo, b.mu))
+            # a separate cost_group keeps liveness independent of the tail
+            reg.record_declaration("cost_group", b, terms=tuple(pin_terms))
 
         # the tail integral IS the cost-to-go, so a declared terminal cost
         # would double-count: deactivate it (build_objective's liveness rule
@@ -740,8 +723,7 @@ class InfiniteHorizonTransformation(Transformation):
                 {
                     "terminal": (
                         f"{config.terminal} pin z(tau=1)=z_s on {len(states)} "
-                        f"state{'' if len(states) == 1 else 's'}"
-                        + (f", mu={config.mu}" if config.terminal == "soft" else "")
+                        f"state{'' if len(states) == 1 else 's'}, mu={config.mu}"
                     )
                 }
                 if config.terminal != "none"

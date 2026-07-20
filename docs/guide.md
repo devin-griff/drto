@@ -83,11 +83,10 @@ eq. 36). The endpoint `z(tau=1)` is the discretization's Legendre
 extrapolation of the last element, the paper's evaluated endpoint. The
 `terminal` option selects `'soft'` (the default: `z(tau=1) + eps_up - eps_lo
 == z_s` with an L1 penalty `mu*(eps_up + eps_lo)`, `mu` a mutable Param
-defaulting to 1000, in the objective), `'hard'` (the plain equality `z(tau=1)
-== z_s`, eq. 21c), or `'none'` (no pin, the singular tail weights driving the
-trajectory to settle on their own). A pin reads the declared
-`drto.steady_state` targets, so with `terminal='soft'` or `'hard'` every
-state needs one; `terminal='none'` needs none. The pin is on the state
+defaulting to 1000, in the objective) or `'none'` (no pin, the singular tail
+weights driving the trajectory to settle on their own). A pin reads the
+declared `drto.steady_state` targets, so `terminal='soft'` needs one per
+state; `terminal='none'` needs none. The pin is on the state
 value, not a derivative: Gauss-Legendre puts no node at `tau=1`, so the
 derivative there is undefined while the extrapolated state value is well
 defined. Because the soft pin adds its penalty to the objective, run

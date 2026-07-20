@@ -251,6 +251,15 @@ unstable plants, so the default is now the L1-relaxed soft pin
 (the prior behavior) available. A pin reads the declared `steady_state`
 targets, so the transform now requires one per state unless `terminal='none'`.
 
+USER DECISION 2026-07-20 (amends 2026-07-18): the `terminal='hard'` option is
+dropped before release; `drto.infinite_horizon` offers only `terminal='soft'`
+(the default) and `terminal='none'`. A plain-equality pin adds one slack-free
+row per state member, which over-determines the tail NLP when state members
+outnumber the horizon's control freedoms (the two-column example, 246 state
+members against 160 moves, exits with too few degrees of freedom). The eq. 36
+L1 penalty is exact, so `terminal='soft'` at a large enough `mu` reproduces the
+plain-equality solution without ever removing a degree of freedom.
+
 Naming: fully-written-out, not abbreviated
 (`tracking_terminal_cost` not `term_cost`,
 `initial_condition` not `init_con`). These are setup-time
