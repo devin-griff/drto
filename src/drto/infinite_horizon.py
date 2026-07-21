@@ -16,11 +16,16 @@ registered as a ``cost_group`` that ``drto.build_objective`` (feature 003)
 picks up wherever it runs. There is no coupling option: applying this
 transform before the mode transform is the whole composition.
 
-No terminal condition is imposed. The quadrature weights are singular at
-the endpoint, so a tail that fails to settle at the zero-cost equilibrium
-is punished without bound: the cost is its own terminal enforcement, and
-the endpoint state values (the Legendre extrapolation) settle as close to
-the setpoint as the horizon's freedoms allow.
+The segment endpoint is pinned to the steady state by default (the paper's
+eq 36). The endpoint ``z(tau=1)`` is the Legendre extrapolation of the last
+element (Pyomo's continuity equation), the paper's evaluated endpoint z_e.
+``terminal='soft'`` (the default) adds, per state, the relaxed endpoint
+equality ``z(tau=1) + eps_up - eps_lo == z_s`` with an L1 penalty
+``mu*(eps_up + eps_lo)`` in the objective; ``terminal='none'`` imposes no
+endpoint condition, leaving the singular tail cost as the only terminal
+enforcement (the endpoint settles as close to the setpoint as the horizon's
+freedoms allow). A pin requires a declared ``drto.steady_state`` target for
+every state.
 
 States may carry index sets besides time; copies, linking, and replication
 run per member. Algebraic variables and equations ride along without being
@@ -38,12 +43,13 @@ import math
 from itertools import product
 
 from pyomo.common.collections import ComponentSet
-from pyomo.common.config import ConfigDict, ConfigValue, PositiveInt
+from pyomo.common.config import ConfigDict, ConfigValue, In, PositiveInt
 from pyomo.common.dependencies import numpy, numpy_available
 from pyomo.core import (
     Block,
     Constraint,
     Expression,
+    NonNegativeReals,
     Param,
     Transformation,
     TransformationFactory,
@@ -128,7 +134,10 @@ class InfiniteHorizonTransformation(Transformation):
     ``tanh(gamma*dt) = tau_11`` (mutable Param, derived by default), and
     ``profile`` sets the segment controls' pyomo-cvp profile (default
     ``'collocation'``, with ``'piecewise_constant'`` the conservative
-    alternative).
+    alternative). ``terminal`` pins the segment endpoint to the steady state:
+    ``'soft'`` (the default, eq 36, L1-penalized with weight ``mu``, default
+    1000) or ``'none'`` (no pin). A pin requires a ``drto.steady_state``
+    target for every state.
     """
 
     CONFIG = ConfigDict("drto.infinite_horizon")
@@ -172,6 +181,31 @@ class InfiniteHorizonTransformation(Transformation):
             default="collocation",
             description="pyomo-cvp profile for the segment controls: "
             "'collocation' (default) or 'piecewise_constant'.",
+        ),
+    )
+    CONFIG.declare(
+        "terminal",
+        ConfigValue(
+            default="soft",
+            domain=In(("none", "soft")),
+            description="Endpoint pin on the extrapolated segment endpoint "
+            "z(tau=1). 'soft' (the default): eq 36, z(tau=1) + eps_up - eps_lo "
+            "== z_s with an L1 penalty mu*(eps_up + eps_lo) in the objective. "
+            "'none': no pin, the singular tail cost is the only terminal "
+            "enforcement. A pin requires a drto.steady_state target for every "
+            "state.",
+        ),
+    )
+    CONFIG.declare(
+        "mu",
+        ConfigValue(
+            default=1000.0,
+            domain=float,
+            description="L1 penalty weight for the soft endpoint pin "
+            "(terminal='soft'); ignored otherwise. A mutable Param on the "
+            "segment, so it retunes with set_value and no re-apply. The paper "
+            "requires mu above the endpoint multiplier norm for the penalty to "
+            "be exact, driving the endpoint onto the setpoint.",
         ),
     )
 
@@ -259,6 +293,25 @@ class InfiniteHorizonTransformation(Transformation):
                 raise ValueError(
                     f"drto: infinite_horizon requires states indexed by the "
                     f"declared time set; '{comp.name}' is not."
+                )
+
+        # the endpoint pin needs a steady-state target per state; validate now,
+        # before the segment block is built, so a missing target does not leave
+        # a half-built block on the model
+        ss_target = None
+        if config.terminal != "none":
+            ss_target = {
+                id(r["of"]): r["component"] for r in reg.declarations("steady_state")
+            }
+            missing = [z.name for z in states if id(z) not in ss_target]
+            if missing:
+                raise ValueError(
+                    f"drto: infinite_horizon terminal={config.terminal!r} pins "
+                    f"the segment endpoint z(tau=1) to the steady state, so "
+                    f"every declared state needs a drto.steady_state target; "
+                    f"missing: {', '.join(missing)}. Declare "
+                    f"drto.steady_state(state, target) for each, or pass "
+                    f"terminal='none'."
                 )
 
         states_set = ComponentSet(states)
@@ -585,6 +638,57 @@ class InfiniteHorizonTransformation(Transformation):
                 terms.append((seg_cost[p], weight))
         reg.record_declaration("cost_group", b, terms=tuple(terms))
 
+        # --- the terminal endpoint pin (Dinh et al. 2025): constrain the
+        # extrapolated endpoint z(tau=1) to the steady state. The endpoint is
+        # the Legendre continuity extrapolation, the paper's evaluated z_e; the
+        # derivative there is undefined, so the pin is on the state value. It
+        # references only states (cvp never replaces those), so it is order-free
+        # relative to the control parameterization above ---
+        if config.terminal != "none":
+            # 'soft': the L1-relaxed endpoint of eq 36, split-nonneg slacks
+            tau_end = b.tau.last()
+
+            def _tgt(z, o):
+                p = ss_target[id(z)]
+                return p[tuple(o)] if o else p
+
+            b.mu = Param(initialize=config.mu, mutable=True)
+            pin_terms = []
+            for z in states:
+                _, others = _layout(z)
+                up = (
+                    Var(*others, domain=NonNegativeReals)
+                    if others
+                    else Var(domain=NonNegativeReals)
+                )
+                lo = (
+                    Var(*others, domain=NonNegativeReals)
+                    if others
+                    else Var(domain=NonNegativeReals)
+                )
+                b.add_component(z.local_name + "_pin_up", up)
+                b.add_component(z.local_name + "_pin_lo", lo)
+
+                def soft_rule(blk, *o, _z=z, _up=up, _lo=lo):
+                    o = tuple(v for v in o if v is not None)
+                    eu = _up[tuple(o)] if o else _up
+                    el = _lo[tuple(o)] if o else _lo
+                    return _seg_at(_z, o, tau_end) + eu - el == _tgt(_z, o)
+
+                b.add_component(
+                    z.local_name + "_pin_eq",
+                    (
+                        Constraint(*others, rule=soft_rule)
+                        if others
+                        else Constraint(rule=soft_rule)
+                    ),
+                )
+                for o in _combos(z):
+                    pin_terms.append((up[tuple(o)] if o else up, b.mu))
+                    pin_terms.append((lo[tuple(o)] if o else lo, b.mu))
+            # a separate cost_group keeps liveness independent of the tail
+            reg.record_declaration("cost_group", b, terms=tuple(pin_terms))
+
         # the tail integral IS the cost-to-go, so a declared terminal cost
         # would double-count: deactivate it (build_objective's liveness rule
         # then drops its term) and record the outcome
@@ -613,6 +717,16 @@ class InfiniteHorizonTransformation(Transformation):
             **(
                 {"terminal_cost": f"{terminal} deactivated (the tail owns it)"}
                 if terminal
+                else {}
+            ),
+            **(
+                {
+                    "terminal": (
+                        f"{config.terminal} pin z(tau=1)=z_s on {len(states)} "
+                        f"state{'' if len(states) == 1 else 's'}, mu={config.mu}"
+                    )
+                }
+                if config.terminal != "none"
                 else {}
             ),
         )

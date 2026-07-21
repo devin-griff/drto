@@ -240,6 +240,26 @@ practical payoff of representing each cost as a Var defined by a
 constraint rather than a bare expression: the pair is one handle drto can
 find and drop.
 
+USER DECISION 2026-07-18 (amends 2026-07-17): `drto.infinite_horizon` pins
+the terminal segment endpoint to the steady state by default. The earlier
+decision imposed no terminal condition, treating the singular tail cost as
+its own enforcement and the paper's endpoint constraint as proof-only theory.
+The paper's operative problem (Dinh et al. 2025, eq. 36) does impose the
+endpoint constraint, and it is what pins the unstable modes on open-loop
+unstable plants, so the default is now the L1-relaxed soft pin
+(`terminal='soft'`), with `terminal='hard'` (eq. 21c) and `terminal='none'`
+(the prior behavior) available. A pin reads the declared `steady_state`
+targets, so the transform now requires one per state unless `terminal='none'`.
+
+USER DECISION 2026-07-20 (amends 2026-07-18): the `terminal='hard'` option is
+dropped before release; `drto.infinite_horizon` offers only `terminal='soft'`
+(the default) and `terminal='none'`. A plain-equality pin adds one slack-free
+row per state member, which over-determines the tail NLP when state members
+outnumber the horizon's control freedoms (the two-column example, 246 state
+members against 160 moves, exits with too few degrees of freedom). The eq. 36
+L1 penalty is exact, so `terminal='soft'` at a large enough `mu` reproduces the
+plain-equality solution without ever removing a degree of freedom.
+
 Naming: fully-written-out, not abbreviated
 (`tracking_terminal_cost` not `term_cost`,
 `initial_condition` not `init_con`). These are setup-time

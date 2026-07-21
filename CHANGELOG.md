@@ -48,6 +48,20 @@ All notable changes to this project are documented here. The format is based on
   surface; and with a horizon declared, a control not indexed by the time
   set errors at the declaration instead of later inside pyomo-cvp.
 
+- `drto.infinite_horizon` now pins the terminal segment endpoint to the
+  declared steady state, the paper's endpoint constraint (Dinh et al. 2025).
+  The `terminal` option selects `'soft'` (the default: the eq. 36 endpoint
+  relaxed by an L1 penalty of weight `mu`, a new option, default 1000) or
+  `'none'` (no pin). A pin requires a `drto.steady_state` target for every
+  state.
+
+### Changed
+
+- `drto.infinite_horizon` defaults to `terminal='soft'`, so it now imposes
+  the endpoint steady-state constraint by default. Pass `terminal='none'`
+  for the previous behavior (no terminal condition; the singular tail cost
+  is the only terminal enforcement).
+
 ## [0.2.1] - 2026-07-18
 
 ### Added
@@ -63,7 +77,6 @@ All notable changes to this project are documented here. The format is based on
   original model; `initialize.py` gains the binary column helper.
 
 ### Changed
-
 
 - `drto.infinite_horizon` replicates algebraic equations that reference a
   declared state's derivative (the index-reduced energy-balance case): the

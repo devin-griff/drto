@@ -71,14 +71,27 @@ Appends the terminal segment of Dinh et al. (2025): the tail of the horizon
 to infinity, compressed onto [0, 1] by `tau = tanh(gamma*(t - tN))`. The
 segment carries copies of the declared states and controls (states may carry index sets besides time; undeclared algebraic variables and equations ride along automatically), the dilated
 dynamics at interior Gauss-Legendre points, and the tracking stage cost
-replicated as the tail integrand. No terminal condition is imposed: the
-tail weights are singular at the endpoint, so the cost itself drives the
-trajectory to settle. The tail enters the objective as explicit Gauss-weighted terms,
+replicated as the tail integrand. The tail enters the objective as explicit Gauss-weighted terms,
 the paper's `(beta/dt)*phi_f`, registered as a cost group that
 `drto.build_objective` picks up wherever it runs: applying this transform
 before the mode transform is the whole composition. `beta` and `gamma` are
 mutable Params, symbolic in the dynamics and the weights, so both retune
 between solves; `gamma` defaults to the mesh rule and `beta` must exceed 1.
+
+The segment endpoint is pinned to the steady state by default (the paper's
+eq. 36). The endpoint `z(tau=1)` is the discretization's Legendre
+extrapolation of the last element, the paper's evaluated endpoint. The
+`terminal` option selects `'soft'` (the default: `z(tau=1) + eps_up - eps_lo
+== z_s` with an L1 penalty `mu*(eps_up + eps_lo)`, `mu` a mutable Param
+defaulting to 1000, in the objective) or `'none'` (no pin, the singular tail
+weights driving the trajectory to settle on their own). A pin reads the
+declared `drto.steady_state` targets, so `terminal='soft'` needs one per
+state; `terminal='none'` needs none. The pin is on the state
+value, not a derivative: Gauss-Legendre puts no node at `tau=1`, so the
+derivative there is undefined while the extrapolated state value is well
+defined. Because the soft pin adds its penalty to the objective, run
+`drto.build_objective` after `drto.infinite_horizon` (drto enforces that
+order).
 
 ## Applying the profiles: `drto.parameterize`
 

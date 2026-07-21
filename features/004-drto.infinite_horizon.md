@@ -79,14 +79,23 @@ move.
   extrapolation.
 - Linking constraints stitch the segment's initial state to the declared
   states at the end of the horizon.
-- No terminal condition is imposed (USER DECISION 2026-07-17). The
-  quadrature weights are singular at the endpoint, so a tail that fails to
-  settle at the zero-cost equilibrium is punished without bound: the cost
-  is its own terminal enforcement, and the endpoint values (the
-  discretization's extrapolation) settle as close to the setpoint as the
-  horizon's freedoms allow. The paper's endpoint constraint (eq. 21c, the
-  evaluated endpoint pinned to the setpoint, softened as eq. 36) is theory
-  the stability proof uses, not a constraint the NLP needs.
+- The terminal segment endpoint is pinned to the steady state by default
+  (USER DECISION 2026-07-18, amending 2026-07-17). `terminal='soft'` (the
+  default) adds the paper's eq. 36 relaxed endpoint constraint, per state
+  `z(tau=1) + eps_up - eps_lo == z_s` with an L1 penalty `mu*(eps_up +
+  eps_lo)` registered as a cost group; `terminal='none'` restores the prior
+  behavior, no pin, the singular tail cost its own terminal enforcement and
+  the endpoint (the discretization's Legendre extrapolation, the paper's
+  evaluated endpoint z_e) settling as close to the setpoint as the horizon's
+  freedoms allow. A pin reads the declared `drto.steady_state` targets and
+  requires one per state; with `terminal='none'` the transform needs none, as
+  before. The original decision judged the endpoint constraint theory-only;
+  the paper's operative problem (eq. 36) does impose it, and it is what pins
+  the unstable modes on open-loop-unstable plants, so it is now the default.
+  A plain-equality `'hard'` option was dropped before release (USER DECISION
+  2026-07-20): one slack-free equality per state over-determines the tail NLP
+  when state members outnumber the horizon's control freedoms, and the exact
+  L1 penalty means `'soft'` at a large enough `mu` reproduces it anyway.
 - The tail cost uses no quadrature state and adds no variables or
   constraints: the declared tracking stage cost is replicated at the segment
   collocation points as named Expressions (a replicated cost Var would sit on
