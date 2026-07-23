@@ -47,7 +47,14 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
   live cost terms over the horizon. When both a tracking and an economic stage
   cost are declared, both are summed into the objective, with a weight applied
   to the tracking stage cost. The transform accepts that weight as an argument,
-  used only when both are present.
+  used only when both are present, and it defaults to 1. The economic stage
+  cost is in currency units and is never scaled, so there is no economic-side
+  weight.
+- Because the transform assembles the objective as its final step, any
+  transform that registers additional cost terms must be applied before it. In
+  particular `drto.infinite_horizon` (feature 004), which appends the tail
+  cost, must run before `drto.dynamic_optimization`, otherwise the tail never
+  enters the objective.
 - `tracking_terminal_cost`, `terminal_constraint`, and the
   steady-state targets (`steady_state`, `steady_state_control`)
   are optional. The transform uses them if declared.
