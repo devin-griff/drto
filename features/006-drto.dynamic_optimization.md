@@ -36,7 +36,7 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.dynamic_optimization')` requires `horizon`,
-  `state`, `dynamics`, `control`, and at
+  `state`, `dynamics`, `control`, `initial_condition`, and at
   least one of `tracking_stage_cost` or `economic_stage_cost`,
   and errors clearly if any is missing.
 - It targets continuous dynamics. Discrete-time (difference-equation)
