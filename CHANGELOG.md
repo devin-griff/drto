@@ -104,6 +104,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.steady_state_simulation` (feature 008) now sheds the terminal
+  constraint and neutralizes the estimation declarations, through the routines
+  the dynamic modes share, so a steady-state simulation of a model that also
+  carries the estimation surface yields a clean, square equilibrium problem.
+  It also keeps the `steady_state` and `steady_state_control` records instead
+  of purging them: the target Params stay on the model and may appear in a
+  deviation-form model's equations, so their records stay with them and the
+  registry mirrors the model. This reverses the pairing-record drop from
+  0.2.0 (USER DECISION 2026-07-24, amends 2026-07-18).
+
 - `drto.infinite_horizon` defaults to `terminal='soft'`, so it now imposes
   the endpoint steady-state constraint by default. Pass `terminal='none'`
   for the previous behavior (no terminal condition; the singular tail cost

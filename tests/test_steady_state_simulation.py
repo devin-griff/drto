@@ -6,6 +6,7 @@ import pytest
 
 import drto
 from test_declarations import declared_model
+from test_dynamic_optimization import estimation_model
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
@@ -74,15 +75,47 @@ def test_stage_cost_is_dropped():
     assert not drto.info(m).has_declaration("tracking_stage_cost")
 
 
-def test_steady_state_pairings_are_dropped():
-    # nothing in a simulation reads the pairings; the Params stay
+def test_steady_state_pairings_are_kept():
+    # the target Params stay on the model and may appear in a deviation-form
+    # model's equations, so their records stay with them: the registry mirrors
+    # the model (USER DECISION 2026-07-24, amends 2026-07-18)
     m = declared_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={m.u: 0.3}
     )
-    assert not drto.info(m).has_declaration("steady_state")
-    assert not drto.info(m).has_declaration("steady_state_control")
-    assert m.component("z_ss") is not None  # the user's Param remains
+    assert drto.info(m).has_declaration("steady_state")
+    assert drto.info(m).has_declaration("steady_state_control")
+    assert m.component("z_ss") is not None
+
+
+def test_terminal_constraint_leaves_the_model():
+    m = declared_model()
+
+    @m.Constraint()
+    def term_set(m):
+        return m.z[m.t.last()] <= 1
+
+    drto.terminal_constraint(m.term_set)
+    pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
+        m, controls={m.u: 0.3}
+    )
+    assert m.component("term_set") is None
+    assert not drto.info(m).has_declaration("terminal_constraint")
+
+
+def test_estimation_declarations_are_neutralized():
+    # a steady-state simulation of a model carrying the estimation surface
+    # sheds it, so the equilibrium solve stays square
+    m = estimation_model()
+    pyo.TransformationFactory("drto.steady_state_simulation").apply_to(m)
+    reg = drto.info(m)
+    for kind in ("estimation_stage_cost", "arrival_cost", "measurement", "disturbance"):
+        assert not reg.has_declaration(kind), kind
+    assert m.component("w") is None
+    assert m.component("y_meas") is None
+    # the estimated parameter stays a live coefficient, so it keeps its record
+    assert reg.has_declaration("estimated_parameter")
+    assert m.k.fixed
 
 
 def test_unknown_control_errors():
