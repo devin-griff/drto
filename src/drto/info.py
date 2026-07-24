@@ -25,8 +25,9 @@ from pyomo.core.expr.template_expr import templatize_constraint
 _DRTO_SCOPE = "drto"
 
 #: Display order and labels for the declaration kinds of the control-side
-#: surface (feature 002). Unknown kinds render after these, labeled by their
-#: raw kind string, so the registry does not need updating for new kinds.
+#: surface (feature 002) and the estimation-side surface (feature 018).
+#: Unknown kinds render after these, labeled by their raw kind string, so the
+#: registry does not need updating for new kinds.
 _KIND_LABELS = (
     ("horizon", "horizon"),
     ("state", "states"),
@@ -39,6 +40,12 @@ _KIND_LABELS = (
     ("terminal_constraint", "terminal constraint"),
     ("steady_state", "steady-state targets"),
     ("steady_state_control", "steady-state control targets"),
+    ("estimated_parameter", "estimated parameters"),
+    ("disturbance", "disturbances"),
+    ("measurement", "measurements"),
+    ("estimation_stage_cost", "estimation stage cost"),
+    ("estimation_terminal_cost", "estimation terminal cost"),
+    ("arrival_cost", "arrival cost"),
 )
 
 #: Fallback free-index names, for rules whose own argument names are

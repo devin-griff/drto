@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The estimation declarations (feature 018): `estimated_parameter` and
+  `disturbance` (varargs over Vars), `measurement` (varargs over mutable
+  Params), and the estimation cost constraints `estimation_stage_cost`,
+  `estimation_terminal_cost`, and `arrival_cost`. They ride the feature 002
+  surface: tag, wrap, or (for the cost constraints) decorate, with the
+  registry recording each. `estimated_parameter` is constant over the window
+  and needs no horizon (it also serves steady-state data reconciliation);
+  `disturbance` and `measurement` are indexed by the declared time set; the
+  cost constraints reuse the stage-cost and scalar-cost machinery, so
+  `tracking_terminal_cost` now routes through the shared scalar-cost helper.
+  Declaration surface only: the estimation mode transforms are a follow-on.
+
 - `drto.initialize_steady_state` (feature 010): initialize a model from
   its steady state. A steady-state model (authored, or a feature 005
   reduction) initializes in place through pyomo-pounce's fill, project,
