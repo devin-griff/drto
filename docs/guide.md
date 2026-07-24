@@ -143,6 +143,31 @@ parameter is fixed at the value it holds and keeps its record, since it stays
 a live coefficient in the equations the controller solves. `drto.dynamic_simulation`
 runs the same routine, so the two modes cannot drift apart.
 
+## Economic RTO: `drto.steady_state_optimization`
+
+The steady-state half of the optimization column. It reduces the model to a
+single point with the declared controls free and optimizes the economic
+objective over them, giving the optimal steady operating point. It requires
+`state`, `control`, and an economic stage cost; `horizon` and `dynamics` are
+optional, so it runs on a dynamic model (composing the reduction) or on one
+written directly as steady-state.
+
+Unlike the simulation modes it keeps its cost equations, since it needs them.
+A declared tracking stage cost is kept too rather than dropped: it regularizes
+the economic optimum toward a known operating point, the RTO-layer equivalent
+of move suppression. With both cost kinds declared, `tracking_weight` scales
+the tracking side, defaulting to 1, and the economic cost is never scaled.
+
+The estimation declarations are neutralized before the reduction. That matters
+more here than in a simulation: a free disturbance would become a decision
+variable the optimizer exploits to lower the economic cost, so the operating
+point would be optimized against fictitious noise.
+
+Writing the solution back into the declared steady-state targets is an
+algorithmic step outside the transform, which shapes the model and does
+nothing after a solve. The pairings are left intact, since they are the record
+of which target Param goes with which state.
+
 ## Dynamic simulation: `drto.dynamic_simulation`
 
 The dual of the mode above: it frees nothing and integrates the declared model

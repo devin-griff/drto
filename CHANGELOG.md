@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.steady_state_optimization` (feature 009): economic RTO. Reduces the
+  model to a single point with the declared controls free and optimizes the
+  economic objective over them, giving the optimal steady operating point. It
+  requires `state`, `control`, and an economic stage cost; `horizon` and
+  `dynamics` are optional, so it runs on a dynamic model (composing the
+  feature 005 reduction) or on one authored directly as steady-state. Unlike
+  the simulation modes it keeps its cost equations, and a declared tracking
+  stage cost is kept rather than dropped, since it regularizes the economic
+  optimum toward a known operating point; with both cost kinds declared,
+  `tracking_weight` scales the tracking side (default 1, the economic cost
+  never scaled). The estimation declarations are neutralized before the
+  reduction, which matters more here than in a simulation: a free disturbance
+  would become a decision variable the optimizer exploits, optimizing the
+  operating point against fictitious noise. The steady-state pairings are left
+  intact, since they are the record that makes a later write-back possible;
+  that write-back is an algorithmic step outside the transform.
+
 - `drto.dynamic_simulation` (feature 007): the dynamic simulation mode. It
   frees nothing, so the solver is handed the square forward integration of the
   declared model over the horizon. The declared control profiles are applied
@@ -105,6 +122,14 @@ All notable changes to this project are documented here. The format is based on
   state.
 
 ### Changed
+
+- The stage-cost declarations (`tracking_stage_cost`, `economic_stage_cost`)
+  accept a scalar Constraint on a model with no declared horizon. A
+  steady-state model has no sample grid to index over, so its cost is a single
+  point, the same accommodation `control` already makes and the shape the
+  steady-state reduction produces. An indexed cost without a horizon is
+  rejected. Without this a model authored directly as steady-state could not
+  declare the cost `drto.steady_state_optimization` requires.
 
 - `drto.infinite_horizon` defaults to `terminal='soft'`, so it now imposes
   the endpoint steady-state constraint by default. Pass `terminal='none'`

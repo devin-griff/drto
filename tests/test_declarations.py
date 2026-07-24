@@ -323,6 +323,36 @@ def test_stage_cost_rejects_a_time_set_index_with_skip():
         drto.tracking_stage_cost(m.skip_stage)
 
 
+def test_stage_cost_on_a_steady_model_is_scalar():
+    # no horizon, so no grid to index over: the cost is a single point
+    m = pyo.ConcreteModel()
+    m.z = pyo.Var(initialize=0.5)
+    m.cost = pyo.Var()
+    drto.state(m.z)
+
+    @m.Constraint()
+    def stage(m):
+        return m.cost == m.z**2
+
+    drto.economic_stage_cost(m.stage)
+    assert drto.info(m).components("economic_stage_cost") == (m.stage,)
+
+
+def test_indexed_stage_cost_without_a_horizon_is_rejected():
+    m = pyo.ConcreteModel()
+    m.s = pyo.Set(initialize=[1, 2])
+    m.z = pyo.Var(m.s, initialize=0.5)
+    m.cost = pyo.Var(m.s)
+    drto.state(m.z)
+
+    @m.Constraint(m.s)
+    def stage(m, i):
+        return m.cost[i] == m.z[i] ** 2
+
+    with pytest.raises(ValueError, match="no horizon is"):
+        drto.economic_stage_cost(m.stage)
+
+
 def test_terminal_cost_must_be_scalar():
     m = base_model()
     with pytest.raises(ValueError, match="scalar Constraint"):

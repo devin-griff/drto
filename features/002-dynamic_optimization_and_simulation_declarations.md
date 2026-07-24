@@ -186,7 +186,11 @@ declarations rather than re-deriving them.
   final time, or a missing sample, is rejected. The family may not be indexed
   by the time set itself, even with Skip members: discretization expands such
   a family to every collocation point, dragging the cost off the sample grid,
-  so declaration rejects the index outright.
+  so declaration rejects the index outright. On a model with no declared
+  horizon (a steady-state model) there is no grid to index over, so a scalar
+  Constraint registers instead and an indexed one is rejected: the same
+  accommodation `control` makes, and the single-point shape the steady-state
+  reduction produces from a per-sample cost.
 - `tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable.
 - `initial_condition(m.con, ...)` tags one or more equality Constraints
