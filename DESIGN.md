@@ -159,8 +159,8 @@ estimation-side surface follows below):
   it assembles. The per-point form is what lets the steady-state reduction
   drop the time index to leave the single-point cost. The tracking targets
   are the declared steady-state Params (`steady_state` /
-  `steady_state_control` below), populated by the steady-state/RTO
-  solve.
+  `steady_state_control` below), which a steady-state/RTO solution can be
+  written back into.
 - `economic_stage_cost(m.economic_stage_con)`: tags the equality
   Constraint defining the economic running cost phi(z, u), same per-sample
   form as the tracking stage cost. Its single-point
@@ -194,12 +194,13 @@ estimation-side surface follows below):
   pinning a value.
 - `steady_state(m.z, m.z_ss)`: pairs a declared state with the mutable
   Param holding its steady-state target z_ss. The tracking costs drive
-  toward the targets (z - z_ss); the steady-state/RTO mode populates them
-  from its solve (or they are set directly, since they are Params), so the
-  target is model-derived rather than hand-typed (the Hicks CSTR lesson
-  above). The pairing is what makes the populate step possible: drto knows
-  which target Param each solved state value writes into. One pair
-  per call, accumulating; the call returns the target.
+  toward the targets (z - z_ss). The targets can be set directly, since they
+  are Params, or written back from a steady-state/RTO solution, so the target
+  is model-derived rather than hand-typed (the Hicks CSTR lesson above). The
+  pairing is what makes such a write-back possible: it is the only record of
+  which target Param goes with which state. Writing it back is an algorithmic
+  step, not part of any mode transform, which shape the model and do nothing
+  after a solve. One pair per call, accumulating; the call returns the target.
 - `steady_state_control(m.u, m.u_ss)`: pairs a declared control with the
   mutable Param holding its target u_ss, driven toward the same way
   (u - u_ss) and populated the same way.

@@ -201,9 +201,10 @@ declarations rather than re-deriving them.
   a state or control that already has one is rejected, a target Param
   cannot serve two owners (in either target kind), and the first argument
   must already be declared. The pairing is
-  recorded in the registry so the steady-state/RTO solve (feature 009) knows
-  which target Param each solved state or control value populates. The
-  function returns the target Param.
+  recorded in the registry as the only record of which target Param goes with
+  which state or control, which is what lets a steady-state/RTO solution be
+  written back into the targets later. That write-back is an algorithmic step,
+  not part of a mode transform. The function returns the target Param.
 - The scalar-side conventions (the cost and initial-condition constraints)
   are read from the written equality's sides, either orientation, so
   `lhs == rhs` and `rhs == lhs` are equivalent; the constraint must be

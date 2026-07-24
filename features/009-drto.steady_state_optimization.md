@@ -38,8 +38,28 @@ directly as steady-state, so the same declaration surface serves both.
   a single point by composing `drto.dynamic_to_steady_state` (feature 005). If
   the model is already steady-state, that step is skipped. The declared controls
   are free.
-- The objective is the single-point economic cost, assembled via
-  `drto.build_objective` (feature 003).
+- The objective is assembled via `drto.build_objective` (feature 003) from the
+  live single-point cost terms: the economic cost, plus a tracking stage cost
+  if one is declared. A tracking term is kept rather than dropped, since it
+  regularizes the economic optimum toward a known operating point, the
+  RTO-layer equivalent of move suppression. With both declared,
+  `tracking_weight` scales the tracking side, mirroring
+  `drto.dynamic_optimization` (feature 006): it defaults to 1, and the
+  economic cost is in currency units and is never scaled.
+- The estimation-category declarations (feature 018) are neutralized through
+  the routine shared with the other control-side modes: the estimation costs
+  and the measurement Params are deleted, a disturbance is eliminated by
+  substituting zero, and an estimated parameter is fixed at the value it
+  holds and keeps its record. This matters more here than in a simulation: a
+  free disturbance would become a decision variable the optimizer exploits to
+  lower the economic cost, optimizing against fictitious noise.
+- Unlike the simulation modes, the cost equations stay: this mode needs them.
+  The terminal constraint and terminal cost need no handling either, since
+  the reduction removes both and a steady-authored model cannot have them.
 - Solving the transformed model gives the optimal steady operating point.
+  Writing that solution back into the declared steady-state targets is an
+  algorithmic step outside this transform, which does nothing after a solve.
+  The `steady_state` pairings are left intact, since they are the record that
+  makes such a write-back possible.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
   clone).
