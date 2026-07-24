@@ -54,8 +54,7 @@ used across the modes.
 - The steady-state pairings are kept. The target Params stay on the model, the
   user's components, and they may appear in the equations of a model written
   in deviations from the steady state, so their records stay with them and the
-  registry mirrors the model (USER DECISION 2026-07-24, amends 2026-07-18,
-  which had dropped the pairing records).
+  registry mirrors the model.
 - The estimation-category declarations (feature 018) are neutralized, before
   the reduction, through the routine shared with the dynamic modes: the
   estimation costs and the measurement Params are deleted, a disturbance is

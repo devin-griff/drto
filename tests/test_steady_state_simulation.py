@@ -78,7 +78,7 @@ def test_stage_cost_is_dropped():
 def test_steady_state_pairings_are_kept():
     # the target Params stay on the model and may appear in a deviation-form
     # model's equations, so their records stay with them: the registry mirrors
-    # the model (USER DECISION 2026-07-24, amends 2026-07-18)
+    # the model
     m = declared_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={m.u: 0.3}

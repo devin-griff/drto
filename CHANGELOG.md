@@ -85,10 +85,12 @@ All notable changes to this project are documented here. The format is based on
 - `drto.steady_state_simulation` (feature 008): reduce to steady state,
   fix the declared controls (at supplied values or the values they hold,
   components resolving by name so `create_using` accepts source-model
-  keys), drop the declared stage costs and the steady-state pairings (a
-  simulation carries no cost equations and nothing reads the pairings;
-  the target Params stay), and install the simulation's zero objective:
-  the square fixed-input equilibrium solve. A dynamic model composes the feature 005
+  keys), shed the optimization-only constructs (the stage costs, the terminal
+  cost, and the terminal constraint) and neutralize the estimation
+  declarations through the routines the dynamic simulation shares, keep the
+  steady-state pairing records (the target Params stay and may appear in a
+  deviation-form model's equations), and install the simulation's zero
+  objective: the square fixed-input equilibrium solve. A dynamic model composes the feature 005
   reduction; a model authored directly as steady-state skips it. With
   that, `drto.control` on a model with no declared horizon registers
   without a profile, so a steady-state model declares through the same
@@ -103,16 +105,6 @@ All notable changes to this project are documented here. The format is based on
   state.
 
 ### Changed
-
-- `drto.steady_state_simulation` (feature 008) now sheds the terminal
-  constraint and neutralizes the estimation declarations, through the routines
-  the dynamic modes share, so a steady-state simulation of a model that also
-  carries the estimation surface yields a clean, square equilibrium problem.
-  It also keeps the `steady_state` and `steady_state_control` records instead
-  of purging them: the target Params stay on the model and may appear in a
-  deviation-form model's equations, so their records stay with them and the
-  registry mirrors the model. This reverses the pairing-record drop from
-  0.2.0 (USER DECISION 2026-07-24, amends 2026-07-18).
 
 - `drto.infinite_horizon` defaults to `terminal='soft'`, so it now imposes
   the endpoint steady-state constraint by default. Pass `terminal='none'`
