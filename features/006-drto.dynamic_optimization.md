@@ -58,9 +58,24 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
 - `tracking_terminal_cost`, `terminal_constraint`, and the
   steady-state targets (`steady_state`, `steady_state_control`)
   are optional. The transform uses them if declared.
-- Any estimation-category declarations on the model (measurements,
-  disturbances, arrival cost, estimation stage and terminal costs, estimated
-  parameters) are dropped.
+- The estimation-category declarations (feature 018) are neutralized so the
+  control problem carries only what it uses, and the registry mirrors the
+  model: a component removed from the model has its record purged, one left on
+  the model keeps its record. The estimation costs (`estimation_stage_cost`,
+  `estimation_terminal_cost`, `arrival_cost`) and the `measurement` Params are
+  deleted and their records purged, since nothing in a control problem reads
+  them and a measurement is reachable only from those costs (`h(z)` is written
+  inline in the cost). A `disturbance` is eliminated by substitution: every
+  reference to it is replaced by zero, the Var is deleted, and its record is
+  purged. An `estimated_parameter` is fixed at its current value and keeps its
+  record, since it stays a live coefficient in the equations the controller
+  solves and that value is the estimate the controller should use.
+- Eliminating a disturbance assumes it enters additively. The transform checks
+  that each constraint body is linear in the disturbance Var and errors naming
+  it otherwise, rather than silently zeroing a term that is not additive.
+  `drto.disturbance` deliberately does not constrain how the noise enters the
+  model (feature 018), so this is the transform's assumption, not the
+  declaration's.
 - The transform keeps the time horizon and does not reduce the model to steady
   state.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
