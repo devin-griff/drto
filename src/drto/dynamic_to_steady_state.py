@@ -2,17 +2,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The steady-state reduction: ``drto.dynamic_to_steady_state`` (feature 005).
 
-Reduces a declared dynamic model to its steady-state form: time collapses
-to a single point, every reference to a declared state's time derivative
-is replaced by zero and the DerivativeVars are deleted, and the initial
-condition, terminal constraint, and terminal cost leave the model. The
-result is the equilibrium system, dynamics as ``0 = f(z, u)``, algebraic
-relations intact (a derivative-carrying energy balance collapses to its
-quasi-static form), and a per-sample stage cost becomes the single-point
-cost that ``drto.build_objective`` assembles for the steady modes.
+Reduces a declared dynamic model to its steady-state form: time collapses to
+a single point, each declared state's time derivative collapses with it and is
+fixed at zero, and the initial condition, terminal constraint, and terminal
+cost leave the model. The result is the equilibrium system, the declared
+dynamics reading as written with ``dz/dt`` pinned at zero, algebraic relations
+intact (a derivative-carrying energy balance keeps its form, its derivative
+fixed), and a per-sample stage cost becomes the single-point cost that
+``drto.build_objective`` assembles for the steady modes.
 
-Elimination is by substitution: no ``dz/dt == 0`` rows and no vestigial
-variables. The transform applies to the declared or discretized model,
+A derivative is fixed, not eliminated: ``dz/dt = 0`` is what steady state
+means, so pinning it keeps the user's equations readable instead of leaving a
+side missing, and the solver folds a fixed Var in as a constant. Pyomo cannot
+hold a DerivativeVar that is not indexed by a ContinuousSet, and the time set
+leaves the model, so the collapsed derivative is a plain scalar Var of the same
+name. There are still no ``dz/dt == 0`` rows: the Var is fixed, not constrained.
+The transform applies to the declared or discretized model,
 before any drto transformation: applied control profiles or an attached
 terminal segment error, the sibling-branch rule. On a discretized model
 the discretization artifacts (the collocation equations and continuity
@@ -125,7 +130,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 for v in identify_variables(cd.expr, include_fixed=True):
                     comp = v.parent_component()
                     if isinstance(comp, DerivativeVar):
-                        continue  # every derivative reference becomes zero
+                        continue  # collapses to one point like the states
                     pos, subs = _time_index(comp, time)
                     if pos is None:
                         continue
@@ -138,16 +143,36 @@ class DynamicToSteadyStateTransformation(Transformation):
                         f"one time point, which has no single-point form."
                     )
 
-        # --- collapse the time-indexed Vars -----------------------------
+        # --- the declared states' time derivatives -----------------------
+        # a DerivativeVar is its own ctype before discretization and is
+        # reclassified to Var by pyomo.dae afterward: scan both
+        seen, derivs = set(), []
+        for query in (DerivativeVar, Var):
+            for dv in model.component_objects(query):
+                if (
+                    isinstance(dv, DerivativeVar)
+                    and id(dv) not in seen
+                    and dv.get_continuousset_list() == [time]
+                    and dv.get_state_var() in states_set
+                ):
+                    seen.add(id(dv))
+                    derivs.append(dv)
+        deriv_ids = {id(dv) for dv in derivs}
+        n_derivs = len(derivs)
+
+        # --- collapse the time-indexed Vars, the derivatives included ----
+        # a derivative collapses like any other time-indexed Var and is then
+        # fixed at zero: dz/dt = 0 is what steady state means, so the declared
+        # dynamics stay readable as written instead of losing a side
         t0 = time.first()
         submap = {}
         replaced = {}
-        tvars = [
-            comp
-            for comp in model.component_objects(Var, active=True)
-            if not isinstance(comp, DerivativeVar)
-            and _time_index(comp, time)[0] is not None
-        ]
+        tvars, tvar_seen = [], set()
+        for query in (DerivativeVar, Var):
+            for comp in model.component_objects(query, active=True):
+                if id(comp) not in tvar_seen and _time_index(comp, time)[0] is not None:
+                    tvar_seen.add(id(comp))
+                    tvars.append(comp)
         for comp in tvars:
             pos, subs = _time_index(comp, time)
             others = [s for n, s in enumerate(subs) if n != pos]
@@ -171,31 +196,19 @@ class DynamicToSteadyStateTransformation(Transformation):
                 dom, lb, ub, val, _ = attrs[()]
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
-            # a fixed input stays fixed through the collapse
-            for o, a in attrs.items():
-                if a[4]:
-                    (new[o] if o else new).fix()
+            if id(comp) in deriv_ids:
+                # zero at steady state, by definition
+                for vd in new.values() if new.is_indexed() else (new,):
+                    vd.set_value(0.0)
+                    vd.fix()
+            else:
+                # a fixed input stays fixed through the collapse
+                for o, a in attrs.items():
+                    if a[4]:
+                        (new[o] if o else new).fix()
             replaced[id(comp)] = new
             for (o, t), vd in members.items():
                 submap[id(vd)] = new[o] if o else new
-
-        # --- every derivative reference becomes zero ---------------------
-        # a DerivativeVar is its own ctype before discretization and is
-        # reclassified to Var by pyomo.dae afterward: scan both
-        seen, derivs = set(), []
-        for query in (DerivativeVar, Var):
-            for dv in model.component_objects(query):
-                if (
-                    isinstance(dv, DerivativeVar)
-                    and id(dv) not in seen
-                    and dv.get_continuousset_list() == [time]
-                    and dv.get_state_var() in states_set
-                ):
-                    seen.add(id(dv))
-                    derivs.append(dv)
-        for dv in derivs:
-            for vd in dv.values():
-                submap[id(vd)] = 0
 
         # --- collapse the constraints ------------------------------------
         stage_cons = ComponentSet()
@@ -238,8 +251,6 @@ class DynamicToSteadyStateTransformation(Transformation):
             e.set_value(replace_expressions(e.expr, submap))
 
         # --- the time dimension leaves the model --------------------------
-        for dv in derivs:
-            dv.parent_block().del_component(dv)
         time.parent_block().del_component(time)
         reg._declarations.pop("horizon", None)
         if pyomo_cvp_available:
@@ -269,8 +280,7 @@ class DynamicToSteadyStateTransformation(Transformation):
             removed=", ".join(removed) if removed else "(nothing to remove)",
             collapsed=f"{len(tvars)} Vars and {n_cons} Constraints to a "
             f"single point",
-            derivatives=f"{sum(len(dv) for dv in derivs)} derivative "
-            f"references replaced by zero",
+            derivatives=f"{n_derivs} fixed at zero",
             **(
                 {"discarded": f"{n_artifacts} discretization artifacts"}
                 if n_artifacts
