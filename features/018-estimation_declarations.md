@@ -114,13 +114,14 @@ problem from the same model.
   parameters to estimate, constant over the window, so they are not indexed by
   the horizon time set. This declaration is shared with the steady-state
   data-reconciliation mode, so it does not require a declared horizon.
-- `disturbance(m.w, ...)` tags one or more process-noise Vars appearing
-  additively in the dynamics (`dz/dt = f + w`), the free variables the estimator
-  adjusts to reconcile the model with the data, penalized by their inverse
-  covariance in the estimation stage cost. Process noise is not a manipulated
-  input: it takes no `profile` and is unrelated to `control` (USER DECISION
-  2026-07-14). With a horizon declared, each disturbance is indexed by the
-  declared time set, checked at the declaration.
+- `disturbance(m.w, ...)` tags one or more Vars used as process noise, the free
+  variables the estimator adjusts to reconcile the model with the data,
+  penalized by their inverse covariance in the estimation stage cost. How the
+  noise enters the model equations is up to the user, not fixed by the
+  declaration. Process noise is not a manipulated input: it takes no `profile`
+  and is unrelated to `control` (USER DECISION 2026-07-14). With a horizon
+  declared, each disturbance is indexed by the declared time set, checked at the
+  declaration.
 - `measurement(m.y_meas, ...)` tags one or more mutable Params holding the
   measured values over the window, which drto refreshes each step like the state
   feedback hook. They appear in the estimation cost residuals
