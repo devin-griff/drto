@@ -46,13 +46,22 @@ used across the modes.
   003) with the option for a simulation, which installs a constant-zero
   `Objective` and gives an NLP solver a well-posed square problem for the
   fixed-control equilibrium.
-- The declared stage costs (tracking and economic) are dropped from the
-  model and the registry: a simulation carries no cost equations, and the
-  cost variables they defined are left unused (USER DECISION 2026-07-18).
-- The steady-state pairings are dropped from the registry too: they serve
-  the costs, the endpoint pin, and the optimization mode's write-back,
-  none of which a simulation has. The target Params stay on the model,
-  the user's components (USER DECISION 2026-07-18).
+- The optimization-only constructs leave the model and the registry, through
+  the routine both simulation modes share: the declared stage costs (tracking
+  and economic), the terminal cost, and the terminal constraint. A simulation
+  carries no cost and no terminal set, and the cost variables they defined are
+  left unused.
+- The steady-state pairings are kept. The target Params stay on the model, the
+  user's components, and they may appear in the equations of a model written
+  in deviations from the steady state, so their records stay with them and the
+  registry mirrors the model.
+- The estimation-category declarations (feature 018) are neutralized, before
+  the reduction, through the routine shared with the dynamic modes: the
+  estimation costs and the measurement Params are deleted, a disturbance is
+  eliminated by substituting zero, and an estimated parameter is fixed at the
+  value it holds and keeps its record. It runs before the reduction, which
+  collapses the control-side costs and not the window-based estimation costs,
+  and it keeps the equilibrium solve square by removing the free disturbance.
 - Solving the transformed model gives an equilibrium that satisfies the dynamics
   at rest and the model's algebraic relations.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
