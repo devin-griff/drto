@@ -140,11 +140,18 @@ def test_disturbance_must_be_time_indexed_with_a_horizon():
         drto.disturbance(m.w0)
 
 
-def test_disturbance_takes_no_profile():
+def test_disturbance_profile_reaches_pyomo_cvp():
+    # a disturbance is a parameterized Var like a control: one value per sample
     m = est_base()
     drto.horizon(m.t)
-    with pytest.raises(TypeError):
-        drto.disturbance(m.w, profile="piecewise_constant")
+    drto.disturbance(m.w, profile="piecewise_constant")
+    (record,) = drto.info(m).declarations("disturbance")
+    assert record["profile"] == "piecewise_constant"
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("cvp.parameterize").apply_to(m)
+    assert len(m.w) == 4  # one free value per finite element
 
 
 # ----------------------------------------------------------------------

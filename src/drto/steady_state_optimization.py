@@ -28,7 +28,7 @@ that makes such a write-back possible.
 from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
-from drto.dynamic_optimization import _neutralize_estimation
+from drto.dynamic_optimization import _fix_disturbances, _neutralize_estimation
 from drto.info import info
 from drto.objective import build_objective
 
@@ -79,10 +79,15 @@ class SteadyStateOptimizationTransformation(Transformation):
 
         # before the reduction, which collapses the control-side costs and not
         # the window-based estimation costs
-        outcome = _neutralize_estimation(model, reg, "steady_state_optimization")
+        outcome = _neutralize_estimation(reg, "steady_state_optimization")
 
         if reg.has_declaration("horizon") and reg.has_declaration("dynamics"):
             TransformationFactory("drto.dynamic_to_steady_state").apply_to(model)
+
+        # the process noise is off in the RTO point: a free disturbance would
+        # be a decision the optimizer exploits. Fixed at zero after the
+        # reduction collapses it to a single point
+        noise = _fix_disturbances(reg, {}, "steady_state_optimization")
 
         # build_objective reads the weight off the group's record
         weighted = None
@@ -98,6 +103,7 @@ class SteadyStateOptimizationTransformation(Transformation):
             tracking_weight=(
                 weighted if weighted is not None else "(economic cost only)"
             ),
+            **({"disturbances": ", ".join(noise)} if noise else {}),
             **outcome,
         )
         return model

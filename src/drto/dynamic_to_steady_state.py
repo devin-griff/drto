@@ -157,7 +157,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 o, t = _split_index(idx, pos, len(subs))
                 members[(o, t)] = vd
                 if t == t0:
-                    attrs[o] = (vd.domain, vd.lb, vd.ub, vd.value)
+                    attrs[o] = (vd.domain, vd.lb, vd.ub, vd.value, vd.fixed)
             parent.del_component(comp)
             any_dom = next(iter(attrs.values()))[0]
             if others:
@@ -168,9 +168,13 @@ class DynamicToSteadyStateTransformation(Transformation):
                     initialize=lambda m, *o, _a=attrs: _a[o][3],
                 )
             else:
-                dom, lb, ub, val = attrs[()]
+                dom, lb, ub, val, _ = attrs[()]
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
+            # a fixed input stays fixed through the collapse
+            for o, a in attrs.items():
+                if a[4]:
+                    (new[o] if o else new).fix()
             replaced[id(comp)] = new
             for (o, t), vd in members.items():
                 submap[id(vd)] = new[o] if o else new
@@ -254,10 +258,12 @@ class DynamicToSteadyStateTransformation(Transformation):
                     new = replaced.get(id(record.get(key)))
                     if new is not None:
                         record[key] = new
-        for record in reg.declarations("control"):
-            # a single-point control has no profile: the annotation came
-            # from the dynamic declaration and describes nothing here
-            record.pop("profile", None)
+        for kind in ("control", "disturbance"):
+            for record in reg.declarations(kind):
+                # a single-point control or disturbance has no profile: the
+                # annotation came from the dynamic declaration and describes
+                # nothing here
+                record.pop("profile", None)
         reg.record_transformation(
             "drto.dynamic_to_steady_state",
             removed=", ".join(removed) if removed else "(nothing to remove)",

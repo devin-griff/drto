@@ -50,11 +50,15 @@ validation runs rely on.
 - The estimation-category declarations (feature 018) are neutralized exactly
   as in `drto.dynamic_optimization` (feature 006), through the same shared
   routine so the two modes cannot drift apart: the estimation costs and the
-  measurement Params are deleted and purged, a disturbance is eliminated by
-  substituting zero behind the additivity guard, and an estimated parameter is
-  fixed at the value it holds and keeps its record. This also protects the
-  squareness the mode promises, since a free disturbance would leave the
-  system underdetermined.
+  measurement Params are deleted and purged, and an estimated parameter is
+  fixed at the value it holds and keeps its record.
+- Each disturbance is fixed at its realization, the same way the controls are
+  fixed, after the profiles are applied. A `disturbances` option maps a
+  declared disturbance to its realized noise, a constant held across the
+  horizon or one value per free point, so the plant can be driven by a
+  supplied noise sequence; a disturbance not in the mapping is fixed at zero.
+  Fixing keeps the disturbance in the model and keeps the forward integration
+  square, and it works however the noise enters the equations.
 - The objective is zero: the transform calls `drto.build_objective` (feature
   003) with the option for a simulation, which installs a constant-zero
   `Objective` and gives an NLP solver a well-posed square problem for the

@@ -19,9 +19,10 @@ All notable changes to this project are documented here. The format is based on
   optimum toward a known operating point; with both cost kinds declared,
   `tracking_weight` scales the tracking side (default 1, the economic cost
   never scaled). The estimation declarations are neutralized before the
-  reduction, which matters more here than in a simulation: a free disturbance
-  would become a decision variable the optimizer exploits, optimizing the
-  operating point against fictitious noise. The steady-state pairings are left
+  reduction and the disturbances fixed at zero, which matters more here than in
+  a simulation: a disturbance left free would be a decision variable the
+  optimizer exploits, optimizing the operating point against fictitious noise.
+  The steady-state pairings are left
   intact, since they are the record that makes a later write-back possible;
   that write-back is an algorithmic step outside the transform.
 
@@ -38,9 +39,10 @@ All notable changes to this project are documented here. The format is based on
   `drto.steady_state_simulation`, and `build_objective` installs the
   constant-zero objective. `initial_condition`
   is required: a forward integration is not square without the initial state
-  pinned. The estimation-category declarations are neutralized through the
-  routine shared with `drto.dynamic_optimization`, which also protects that
-  squareness, since a free disturbance would leave the system underdetermined.
+  pinned. The estimation costs and measurements are neutralized through the
+  shared routine, and each disturbance is fixed at its realization, the same
+  way the controls are fixed, through a `disturbances` option (default zero),
+  so the plant can be driven by a supplied noise sequence.
 
 - `drto.dynamic_optimization` (feature 006): the dynamic optimization mode,
   NMPC and D-RTO. It assembles the horizon optimization from the
@@ -55,9 +57,9 @@ All notable changes to this project are documented here. The format is based on
   here and the tail's cost group must be registered by then. A model that
   also carries the estimation declarations still yields a clean control
   problem: the estimation costs and the measurement Params are deleted, a
-  disturbance is eliminated by substituting zero (which errors if it appears
-  nonlinearly, since substitution removes it only where it enters
-  additively), and an estimated parameter is fixed at the value it holds and
+  disturbance is fixed at zero and kept in the model (so it works however the
+  noise enters the equations, and the solver folds a fixed Var in as a
+  constant), and an estimated parameter is fixed at the value it holds and
   keeps its registry record, since it stays a live coefficient.
 
 - The estimation declarations (feature 018): `estimated_parameter` and
@@ -67,8 +69,10 @@ All notable changes to this project are documented here. The format is based on
   surface: tag, wrap, or (for the cost constraints) decorate, with the
   registry recording each. `estimated_parameter` is constant over the window
   and needs no horizon (it also serves steady-state data reconciliation);
-  `disturbance` and `measurement` are indexed by the declared time set; the
-  cost constraints reuse the stage-cost and scalar-cost machinery, so
+  `disturbance` and `measurement` are indexed by the declared time set, and
+  `disturbance` takes a piecewise-constant `profile` like `control`, its
+  control-side dual, so a simulation drives it at one realization per sample;
+  the cost constraints reuse the stage-cost and scalar-cost machinery, so
   `tracking_terminal_cost` now routes through the shared scalar-cost helper.
   Declaration surface only: the estimation mode transforms are a follow-on.
 
@@ -104,10 +108,12 @@ All notable changes to this project are documented here. The format is based on
   components resolving by name so `create_using` accepts source-model
   keys), shed the optimization-only constructs (the stage costs, the terminal
   cost, and the terminal constraint) and neutralize the estimation
-  declarations through the routines the dynamic simulation shares, keep the
-  steady-state pairing records (the target Params stay and may appear in a
-  deviation-form model's equations), and install the simulation's zero
-  objective: the square fixed-input equilibrium solve. A dynamic model composes the feature 005
+  declarations through the routines the dynamic simulation shares, fix each
+  disturbance at a standing value (a `disturbances` option, default zero) for
+  the equilibrium under a persistent disturbance, keep the steady-state pairing
+  records (the target Params stay and may appear in a deviation-form model's
+  equations), and install the simulation's zero objective: the square
+  fixed-input equilibrium solve. A dynamic model composes the feature 005
   reduction; a model authored directly as steady-state skips it. With
   that, `drto.control` on a model with no declared horizon registers
   without a profile, so a steady-state model declares through the same

@@ -15,6 +15,21 @@ needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 SS = "drto.dynamic_to_steady_state"
 
 
+def test_a_fixed_input_stays_fixed_through_the_reduction():
+    # the collapse rebuilds each time-indexed Var; the fixed flag is carried
+    # through, not dropped
+    m = declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    for vd in m.u.values():
+        vd.set_value(0.5)
+        vd.fix()
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert not m.u.is_indexed()
+    assert m.u.fixed and pyo.value(m.u) == 0.5
+
+
 def test_requires_the_declarations():
     m = base_model()
     drto.horizon(m.t)

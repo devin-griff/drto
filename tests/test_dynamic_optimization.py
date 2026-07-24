@@ -3,7 +3,6 @@
 """Feature 006: the dynamic optimization assembly."""
 import pyomo.environ as pyo
 import pytest
-from pyomo.core.expr import identify_variables
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
@@ -119,10 +118,13 @@ def test_bad_weight_errors_before_the_model_is_touched():
     assert m.component("drto_objective") is None
 
 
-def test_nonlinear_disturbance_is_refused():
+def test_nonlinear_disturbance_runs():
+    # the disturbance is fixed at zero, not substituted, so it works however
+    # it enters the equations, including nonlinearly
     m = estimation_model(nonlinear_noise=True)
-    with pytest.raises(ValueError, match="appears nonlinearly"):
-        pyo.TransformationFactory(DO).apply_to(m)
+    pyo.TransformationFactory(DO).apply_to(m)
+    assert m.component("drto_objective") is not None
+    assert all(vd.fixed and pyo.value(vd) == 0 for vd in m.w.values())
 
 
 # ----------------------------------------------------------------------
@@ -180,23 +182,21 @@ def test_estimation_costs_and_measurements_leave_the_model():
     m = estimation_model()
     pyo.TransformationFactory(DO).apply_to(m)
     reg = drto.info(m)
-    for kind in ("estimation_stage_cost", "arrival_cost", "measurement", "disturbance"):
+    for kind in ("estimation_stage_cost", "arrival_cost", "measurement"):
         assert not reg.has_declaration(kind), kind
     assert m.component("est_stage_con") is None
     assert m.component("arrival_con") is None
     assert m.component("y_meas") is None
 
 
-def test_disturbance_is_eliminated_by_substitution():
+def test_disturbance_is_fixed_at_zero_not_deleted():
     m = estimation_model()
     pyo.TransformationFactory(DO).apply_to(m)
-    assert m.component("w") is None
-    # no vestigial fixed-at-zero variable: the reference is gone from the ode
-    cd = m.ode[sorted(m.t)[1]]
-    assert all(
-        v.parent_component().local_name != "w"
-        for v in identify_variables(cd.body, include_fixed=True)
-    )
+    # the disturbance stays in the model, fixed at zero, so the "noise enters
+    # here" structure is preserved and the NLP folds it in as a constant
+    assert m.component("w") is not None
+    assert drto.info(m).has_declaration("disturbance")
+    assert all(vd.fixed and pyo.value(vd) == 0 for vd in m.w.values())
 
 
 def test_estimated_parameter_is_fixed_and_keeps_its_record():

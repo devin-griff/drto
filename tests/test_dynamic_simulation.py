@@ -173,13 +173,41 @@ def test_estimation_declarations_are_neutralized():
     m = estimation_model()
     pyo.TransformationFactory(DS).apply_to(m)
     reg = drto.info(m)
-    for kind in ("estimation_stage_cost", "arrival_cost", "measurement", "disturbance"):
+    for kind in ("estimation_stage_cost", "arrival_cost", "measurement"):
         assert not reg.has_declaration(kind), kind
-    assert m.component("w") is None
     assert m.component("y_meas") is None
+    # the disturbance stays, fixed at its realization (zero by default)
+    assert reg.has_declaration("disturbance")
+    assert all(vd.fixed and pyo.value(vd) == 0 for vd in m.w.values())
     # the estimated parameter stays a live coefficient, so it keeps its record
     assert reg.components("estimated_parameter") == (m.k,)
     assert m.k.fixed
+
+
+def test_disturbance_realization_drives_the_plant():
+    # the plant is stepped with a supplied noise realization, held across the
+    # horizon; the disturbance is fixed at it
+    m = estimation_model()
+    pyo.TransformationFactory(DS).apply_to(m, disturbances={"w": 0.1})
+    assert all(vd.fixed and pyo.value(vd) == 0.1 for vd in m.w.values())
+
+
+def test_disturbance_realization_per_free_point():
+    m = estimation_model()
+    pyo.TransformationFactory(DS).apply_to(m, disturbances={"w": [0.1, 0.2, 0.3, 0.4]})
+    assert [pyo.value(m.w[i]) for i in sorted(m.w)] == [0.1, 0.2, 0.3, 0.4]
+
+
+def test_unfixed_disturbance_defaults_to_zero():
+    m = estimation_model()
+    pyo.TransformationFactory(DS).apply_to(m)  # no realization supplied
+    assert all(vd.fixed and pyo.value(vd) == 0 for vd in m.w.values())
+
+
+def test_unknown_disturbance_errors():
+    m = estimation_model()
+    with pytest.raises(ValueError, match="not a declared disturbance"):
+        pyo.TransformationFactory(DS).apply_to(m, disturbances={"nope": 0.1})
 
 
 # ----------------------------------------------------------------------

@@ -309,11 +309,15 @@ Vars):
 - `estimated_parameter(m.theta, ...)`: tags the Vars for unknown
   model parameters to estimate, constant over the window. Shared with the
   steady-state data-reconciliation mode.
-- `disturbance(m.w, ...)`: tags the process-noise Vars w in
-  dz/dt = f + w, the free variables the estimator adjusts to reconcile the
-  model with the data, penalized by their inverse covariance in the
-  estimation stage cost. It is noise, not a manipulated input: unrelated to
-  `control`, with no profile parameterization.
+- `disturbance(m.w, ..., profile=...)`: tags the process-noise Vars w, the
+  free variables the estimator adjusts to reconcile the model with the data,
+  penalized by their inverse covariance in the estimation stage cost. It is
+  the estimation-side dual of a control: a parameterized Var the estimation
+  frees and a simulation fixes at a realization, the optimizations fixing it
+  at zero. The `profile` (default piecewise-constant) parameterizes it over
+  the declared time set the way `control` does, one value per sample, since
+  process noise is a zero-order hold over a sampling interval. How the noise
+  enters the model equations is the user's, not fixed by the declaration.
 - `measurement(m.y_meas, ...)`: tags the measurement Param(s), the
   measured values y_meas that appear in the estimation cost residuals
   (||y_meas - h(z)||). Like the z_hat feedback hook, it is a mutable Param

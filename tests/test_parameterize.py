@@ -39,7 +39,7 @@ def test_records_in_the_transformation_log():
     pyo.TransformationFactory("drto.parameterize").apply_to(m)
     reg = drto.info(m)
     assert reg.has_transformation("drto.parameterize")
-    assert reg.transformations[-1]["outcome"]["controls"] == "u (piecewise_constant)"
+    assert reg.transformations[-1]["outcome"]["profiles"] == "u (piecewise_constant)"
 
 
 def test_errors_without_declared_controls():
