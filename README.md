@@ -10,10 +10,12 @@ DRTO is a unified framework for dynamic real-time optimization built on Pyomo.
 
 ## Status
 
-Alpha. The registry (`drto.info`), the declaration surface, objective
-assembly, the control-profile application, and the infinite-horizon terminal
-segment (features 001-004 and 017) are implemented and tested; the mode
-transforms, initializers, and closed-loop frameworks follow. The feature
+Alpha. The registry (`drto.info`), the declaration surface (control,
+simulation, and estimation), objective assembly, the control-profile
+application, the steady-state reduction and simulation, the steady-state
+initializer, and the infinite-horizon terminal segment (features 001-005, 008,
+010, 017, and 018) are implemented and tested. The remaining mode transforms,
+the start strategies, and the closed-loop frameworks follow. The feature
 statuses live in [`features/README.md`](features/README.md), and DESIGN.md
 remains the design record.
 
