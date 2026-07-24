@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.dynamic_optimization` (feature 006): the dynamic optimization mode,
+  NMPC and D-RTO. It assembles the horizon optimization from the
+  declarations, so on a discretized model it replaces the
+  `drto.parameterize` and `drto.build_objective` pair with one call. The
+  declared controls stay free and are parameterized by their declared
+  profiles, the horizon is kept, and the objective is assembled from the live
+  cost terms as the final step. With both a tracking and an economic stage
+  cost declared, `tracking_weight` scales the tracking side (default 1; the
+  economic cost is in currency units and is never scaled).
+  `drto.infinite_horizon` applies before it, since the objective is built
+  here and the tail's cost group must be registered by then. A model that
+  also carries the estimation declarations still yields a clean control
+  problem: the estimation costs and the measurement Params are deleted, a
+  disturbance is eliminated by substituting zero (which errors if it appears
+  nonlinearly, since substitution removes it only where it enters
+  additively), and an estimated parameter is fixed at the value it holds and
+  keeps its registry record, since it stays a live coefficient.
+
 - The estimation declarations (feature 018): `estimated_parameter` and
   `disturbance` (varargs over Vars), `measurement` (varargs over mutable
   Params), and the estimation cost constraints `estimation_stage_cost`,

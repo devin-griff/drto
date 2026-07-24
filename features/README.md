@@ -19,7 +19,7 @@ alongside the CHANGELOG section rename.
 | [003 drto.build_objective](003-drto.build_objective.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [004 drto.infinite_horizon](004-drto.infinite_horizon.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [005 drto.dynamic_to_steady_state](005-drto.dynamic_to_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [006 drto.dynamic_optimization](006-drto.dynamic_optimization.md) | ![ready](https://img.shields.io/badge/ready-blue) |
+| [006 drto.dynamic_optimization](006-drto.dynamic_optimization.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [007 drto.dynamic_simulation](007-drto.dynamic_simulation.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [008 drto.steady_state_simulation](008-drto.steady_state_simulation.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [009 drto.steady_state_optimization](009-drto.steady_state_optimization.md) | ![ready](https://img.shields.io/badge/ready-blue) |

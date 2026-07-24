@@ -33,6 +33,7 @@ from drto.initialize_steady_state import SteadyStateInitReport, initialize_stead
 from drto.objective import build_objective
 
 # importing registers the drto.* transformations
+from drto import dynamic_optimization as _dynamic_optimization  # noqa: F401
 from drto import dynamic_to_steady_state as _dynamic_to_steady_state  # noqa: F401
 from drto import infinite_horizon as _infinite_horizon  # noqa: F401
 from drto import parameterize as _parameterize  # noqa: F401

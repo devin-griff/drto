@@ -114,3 +114,30 @@ every pending one by delegating to pyomo-cvp, then repairs the registry so
 the control records point at the live replacement components. The mode
 transforms run it as one of their steps; standalone workflows call it after
 `drto.infinite_horizon` and before `drto.build_objective`.
+
+## Dynamic optimization: `drto.dynamic_optimization`
+
+The headline mode, NMPC and D-RTO. It assembles the horizon optimization from
+the declarations, so applying the profiles and building the objective collapse
+into one call on the discretized model. It requires `horizon`, `state`,
+`dynamics`, `control`, `initial_condition`, and at least one stage cost, and
+errors naming what is missing. The declared controls stay free and are
+parameterized by their declared profiles, the horizon is kept (this is the
+dynamic mode, not a reduction), and `build_objective` runs as the final step.
+With both a tracking and an economic stage cost declared, `tracking_weight`
+scales the tracking side. It defaults to 1, and the economic cost is in
+currency units and is never scaled.
+
+Because the objective is assembled here, anything that registers cost terms
+runs first: `drto.infinite_horizon` applies before this transform, or the tail
+never reaches the objective.
+
+A model may carry the estimation declarations too, since one model serves
+every mode. The transform neutralizes them so the control problem carries only
+what it uses, and the registry mirrors the model: a component that leaves has
+its record purged, one that stays keeps its record. The estimation costs and
+the measurement Params are deleted. A disturbance is eliminated by
+substituting zero, which removes it only where it enters additively, so one
+inside a nonlinear term errors rather than being silently zeroed. An estimated
+parameter is fixed at the value it holds and keeps its record, since it stays
+a live coefficient in the equations the controller solves.
