@@ -40,13 +40,12 @@ many modes" promise.
 - It applies to the declared or discretized model, before any drto
   transformation: an applied `drto.infinite_horizon` or applied control
   profiles error clearly. The steady reduction and the dynamic transforms
-  are sibling branches of the same declarations, not a pipeline
-  (USER DECISION 2026-07-18). On a discretized model the discretization
+  are sibling branches of the same declarations, not a pipeline. On a
+  discretized model the discretization
   artifacts (the collocation equations and continuity rows pyomo.dae adds)
   are discarded, grid machinery rather than model content, and the
   reduction gives the same steady system as reducing before
-  discretization (USER DECISION 2026-07-19, amending the discretized-model
-  refusal so feature 010's dynamic path can reduce a discretized clone).
+  discretization.
 - It validates that one side of each dynamics constraint is the
   DerivativeVar of a declared state (either orientation of the equality),
   and errors clearly otherwise. Derivative references outside the dynamics
@@ -58,7 +57,7 @@ many modes" promise.
 - Every reference to a declared state's DerivativeVar, in the dynamics and
   in any algebraic equation carrying one, is replaced by zero, and the
   DerivativeVars are deleted: elimination by substitution, no `dz/dt == 0`
-  rows and no vestigial variables (USER DECISION 2026-07-18). The dynamics
+  rows and no vestigial variables. The dynamics
   become `0 = f(z, u)`, and a derivative-carrying energy balance collapses
   to its quasi-static form.
 - It removes the time index from every variable and constraint, collapsing the

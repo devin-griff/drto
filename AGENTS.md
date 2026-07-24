@@ -12,14 +12,13 @@ implementation status here or in README.md, since a second copy goes stale
 silently. The design is settled and recorded:
 
 - **DESIGN.md** is the authoritative design record: the six-mode framework,
-  the declaration surface, and every locked decision.
+  the declaration surface, and the current design.
 - **README.md** is the user-facing overview of the same.
 
 Treat both as the source of truth. Before touching anything on the
-declaration or API surface, read DESIGN.md. A decision logged there as
-`USER DECISION <date>` is authoritative: do not silently reverse or
-reinterpret it. If new work seems to require changing one, surface it and
-ask, do not just diverge.
+declaration or API surface, read DESIGN.md. It states the design as it stands
+now, so if new work changes the design, update DESIGN.md to match rather than
+diverging from it silently.
 
 Development is spec-first: each feature is specified in `features/` before it
 is implemented. Read the feature's spec and build to its acceptance criteria,

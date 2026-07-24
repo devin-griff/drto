@@ -26,7 +26,7 @@ drto.initialize_steady_state(ss)  # in place: fill, project, block-solve
 A steady-state-based initial guess is often the difference between a solve
 that converges and one that stalls, and deriving it from the model keeps it
 consistent with the dynamics. One function serves both declared shapes,
-since the core calculation is the same (USER DECISION 2026-07-19), and it
+since the core calculation is the same, and it
 replaces the hand-written per-model initialization helpers the examples
 carry today.
 
@@ -62,8 +62,8 @@ carry today.
   control (the component, or its name) to the value the steady solve holds
   it at; controls not in the mapping hold the values they already have; an
   unknown name errors.
-- A non-square system raises in both paths, consistently (USER DECISION
-  2026-07-19): the error names the unmatched variables and constraints from
+- A non-square system raises in both paths, consistently: the error names
+  the unmatched variables and constraints from
   the pipeline's report and says what to fix (declare the missing decision,
   or remove the redundant specification). Deliberately partial
   initialization is `pyomo_pounce.initialize` called directly.
@@ -74,12 +74,11 @@ carry today.
   the steady path returns the pipeline's `InitializeReport` as-is (fills,
   projection outcome, block counts); the dynamic path returns a thin drto
   wrapper around it that adds the broadcast line, the variables seeded
-  across the grid points and the derivatives zeroed (USER DECISION
-  2026-07-19).
+  across the grid points and the derivatives zeroed.
 - pyomo-pounce is an optional dependency, not a requirement of drto: it
   lives in the `pounce` extras group (`pip install drto[pounce]`, shared
   with the future pounce-backed features, e.g. the advanced-step
   controller and sensitivities), the import happens inside the function so
   `import drto` never touches it, and a missing install raises the
-  house-style error naming the extra (USER DECISION 2026-07-19). drto's
+  house-style error naming the extra. drto's
   core stays solver-agnostic.

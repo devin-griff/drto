@@ -79,8 +79,8 @@ move.
   extrapolation.
 - Linking constraints stitch the segment's initial state to the declared
   states at the end of the horizon.
-- The terminal segment endpoint is pinned to the steady state by default
-  (USER DECISION 2026-07-18, amending 2026-07-17). `terminal='soft'` (the
+- The terminal segment endpoint is pinned to the steady state by default.
+  `terminal='soft'` (the
   default) adds the paper's eq. 36 relaxed endpoint constraint, per state
   `z(tau=1) + eps_up - eps_lo == z_s` with an L1 penalty `mu*(eps_up +
   eps_lo)` registered as a cost group; `terminal='none'` restores the prior
@@ -92,8 +92,8 @@ move.
   before. The original decision judged the endpoint constraint theory-only;
   the paper's operative problem (eq. 36) does impose it, and it is what pins
   the unstable modes on open-loop-unstable plants, so it is now the default.
-  A plain-equality `'hard'` option was dropped before release (USER DECISION
-  2026-07-20): one slack-free equality per state over-determines the tail NLP
+  A plain-equality `'hard'` option was dropped before release: one slack-free
+  equality per state over-determines the tail NLP
   when state members outnumber the horizon's control freedoms, and the exact
   L1 penalty means `'soft'` at a large enough `mu` reproduces it anyway.
 - The tail cost uses no quadrature state and adds no variables or

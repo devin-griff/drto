@@ -174,8 +174,7 @@ declarations rather than re-deriving them.
   the declared time set, checked at the declaration. On a model with no
   declared horizon (a steady-state model), the control registers without a
   profile: there is no time to parameterize over, and the steady modes fix
-  the control instead (USER DECISION 2026-07-18, feature 008's
-  steady-authored path).
+  the control instead.
 - `dynamics(m.ode, ...)` tags one or more equality
   Constraints whose left-hand sides are the DerivativeVars of declared states.
 - `tracking_stage_cost(m.con)` and `economic_stage_cost(m.con)`

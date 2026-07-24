@@ -119,14 +119,14 @@ problem from the same model.
   penalized by their inverse covariance in the estimation stage cost. How the
   noise enters the model equations is up to the user, not fixed by the
   declaration. Process noise is not a manipulated input: it takes no `profile`
-  and is unrelated to `control` (USER DECISION 2026-07-14). With a horizon
+  and is unrelated to `control`. With a horizon
   declared, each disturbance is indexed by the declared time set, checked at the
   declaration.
 - `measurement(m.y_meas, ...)` tags one or more mutable Params holding the
   measured values over the window, which drto refreshes each step like the state
   feedback hook. They appear in the estimation cost residuals
   `||y_meas - h(z)||`; `h(z)` is written inline in the cost, so there is no
-  output Var or defining constraint to tag (USER DECISION 2026-07-14). With a
+  output Var or defining constraint to tag. With a
   horizon declared, each measurement is indexed by the declared time set.
 - `estimation_stage_cost(m.con)` tags a per-time-point equality Constraint whose
   left-hand side is the scalar running estimation-cost variable, the measurement
@@ -140,7 +140,7 @@ problem from the same model.
   side is the scalar terminal estimation-cost variable, the current-state
   measurement residual at the final (present) time with no process noise. It is
   a distinct terminal term rather than part of the stage sum, a standard MHE
-  term (USER correction 2026-07-14).
+  term.
 - `arrival_cost(m.con)` tags an equality Constraint whose left-hand side is the
   scalar arrival-cost variable, the soft prior on the window's initial state
   `||z(t0) - z_prior||` referencing declared states at the first time point. It
