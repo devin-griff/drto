@@ -16,9 +16,9 @@ import drto
 # ... declared dynamic model m (feature 002) ...
 
 ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
-# ss is the steady-state system: time collapsed to a single point, every
-# dz/dt reference replaced by zero and the DerivativeVars deleted, initial
-# and terminal pieces removed; m is unchanged
+# ss is the steady-state system: time collapsed to a single point, each
+# dz/dt collapsed with it and fixed at zero, initial and terminal pieces
+# removed; m is unchanged
 drto.build_objective(ss)              # e.g. the single-point cost
 pyo.SolverFactory("ipopt").solve(ss)
 ```
@@ -54,12 +54,15 @@ many modes" promise.
 - It removes, if present, the declared initial condition, terminal constraint,
   and both terminal costs (the tracking terminal cost and the estimation
   terminal cost).
-- Every reference to a declared state's DerivativeVar, in the dynamics and
-  in any algebraic equation carrying one, is replaced by zero, and the
-  DerivativeVars are deleted: elimination by substitution, no `dz/dt == 0`
-  rows and no vestigial variables. The dynamics
-  become `0 = f(z, u)`, and a derivative-carrying energy balance collapses
-  to its quasi-static form.
+- Each declared state's derivative collapses to a single point like every
+  other time-indexed Var and is fixed at zero, not eliminated: `dz/dt = 0` is
+  what steady state means, so the declared dynamics and any algebraic equation
+  carrying a derivative keep their form as the user wrote them, with the
+  derivative pinned. There are still no `dz/dt == 0` rows; the Var is fixed,
+  not constrained, and the solver folds it in as a constant. Pyomo cannot hold
+  a DerivativeVar that is not indexed by a ContinuousSet, and the time set
+  leaves the model, so the collapsed derivative is a plain scalar Var of the
+  same name.
 - It removes the time index from every variable and constraint, collapsing the
   model to a single point (so a per-time-point stage cost becomes the
   single-point cost).

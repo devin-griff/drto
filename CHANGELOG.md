@@ -89,13 +89,16 @@ All notable changes to this project are documented here. The format is based on
   (`pip install drto[pounce]`), imported at call time.
 
 - `drto.dynamic_to_steady_state` (feature 005): reduces a declared dynamic
-  model to its steady-state form. Time collapses to a single point, every
-  reference to a declared state's derivative is replaced by zero
-  (elimination by substitution, no `dz/dt == 0` rows) and the
-  DerivativeVars are deleted, the initial condition, terminal constraint,
-  and terminal cost leave the model, and a per-sample stage cost becomes
-  the single-point cost `build_objective` assembles. Derivative-carrying
-  algebraic equations collapse to their quasi-static forms. Applies to
+  model to its steady-state form. Time collapses to a single point, each
+  declared state's derivative collapses with it and is fixed at zero, the
+  initial condition, terminal constraint, and terminal cost leave the model,
+  and a per-sample stage cost becomes the single-point cost
+  `build_objective` assembles. The derivative is fixed rather than
+  eliminated, so the declared dynamics and any derivative-carrying algebraic
+  equation keep their form as written, with `dz/dt` pinned; there are still
+  no `dz/dt == 0` rows, and the solver folds a fixed Var in as a constant.
+  Pyomo cannot hold a DerivativeVar outside a ContinuousSet, so the
+  collapsed derivative is a plain scalar Var of the same name. Applies to
   the declared or discretized model, before any drto transformation (the
   steady reduction and the dynamic transforms are sibling branches of the
   same declarations); on a discretized model the discretization artifacts

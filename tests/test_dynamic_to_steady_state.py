@@ -71,18 +71,20 @@ def test_applied_drto_transforms_still_error():
 def test_collapse_structure():
     m = declared_model()
     ss = pyo.TransformationFactory(SS).create_using(m)
-    # time collapsed: every Var and Constraint single-point, derivatives gone
+    # time collapsed: every Var and Constraint single-point
     assert not ss.z.is_indexed() and not ss.u.is_indexed()
     assert not ss.cost.is_indexed()
-    assert ss.component("dzdt") is None
     assert ss.component("t") is None
     assert not ss.ode.is_indexed()
     assert not ss.stage.is_indexed()
     # initial condition removed; the source dynamic model is untouched
     assert ss.component("init") is None
     assert m.z.is_indexed() and m.component("init") is not None
-    # the dynamics are the equilibrium: 0 = f has no derivative left
-    assert "dzdt" not in str(ss.ode.expr)
+    # the derivative stays, collapsed to a point and fixed at zero: the
+    # declared dynamics still read as written
+    assert "dzdt" in str(ss.ode.expr)
+    assert not ss.dzdt.is_indexed()
+    assert ss.dzdt.fixed and pyo.value(ss.dzdt) == 0
 
 
 def test_registry_reflects_the_reduction():
@@ -125,7 +127,7 @@ def test_multi_time_reference_errors():
         pyo.TransformationFactory(SS).apply_to(m)
 
 
-def test_derivative_in_an_algebraic_equation_is_zeroed():
+def test_derivative_in_an_algebraic_equation_is_fixed_at_zero():
     m = base_model()
     m.w = pyo.Var(m.t, initialize=0.5)
 
@@ -140,8 +142,10 @@ def test_derivative_in_an_algebraic_equation_is_zeroed():
     drto.tracking_stage_cost(m.stage)
     drto.initial_condition(m.init)
     pyo.TransformationFactory(SS).apply_to(m)
-    # the quasi-static form: the derivative term is gone
-    assert "dzdt" not in str(m.w_def.expr)
+    # the equation keeps its form; its derivative is fixed at zero, so it is
+    # the quasi-static relation without the expression being rewritten
+    assert "dzdt" in str(m.w_def.expr)
+    assert m.dzdt.fixed and pyo.value(m.dzdt) == 0
     assert not m.w_def.is_indexed()
 
 
