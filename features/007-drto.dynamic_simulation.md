@@ -29,13 +29,30 @@ validation runs rely on.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.dynamic_simulation')` requires `horizon`,
-  `state`, `dynamics`, and `control`, and
-  errors clearly if any is missing.
-- The declared controls are fixed, so the mode frees nothing and solves the
-  model as declared over the horizon. A control-profile option sets the values
-  they are fixed to: a supplied constant, held across the horizon, or a supplied
-  profile over the time set. With nothing supplied, the controls stay at the
-  values the control variables are already initialized to on the model.
+  `state`, `dynamics`, `control`, and `initial_condition`, and errors clearly
+  if any is missing. A forward integration needs the initial state pinned, or
+  the horizon problem is not square.
+- The declared control profiles are applied first (`drto.parameterize`,
+  feature 017), so the simulated input takes the shape the model declared. The
+  user chooses that shape at declaration time through `control(profile=...)`.
+- The parameterized controls are then fixed, so the mode frees nothing and
+  solves the model as declared over the horizon. A `controls` option sets the
+  values they are fixed at: a constant, held across the horizon, or one value
+  per free point the applied profile leaves. With nothing supplied a control
+  is fixed at the value it already holds, and a control holding no value
+  errors rather than fixing at nothing.
+- A simulation carries no cost: the declared stage and terminal cost equations
+  leave the model and their records are purged, as in
+  `drto.steady_state_simulation` (feature 008). Their cost variables are left
+  unused.
+- The estimation-category declarations (feature 018) are neutralized exactly
+  as in `drto.dynamic_optimization` (feature 006), through the same shared
+  routine so the two modes cannot drift apart: the estimation costs and the
+  measurement Params are deleted and purged, a disturbance is eliminated by
+  substituting zero behind the additivity guard, and an estimated parameter is
+  fixed at the value it holds and keeps its record. This also protects the
+  squareness the mode promises, since a free disturbance would leave the
+  system underdetermined.
 - The objective is zero: the transform calls `drto.build_objective` (feature
   003) with the option for a simulation, which installs a constant-zero
   `Objective` and gives an NLP solver a well-posed square problem for the
