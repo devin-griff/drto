@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.dynamic_simulation` (feature 007): the dynamic simulation mode. It
+  frees nothing, so the solver is handed the square forward integration of the
+  declared model over the horizon. The declared control profiles are applied
+  first, so the simulated input takes the shape the model declared, then the
+  parameterized controls are fixed. The `controls` option sets what they are
+  fixed at, a constant held across the horizon or one value per free point the
+  profile leaves; a control not named there holds the value it already has,
+  and one holding no value errors rather than being fixed at nothing. A
+  simulation carries no cost, so the declared stage and terminal cost
+  equations leave the model as in `drto.steady_state_simulation`, and
+  `build_objective` installs the constant-zero objective. `initial_condition`
+  is required: a forward integration is not square without the initial state
+  pinned. The estimation-category declarations are neutralized through the
+  routine shared with `drto.dynamic_optimization`, which also protects that
+  squareness, since a free disturbance would leave the system underdetermined.
+
 - `drto.dynamic_optimization` (feature 006): the dynamic optimization mode,
   NMPC and D-RTO. It assembles the horizon optimization from the
   declarations, so on a discretized model it replaces the

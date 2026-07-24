@@ -140,4 +140,27 @@ the measurement Params are deleted. A disturbance is eliminated by
 substituting zero, which removes it only where it enters additively, so one
 inside a nonlinear term errors rather than being silently zeroed. An estimated
 parameter is fixed at the value it holds and keeps its record, since it stays
-a live coefficient in the equations the controller solves.
+a live coefficient in the equations the controller solves. `drto.dynamic_simulation`
+runs the same routine, so the two modes cannot drift apart.
+
+## Dynamic simulation: `drto.dynamic_simulation`
+
+The dual of the mode above: it frees nothing and integrates the declared model
+forward over the horizon. It requires the same declarations, including
+`initial_condition`, because a forward integration is not square without the
+initial state pinned.
+
+The declared profiles are applied first, so the simulated input takes the shape
+the model declared and the user picks that shape at declaration time through
+`control(profile=...)`. The parameterized controls are then fixed. The
+`controls` option sets what they are fixed at, either a constant held across
+the horizon or one value per free point the profile leaves, and a control not
+named there is fixed at the value it already holds. A control holding no value
+errors rather than being fixed at nothing.
+
+A simulation carries no cost, so the declared stage and terminal cost equations
+leave the model as they do in the steady-state simulation, and
+`build_objective` installs the constant-zero objective. The estimation
+declarations are neutralized by the same routine the optimization mode uses,
+which also protects squareness here, since a free disturbance would leave the
+system underdetermined.

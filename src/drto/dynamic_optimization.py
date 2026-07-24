@@ -9,12 +9,8 @@ kept; this is the dynamic mode, not a reduction.
 
 The estimation-category declarations (feature 018) are neutralized first, so a
 model that also carries the estimation problem still yields a clean control
-problem. The registry mirrors the model throughout: a component that leaves
-the model has its record purged, one that stays keeps its record. The
-estimation costs and the measurement Params are deleted, a disturbance is
-eliminated by substituting zero, and an estimated parameter is fixed at its
-current value and keeps its record, since it stays a live coefficient in the
-equations the controller solves.
+problem. That routine is shared with ``drto.dynamic_simulation`` (feature 007);
+see ``_neutralize_estimation``.
 
 ``drto.infinite_horizon`` (feature 004) applies before this transform: the
 objective is assembled here as the final step, so the tail's cost group must
@@ -57,9 +53,114 @@ def _members(comp):
     return comp.values() if comp.is_indexed() else (comp,)
 
 
+def _eliminate_disturbances(model, reg, fn):
+    """Substitute zero for the declared disturbances and delete them.
+
+    Elimination by substitution, as the steady-state reduction does for
+    derivatives: no vestigial fixed-at-zero variables. Substituting zero
+    removes the noise only where it enters additively, so a disturbance inside
+    a nonlinear term errors rather than silently zeroing that term.
+    """
+    comps = reg.components("disturbance")
+    if not comps:
+        return 0
+    noise, submap = ComponentSet(), {}
+    for comp in comps:
+        for vd in _members(comp):
+            noise.add(vd)
+            submap[id(vd)] = 0
+
+    for con in model.component_objects(Constraint, active=True):
+        for cd in _members(con):
+            present = [
+                v for v in identify_variables(cd.body, include_fixed=True) if v in noise
+            ]
+            if not present:
+                continue
+            repn = generate_standard_repn(cd.body)
+            nonlinear = ComponentSet(repn.nonlinear_vars or ())
+            for pair in repn.quadratic_vars or ():
+                nonlinear.update(pair)
+            offenders = [v for v in present if v in nonlinear]
+            if offenders:
+                raise ValueError(
+                    f"drto: {fn} eliminates a disturbance by substituting "
+                    f"zero, which removes it only where it enters additively, "
+                    f"but '{offenders[0].name}' appears nonlinearly in "
+                    f"'{cd.name}'."
+                )
+            cd.set_value(replace_expressions(cd.expr, submap))
+    for obj in model.component_data_objects(Objective, active=True):
+        obj.set_value(replace_expressions(obj.expr, submap))
+    for e in model.component_data_objects(Expression, active=True):
+        e.set_value(replace_expressions(e.expr, submap))
+
+    for comp in comps:
+        comp.parent_block().del_component(comp)
+    reg._declarations.pop("disturbance", None)
+    return len(noise)
+
+
+def _fix_estimated_parameters(reg, fn):
+    """Fix the declared estimated parameters at the values they hold.
+
+    The parameter is known to a control-side mode: its current value is the
+    estimate. The Var stays in the equations, so its record stays too.
+    """
+    pinned = []
+    for comp in reg.components("estimated_parameter"):
+        for vd in _members(comp):
+            if vd.value is None:
+                raise ValueError(
+                    f"drto: {fn} fixes the estimated parameter "
+                    f"'{comp.name}' at the value it holds, but it has none; "
+                    f"initialize it first."
+                )
+            vd.fix()
+        pinned.append(comp.name)
+    return pinned
+
+
+def _neutralize_estimation(model, reg, fn):
+    """Neutralize the estimation declarations for a control-side mode.
+
+    Shared by ``drto.dynamic_optimization`` (feature 006) and
+    ``drto.dynamic_simulation`` (feature 007) so the two cannot drift apart.
+    The registry mirrors the model: a component that leaves has its record
+    purged, one that stays keeps its record. The estimation costs and the
+    measurement Params are deleted, a disturbance is eliminated by
+    substitution, and an estimated parameter is fixed and keeps its record,
+    since it stays a live coefficient in the equations. Returns the outcome
+    fields for the transformation log.
+    """
+    removed = []
+    for kind in _REMOVED_ESTIMATION_KINDS:
+        for record in reg.declarations(kind):
+            comp = record["component"]
+            if comp.parent_block() is not None:
+                comp.parent_block().del_component(comp)
+        if reg.has_declaration(kind):
+            removed.append(kind.replace("_", " "))
+        # same-package registry surgery: the records describe components that
+        # no longer exist on the control-side model
+        reg._declarations.pop(kind, None)
+
+    n_noise = _eliminate_disturbances(model, reg, fn)
+    pinned = _fix_estimated_parameters(reg, fn)
+
+    outcome = {}
+    if removed:
+        outcome["removed"] = ", ".join(removed)
+    if n_noise:
+        outcome["disturbances"] = f"{n_noise} references replaced by zero"
+    if pinned:
+        outcome["fixed"] = ", ".join(pinned)
+    return outcome
+
+
 @TransformationFactory.register(
     "drto.dynamic_optimization",
-    doc="Assemble the dynamic optimization problem from the declarations " "(drto).",
+    doc="Assemble the dynamic optimization problem from the declarations (drto).",
 )
 class DynamicOptimizationTransformation(Transformation):
     """The dynamic optimization mode; see the module docstring.
@@ -98,23 +199,7 @@ class DynamicOptimizationTransformation(Transformation):
                 "tracking_stage_cost or economic_stage_cost."
             )
 
-        # --- the estimation declarations are neutralized -----------------
-        # the cost equations and the measurements leave the model; their cost
-        # variables are left unused, as in the steady-state simulation
-        removed = []
-        for kind in _REMOVED_ESTIMATION_KINDS:
-            for record in reg.declarations(kind):
-                comp = record["component"]
-                if comp.parent_block() is not None:
-                    comp.parent_block().del_component(comp)
-            if reg.has_declaration(kind):
-                removed.append(kind.replace("_", " "))
-            # same-package registry surgery: the records describe components
-            # that no longer exist on the control model
-            reg._declarations.pop(kind, None)
-
-        n_noise = self._eliminate_disturbances(model, reg)
-        pinned = self._fix_estimated_parameters(reg)
+        outcome = _neutralize_estimation(model, reg, "dynamic_optimization")
 
         # --- the tracking weight, when both cost kinds are declared -------
         # build_objective reads it off the group's record
@@ -133,80 +218,6 @@ class DynamicOptimizationTransformation(Transformation):
             tracking_weight=(
                 weighted if weighted is not None else "(one stage cost declared)"
             ),
-            **({"removed": ", ".join(removed)} if removed else {}),
-            **(
-                {"disturbances": f"{n_noise} references replaced by zero"}
-                if n_noise
-                else {}
-            ),
-            **({"fixed": ", ".join(pinned)} if pinned else {}),
+            **outcome,
         )
         return model
-
-    def _eliminate_disturbances(self, model, reg):
-        """Substitute zero for the declared disturbances and delete them.
-
-        Elimination by substitution, as the steady-state reduction does for
-        derivatives: no vestigial fixed-at-zero variables. Substituting zero
-        removes the noise only where it enters additively, so a disturbance
-        inside a nonlinear term errors rather than silently zeroing that term.
-        """
-        comps = reg.components("disturbance")
-        if not comps:
-            return 0
-        noise, submap = ComponentSet(), {}
-        for comp in comps:
-            for vd in _members(comp):
-                noise.add(vd)
-                submap[id(vd)] = 0
-
-        for con in model.component_objects(Constraint, active=True):
-            for cd in _members(con):
-                present = [
-                    v
-                    for v in identify_variables(cd.body, include_fixed=True)
-                    if v in noise
-                ]
-                if not present:
-                    continue
-                repn = generate_standard_repn(cd.body)
-                nonlinear = ComponentSet(repn.nonlinear_vars or ())
-                for pair in repn.quadratic_vars or ():
-                    nonlinear.update(pair)
-                offenders = [v for v in present if v in nonlinear]
-                if offenders:
-                    raise ValueError(
-                        f"drto: dynamic_optimization eliminates a disturbance "
-                        f"by substituting zero, which removes it only where it "
-                        f"enters additively, but '{offenders[0].name}' appears "
-                        f"nonlinearly in '{cd.name}'."
-                    )
-                cd.set_value(replace_expressions(cd.expr, submap))
-        for obj in model.component_data_objects(Objective, active=True):
-            obj.set_value(replace_expressions(obj.expr, submap))
-        for e in model.component_data_objects(Expression, active=True):
-            e.set_value(replace_expressions(e.expr, submap))
-
-        for comp in comps:
-            comp.parent_block().del_component(comp)
-        reg._declarations.pop("disturbance", None)
-        return len(noise)
-
-    def _fix_estimated_parameters(self, reg):
-        """Fix the declared estimated parameters at the values they hold.
-
-        The parameter is known to the controller: its current value is the
-        estimate. The Var stays in the equations, so its record stays too.
-        """
-        pinned = []
-        for comp in reg.components("estimated_parameter"):
-            for vd in _members(comp):
-                if vd.value is None:
-                    raise ValueError(
-                        f"drto: dynamic_optimization fixes the estimated "
-                        f"parameter '{comp.name}' at the value it holds, but "
-                        f"it has none; initialize it first."
-                    )
-                vd.fix()
-            pinned.append(comp.name)
-        return pinned
