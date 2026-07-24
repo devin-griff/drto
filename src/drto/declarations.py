@@ -448,26 +448,40 @@ def control(*components, profile="piecewise_constant"):
 
 
 def _register_stage_cost(kind, component, fn):
-    """Validate and record a stage cost (attached and constructed)."""
+    """Validate and record a stage cost (attached and constructed).
+
+    With a horizon declared the cost is per sample, indexed over the sample
+    grid minus the final point. On a model with no declared horizon (a
+    steady-state model) there is no grid to index over, so the cost is a
+    scalar Constraint: the single-point shape the steady modes assemble and
+    the one the steady-state reduction produces from a per-sample cost.
+    """
     reg = info(component.model())
-    time = _declared_horizon(reg, fn)
-    if any(s is time for s in component.index_set().subsets()):
+    if reg.has_declaration("horizon"):
+        time = _declared_horizon(reg, fn)
+        if any(s is time for s in component.index_set().subsets()):
+            raise ValueError(
+                f"drto: {fn}: '{component.name}' is indexed by the time set "
+                f"'{time.name}': discretization expands such a family to every "
+                f"collocation point, dragging the cost off the sample grid. "
+                f"Index it over the samples, for example "
+                f"@m.Constraint(sorted(m.t)[:-1])."
+            )
+        samples = reg.declarations("horizon")[0]["samples"]
+        expected = list(samples[:-1])
+        members = sorted(component.keys()) if component.is_indexed() else []
+        if members != expected:
+            raise ValueError(
+                f"drto: {fn}: '{component.name}' must have one member per "
+                f"sample point except the final one, where only the terminal "
+                f"cost applies: index it over the samples, for example "
+                f"@m.Constraint(sorted(m.t)[:-1])."
+            )
+    elif component.is_indexed():
         raise ValueError(
-            f"drto: {fn}: '{component.name}' is indexed by the time set "
-            f"'{time.name}': discretization expands such a family to every "
-            f"collocation point, dragging the cost off the sample grid. "
-            f"Index it over the samples, for example "
-            f"@m.Constraint(sorted(m.t)[:-1])."
-        )
-    samples = reg.declarations("horizon")[0]["samples"]
-    expected = list(samples[:-1])
-    members = sorted(component.keys()) if component.is_indexed() else []
-    if members != expected:
-        raise ValueError(
-            f"drto: {fn}: '{component.name}' must have one member per sample "
-            f"point except the final one, where only the terminal cost "
-            f"applies: index it over the samples, for example "
-            f"@m.Constraint(sorted(m.t)[:-1])."
+            f"drto: {fn}: '{component.name}' is indexed, but no horizon is "
+            f"declared. A steady-state model's cost is a single point: "
+            f"declare a scalar Constraint."
         )
     for cd in _members(component):
         _side_matching(
