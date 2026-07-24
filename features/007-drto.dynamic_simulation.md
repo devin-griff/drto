@@ -1,6 +1,6 @@
 # drto.dynamic_simulation
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
@@ -41,9 +41,11 @@ validation runs rely on.
   per free point the applied profile leaves. With nothing supplied a control
   is fixed at the value it already holds, and a control holding no value
   errors rather than fixing at nothing.
-- A simulation carries no cost: the declared stage and terminal cost equations
-  leave the model and their records are purged, as in
-  `drto.steady_state_simulation` (feature 008). Their cost variables are left
+- A simulation carries no cost and no terminal set: the declared stage costs,
+  terminal cost, and terminal constraint leave the model and their records are
+  purged, as in `drto.steady_state_simulation` (feature 008), through the
+  routine both simulation modes share. A terminal constraint would
+  over-constrain the square forward integration. The cost variables are left
   unused.
 - The estimation-category declarations (feature 018) are neutralized exactly
   as in `drto.dynamic_optimization` (feature 006), through the same shared
