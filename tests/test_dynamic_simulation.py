@@ -5,7 +5,7 @@ import pyomo.environ as pyo
 import pytest
 
 import drto
-from test_declarations import base_model
+from test_declarations import base_model, declared_model
 from test_dynamic_optimization import estimation_model
 from test_infinite_horizon import ready_model
 
@@ -85,6 +85,37 @@ def test_costs_leave_the_model():
     pyo.TransformationFactory(DS).apply_to(m)
     assert m.component("stage") is None
     assert not drto.info(m).has_declaration("tracking_stage_cost")
+
+
+def test_terminal_constraint_is_shed():
+    # a terminal constraint is an optimization construct: a simulation would be
+    # over-constrained by it
+    m = declared_model()
+
+    @m.Constraint()
+    def term_set(m):
+        return m.z[m.t.last()] <= 1
+
+    drto.terminal_constraint(m.term_set)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    for vd in m.u.values():
+        vd.set_value(0.5)
+    pyo.TransformationFactory(DS).apply_to(m)
+    assert m.component("term_set") is None
+    assert not drto.info(m).has_declaration("terminal_constraint")
+
+
+def test_steady_state_records_are_kept():
+    # the target Params stay on the model (they may appear in a deviation-form
+    # model's equations), so their records stay with them
+    m = sim_model()
+    pyo.TransformationFactory(DS).apply_to(m)
+    reg = drto.info(m)
+    assert reg.has_declaration("steady_state")
+    assert reg.has_declaration("steady_state_control")
+    assert m.component("z_ss") is not None
 
 
 def test_horizon_is_kept():

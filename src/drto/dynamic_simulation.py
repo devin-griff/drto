@@ -29,8 +29,35 @@ from drto.objective import build_objective
 #: initial state pinned, or the horizon problem is not square.
 _REQUIRED = ("horizon", "state", "dynamics", "control", "initial_condition")
 
-#: The cost kinds a simulation carries no use for.
-_COST_KINDS = ("tracking_stage_cost", "economic_stage_cost", "tracking_terminal_cost")
+#: The optimization-only constructs a simulation sheds: it carries no cost, and
+#: a terminal constraint would over-constrain the square forward integration.
+#: Shared with ``drto.steady_state_simulation`` (feature 008) through
+#: ``_shed_optimization_constructs`` so the two modes cannot diverge.
+_SIMULATION_SHED = (
+    "tracking_stage_cost",
+    "economic_stage_cost",
+    "tracking_terminal_cost",
+    "terminal_constraint",
+)
+
+
+def _shed_optimization_constructs(reg):
+    """Delete the optimization-only cost and constraint declarations.
+
+    The stage costs, the terminal cost, and the terminal constraint leave the
+    model and their records are purged; the cost variables are left unused.
+    Returns the dropped display names for the transformation log.
+    """
+    dropped = []
+    for kind in _SIMULATION_SHED:
+        for record in reg.declarations(kind):
+            comp = record["component"]
+            if comp.parent_block() is not None:
+                comp.parent_block().del_component(comp)
+        if reg.has_declaration(kind):
+            dropped.append(kind.replace("_", " "))
+        reg._declarations.pop(kind, None)
+    return dropped
 
 
 @TransformationFactory.register(
@@ -74,18 +101,9 @@ class DynamicSimulationTransformation(Transformation):
                 f"{', '.join(_REQUIRED)}; missing: {', '.join(missing)}."
             )
 
-        # a simulation carries no cost: the cost equations leave the model and
-        # their cost variables are left unused, as in the steady-state
-        # simulation
-        dropped = []
-        for kind in _COST_KINDS:
-            for record in reg.declarations(kind):
-                comp = record["component"]
-                if comp.parent_block() is not None:
-                    comp.parent_block().del_component(comp)
-            if reg.has_declaration(kind):
-                dropped.append(kind.replace("_", " "))
-            reg._declarations.pop(kind, None)
+        # a simulation carries no cost and no terminal set: the cost equations
+        # and the terminal constraint leave the model
+        dropped = _shed_optimization_constructs(reg)
 
         outcome = _neutralize_estimation(model, reg, "dynamic_simulation")
 

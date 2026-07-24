@@ -158,9 +158,10 @@ the horizon or one value per free point the profile leaves, and a control not
 named there is fixed at the value it already holds. A control holding no value
 errors rather than being fixed at nothing.
 
-A simulation carries no cost, so the declared stage and terminal cost equations
-leave the model as they do in the steady-state simulation, and
-`build_objective` installs the constant-zero objective. The estimation
+A simulation carries no cost and no terminal set, so the declared stage costs,
+the terminal cost, and the terminal constraint leave the model as they do in
+the steady-state simulation, and `build_objective` installs the constant-zero
+objective. The estimation
 declarations are neutralized by the same routine the optimization mode uses,
 which also protects squareness here, since a free disturbance would leave the
 system underdetermined.

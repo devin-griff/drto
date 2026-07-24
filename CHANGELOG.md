@@ -16,9 +16,10 @@ All notable changes to this project are documented here. The format is based on
   fixed at, a constant held across the horizon or one value per free point the
   profile leaves; a control not named there holds the value it already has,
   and one holding no value errors rather than being fixed at nothing. A
-  simulation carries no cost, so the declared stage and terminal cost
-  equations leave the model as in `drto.steady_state_simulation`, and
-  `build_objective` installs the constant-zero objective. `initial_condition`
+  simulation carries no cost and no terminal set, so the declared stage costs,
+  terminal cost, and terminal constraint leave the model as in
+  `drto.steady_state_simulation`, and `build_objective` installs the
+  constant-zero objective. `initial_condition`
   is required: a forward integration is not square without the initial state
   pinned. The estimation-category declarations are neutralized through the
   routine shared with `drto.dynamic_optimization`, which also protects that
