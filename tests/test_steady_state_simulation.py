@@ -109,13 +109,24 @@ def test_estimation_declarations_are_neutralized():
     m = estimation_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(m)
     reg = drto.info(m)
-    for kind in ("estimation_stage_cost", "arrival_cost", "measurement", "disturbance"):
+    for kind in ("estimation_stage_cost", "arrival_cost", "measurement"):
         assert not reg.has_declaration(kind), kind
-    assert m.component("w") is None
     assert m.component("y_meas") is None
+    # the disturbance is kept, collapsed to a single point and fixed at zero
+    assert reg.has_declaration("disturbance")
+    assert m.w.fixed and pyo.value(m.w) == 0
     # the estimated parameter stays a live coefficient, so it keeps its record
     assert reg.has_declaration("estimated_parameter")
     assert m.k.fixed
+
+
+def test_disturbance_realization_is_a_standing_value():
+    # the equilibrium under a persistent disturbance: a single constant offset
+    m = estimation_model()
+    pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
+        m, disturbances={"w": 0.1}
+    )
+    assert m.w.fixed and pyo.value(m.w) == 0.1
 
 
 def test_unknown_control_errors():

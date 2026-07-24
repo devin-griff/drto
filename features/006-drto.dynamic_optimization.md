@@ -65,17 +65,15 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
   `estimation_terminal_cost`, `arrival_cost`) and the `measurement` Params are
   deleted and their records purged, since nothing in a control problem reads
   them and a measurement is reachable only from those costs (`h(z)` is written
-  inline in the cost). A `disturbance` is eliminated by substitution: every
-  reference to it is replaced by zero, the Var is deleted, and its record is
-  purged. An `estimated_parameter` is fixed at its current value and keeps its
-  record, since it stays a live coefficient in the equations the controller
-  solves and that value is the estimate the controller should use.
-- Eliminating a disturbance assumes it enters additively. The transform checks
-  that each constraint body is linear in the disturbance Var and errors naming
-  it otherwise, rather than silently zeroing a term that is not additive.
-  `drto.disturbance` deliberately does not constrain how the noise enters the
-  model (feature 018), so this is the transform's assumption, not the
-  declaration's.
+  inline in the cost). A `disturbance` is fixed at zero and keeps its record:
+  the controller predicts on its own model with the process noise off. It is
+  fixed, not eliminated, so the "noise enters here" structure stays in the
+  model and the fixing works however the noise enters the equations, additive
+  or not; the solver folds a fixed Var in as a constant, so the NLP is
+  identical to substituting zero. An `estimated_parameter` is fixed at its
+  current value and keeps its record, since it stays a live coefficient in the
+  equations the controller solves and that value is the estimate the
+  controller should use.
 - The transform keeps the time horizon and does not reduce the model to steady
   state.
 - It works through both `apply_to` (in place) and `create_using` (a transformed

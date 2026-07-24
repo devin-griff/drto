@@ -7,26 +7,18 @@ controls are the free decisions, parameterized over the time set by their
 declared profiles, and the objective is the live cost terms. The horizon is
 kept; this is the dynamic mode, not a reduction.
 
-The estimation-category declarations (feature 018) are neutralized first, so a
-model that also carries the estimation problem still yields a clean control
-problem. That routine is shared with ``drto.dynamic_simulation`` (feature 007);
-see ``_neutralize_estimation``.
+A model that also carries the estimation declarations (feature 018) still
+yields a clean control problem: the estimation costs and measurements are
+dropped and any estimated parameter fixed (``_neutralize_estimation``, shared
+by the four control-side modes), and the disturbances are fixed at zero
+(``_fix_disturbances``), the process noise off in the controller's own model.
 
 ``drto.infinite_horizon`` (feature 004) applies before this transform: the
 objective is assembled here as the final step, so the tail's cost group must
 be registered by then.
 """
-from pyomo.common.collections import ComponentSet
 from pyomo.common.config import ConfigDict, ConfigValue
-from pyomo.core import (
-    Constraint,
-    Expression,
-    Objective,
-    Transformation,
-    TransformationFactory,
-)
-from pyomo.core.expr import identify_variables, replace_expressions
-from pyomo.repn import generate_standard_repn
+from pyomo.core import Transformation, TransformationFactory
 
 from drto.info import info
 from drto.objective import build_objective
@@ -53,52 +45,53 @@ def _members(comp):
     return comp.values() if comp.is_indexed() else (comp,)
 
 
-def _eliminate_disturbances(model, reg, fn):
-    """Substitute zero for the declared disturbances and delete them.
+def _spread(val, n_free, name, fn):
+    """Return ``n_free`` values from a constant or a per-point sequence."""
+    if isinstance(val, (list, tuple)):
+        if len(val) != n_free:
+            raise ValueError(
+                f"drto: {fn} got {len(val)} values for '{name}', which has "
+                f"{n_free} free points after its profile is applied; pass a "
+                f"constant or one value each."
+            )
+        return list(val)
+    return [val] * n_free
 
-    Elimination by substitution, as the steady-state reduction does for
-    derivatives: no vestigial fixed-at-zero variables. Substituting zero
-    removes the noise only where it enters additively, so a disturbance inside
-    a nonlinear term errors rather than silently zeroing that term.
+
+def _fix_disturbances(reg, requested, fn):
+    """Fix the declared disturbances at their realization, defaulting to zero.
+
+    A disturbance is a declared Var like a control: the simulations fix it at a
+    supplied realization, the optimizations fix it at zero, and the estimation
+    modes leave it free. It is never eliminated, so the "noise enters here"
+    structure stays in the model, and fixing (unlike substituting zero) works
+    however the noise enters the equations. With a piecewise-constant profile
+    the free per-element values are fixed and the profile's dependent copies
+    follow; on a reduced model it is a single point. Resolution is by name,
+    since parameterizing and reducing both replace the component. Returns the
+    fixed display names.
     """
-    comps = reg.components("disturbance")
-    if not comps:
-        return 0
-    noise, submap = ComponentSet(), {}
-    for comp in comps:
-        for vd in _members(comp):
-            noise.add(vd)
-            submap[id(vd)] = 0
+    declared = {c.name: c for c in reg.components("disturbance")}
+    wanted = {}
+    for key, val in (requested or {}).items():
+        name = key if isinstance(key, str) else key.name
+        if name not in declared:
+            raise ValueError(
+                f"drto: {fn} got a disturbance realization for '{name}', "
+                f"which is not a declared disturbance; declared: "
+                f"{', '.join(declared) or '(none)'}."
+            )
+        wanted[name] = val
 
-    for con in model.component_objects(Constraint, active=True):
-        for cd in _members(con):
-            present = [
-                v for v in identify_variables(cd.body, include_fixed=True) if v in noise
-            ]
-            if not present:
-                continue
-            repn = generate_standard_repn(cd.body)
-            nonlinear = ComponentSet(repn.nonlinear_vars or ())
-            for pair in repn.quadratic_vars or ():
-                nonlinear.update(pair)
-            offenders = [v for v in present if v in nonlinear]
-            if offenders:
-                raise ValueError(
-                    f"drto: {fn} eliminates a disturbance by substituting "
-                    f"zero, which removes it only where it enters additively, "
-                    f"but '{offenders[0].name}' appears nonlinearly in "
-                    f"'{cd.name}'."
-                )
-            cd.set_value(replace_expressions(cd.expr, submap))
-    for obj in model.component_data_objects(Objective, active=True):
-        obj.set_value(replace_expressions(obj.expr, submap))
-    for e in model.component_data_objects(Expression, active=True):
-        e.set_value(replace_expressions(e.expr, submap))
-
-    for comp in comps:
-        comp.parent_block().del_component(comp)
-    reg._declarations.pop("disturbance", None)
-    return len(noise)
+    fixed = []
+    for name, comp in declared.items():
+        members = list(_members(comp))
+        values = _spread(wanted.get(name, 0.0), len(members), name, fn)
+        for vd, v in zip(members, values):
+            vd.set_value(v)
+            vd.fix()
+        fixed.append(f"{name}={wanted[name]}" if name in wanted else f"{name}=0")
+    return fixed
 
 
 def _fix_estimated_parameters(reg, fn):
@@ -121,17 +114,17 @@ def _fix_estimated_parameters(reg, fn):
     return pinned
 
 
-def _neutralize_estimation(model, reg, fn):
-    """Neutralize the estimation declarations for a control-side mode.
+def _neutralize_estimation(reg, fn):
+    """Neutralize the estimation costs for a control-side mode.
 
-    Shared by ``drto.dynamic_optimization`` (feature 006) and
-    ``drto.dynamic_simulation`` (feature 007) so the two cannot drift apart.
-    The registry mirrors the model: a component that leaves has its record
-    purged, one that stays keeps its record. The estimation costs and the
-    measurement Params are deleted, a disturbance is eliminated by
-    substitution, and an estimated parameter is fixed and keeps its record,
-    since it stays a live coefficient in the equations. Returns the outcome
-    fields for the transformation log.
+    Shared by the four control-side modes so they cannot drift apart. The
+    registry mirrors the model: a component that leaves has its record purged,
+    one that stays keeps its record. The estimation costs and the measurement
+    Params are deleted, and an estimated parameter is fixed and keeps its
+    record, since it stays a live coefficient in the equations. The disturbance
+    is not touched here; each mode fixes it at its own value afterward (see
+    ``_fix_disturbances``). Returns the outcome fields for the transformation
+    log.
     """
     removed = []
     for kind in _REMOVED_ESTIMATION_KINDS:
@@ -145,14 +138,11 @@ def _neutralize_estimation(model, reg, fn):
         # no longer exist on the control-side model
         reg._declarations.pop(kind, None)
 
-    n_noise = _eliminate_disturbances(model, reg, fn)
     pinned = _fix_estimated_parameters(reg, fn)
 
     outcome = {}
     if removed:
         outcome["removed"] = ", ".join(removed)
-    if n_noise:
-        outcome["disturbances"] = f"{n_noise} references replaced by zero"
     if pinned:
         outcome["fixed"] = ", ".join(pinned)
     return outcome
@@ -199,7 +189,7 @@ class DynamicOptimizationTransformation(Transformation):
                 "tracking_stage_cost or economic_stage_cost."
             )
 
-        outcome = _neutralize_estimation(model, reg, "dynamic_optimization")
+        outcome = _neutralize_estimation(reg, "dynamic_optimization")
 
         # --- the tracking weight, when both cost kinds are declared -------
         # build_objective reads it off the group's record
@@ -210,6 +200,10 @@ class DynamicOptimizationTransformation(Transformation):
             weighted = config.tracking_weight
 
         TransformationFactory("drto.parameterize").apply_to(model)
+        # the controller predicts on its own model with the process noise off,
+        # fixed at zero after parameterization exposes the free per-element
+        # values
+        noise = _fix_disturbances(reg, {}, "dynamic_optimization")
         build_objective(model)
 
         reg.record_transformation(
@@ -218,6 +212,7 @@ class DynamicOptimizationTransformation(Transformation):
             tracking_weight=(
                 weighted if weighted is not None else "(one stage cost declared)"
             ),
+            **({"disturbances": ", ".join(noise)} if noise else {}),
             **outcome,
         )
         return model

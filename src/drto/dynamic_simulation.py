@@ -14,14 +14,20 @@ time through ``control(profile=...)``.
 
 A simulation carries no cost, so the declared stage and terminal cost
 equations leave the model, as in ``drto.steady_state_simulation`` (feature
-008). The estimation-category declarations are neutralized through the routine
-shared with ``drto.dynamic_optimization`` (feature 006), which also protects
-squareness: a free disturbance would leave the system underdetermined.
+008). The estimation costs and measurements are neutralized through the routine
+shared with the other control-side modes, and each disturbance is fixed at its
+realization (default zero), the same way the controls are fixed, so the plant
+can be driven by a supplied noise sequence and the system stays square.
 """
 from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
-from drto.dynamic_optimization import _members, _neutralize_estimation
+from drto.dynamic_optimization import (
+    _fix_disturbances,
+    _members,
+    _neutralize_estimation,
+    _spread,
+)
 from drto.info import info
 from drto.objective import build_objective
 
@@ -71,7 +77,9 @@ class DynamicSimulationTransformation(Transformation):
     Options: ``controls`` maps a declared control (the component, or its name)
     to what it is fixed at, either a constant held across the horizon or one
     value per free point the applied profile leaves. Controls not in the
-    mapping fix at the values they already hold. Components from the source
+    mapping fix at the values they already hold. ``disturbances`` maps a
+    declared disturbance the same way, the plant's realized noise; a
+    disturbance not in the mapping is fixed at zero. Components from the source
     model resolve by name, so ``create_using(m, controls={m.u: 0.3})`` works on
     the clone.
 
@@ -90,6 +98,16 @@ class DynamicSimulationTransformation(Transformation):
             "the mapping fix at the values they already hold.",
         ),
     )
+    CONFIG.declare(
+        "disturbances",
+        ConfigValue(
+            default=None,
+            description="Mapping of declared disturbance (component or name) to "
+            "its realization: a constant held across the horizon, or one value "
+            "per free point of the applied profile. A disturbance not in the "
+            "mapping is fixed at zero.",
+        ),
+    )
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
@@ -105,18 +123,20 @@ class DynamicSimulationTransformation(Transformation):
         # and the terminal constraint leave the model
         dropped = _shed_optimization_constructs(reg)
 
-        outcome = _neutralize_estimation(model, reg, "dynamic_simulation")
+        outcome = _neutralize_estimation(reg, "dynamic_simulation")
 
         # the declared profiles shape the simulated input, so they are applied
-        # before the controls are fixed
+        # before the controls and disturbances are fixed
         TransformationFactory("drto.parameterize").apply_to(model)
         fixed = self._fix_controls(reg, config.controls or {})
+        noise = _fix_disturbances(reg, config.disturbances or {}, "dynamic_simulation")
 
         build_objective(model, zero=True)
         reg.record_transformation(
             "drto.dynamic_simulation",
             horizon="kept",
             controls=", ".join(fixed) if fixed else "(none declared)",
+            **({"disturbances": ", ".join(noise)} if noise else {}),
             **({"dropped": ", ".join(dropped)} if dropped else {}),
             **outcome,
         )
@@ -146,7 +166,7 @@ class DynamicSimulationTransformation(Transformation):
             members = list(_members(comp))
             if name in wanted:
                 val = wanted[name]
-                values = self._spread(val, len(members), name)
+                values = _spread(val, len(members), name, "dynamic_simulation")
                 for vd, v in zip(members, values):
                     vd.set_value(v)
             for vd in members:
@@ -161,15 +181,3 @@ class DynamicSimulationTransformation(Transformation):
                 f"{name}={wanted[name]}" if name in wanted else f"{name} (held)"
             )
         return fixed
-
-    def _spread(self, val, n_free, name):
-        """Return ``n_free`` values from a constant or a per-point sequence."""
-        if isinstance(val, (list, tuple)):
-            if len(val) != n_free:
-                raise ValueError(
-                    f"drto: dynamic_simulation got {len(val)} values for "
-                    f"'{name}', which has {n_free} free points after its "
-                    f"profile is applied; pass a constant or one value each."
-                )
-            return list(val)
-        return [val] * n_free

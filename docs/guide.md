@@ -136,12 +136,13 @@ A model may carry the estimation declarations too, since one model serves
 every mode. The transform neutralizes them so the control problem carries only
 what it uses, and the registry mirrors the model: a component that leaves has
 its record purged, one that stays keeps its record. The estimation costs and
-the measurement Params are deleted. A disturbance is eliminated by
-substituting zero, which removes it only where it enters additively, so one
-inside a nonlinear term errors rather than being silently zeroed. An estimated
-parameter is fixed at the value it holds and keeps its record, since it stays
-a live coefficient in the equations the controller solves. `drto.dynamic_simulation`
-runs the same routine, so the two modes cannot drift apart.
+the measurement Params are deleted. A disturbance is fixed at zero, the process
+noise off in the controller's own model; it is fixed, not eliminated, so it
+stays in the model and works however the noise enters the equations, and the
+solver folds a fixed Var in as a constant. An estimated parameter is fixed at
+the value it holds and keeps its record, since it stays a live coefficient in
+the equations the controller solves. The three other control-side modes run
+the same routines, so they cannot drift apart.
 
 ## Economic RTO: `drto.steady_state_optimization`
 
@@ -158,10 +159,11 @@ the economic optimum toward a known operating point, the RTO-layer equivalent
 of move suppression. With both cost kinds declared, `tracking_weight` scales
 the tracking side, defaulting to 1, and the economic cost is never scaled.
 
-The estimation declarations are neutralized before the reduction. That matters
-more here than in a simulation: a free disturbance would become a decision
-variable the optimizer exploits to lower the economic cost, so the operating
-point would be optimized against fictitious noise.
+The estimation declarations are neutralized before the reduction, and the
+disturbances are fixed at zero. That matters more here than in a simulation: a
+disturbance left free would be a decision variable the optimizer exploits to
+lower the economic cost, so the operating point would be optimized against
+fictitious noise.
 
 Writing the solution back into the declared steady-state targets is an
 algorithmic step outside the transform, which shapes the model and does
@@ -183,10 +185,15 @@ the horizon or one value per free point the profile leaves, and a control not
 named there is fixed at the value it already holds. A control holding no value
 errors rather than being fixed at nothing.
 
+The disturbances are fixed the same way, at their realized noise. A
+`disturbances` option maps a declared disturbance to a constant or a
+per-free-point sequence, the plant's noise realization, so the mode is the
+plant step of a closed-loop run; a disturbance not named is fixed at zero.
+Because it is fixed rather than eliminated, it stays in the model, the forward
+integration stays square, and any noise form works.
+
 A simulation carries no cost and no terminal set, so the declared stage costs,
 the terminal cost, and the terminal constraint leave the model as they do in
 the steady-state simulation, and `build_objective` installs the constant-zero
-objective. The estimation
-declarations are neutralized by the same routine the optimization mode uses,
-which also protects squareness here, since a free disturbance would leave the
-system underdetermined.
+objective. The estimation costs and measurements are neutralized by the same
+routine the optimization mode uses.

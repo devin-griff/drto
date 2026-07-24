@@ -794,15 +794,18 @@ def estimated_parameter(*components):
     return components[0] if len(components) == 1 else None
 
 
-def disturbance(*components):
-    """Declare one or more process-noise Vars.
+def disturbance(*components, profile="piecewise_constant"):
+    """Declare one or more process-noise Vars and their profile.
 
-    The free variables the estimator adjusts to reconcile the model with the
-    data, penalized by their inverse covariance in the estimation stage cost.
-    How the noise enters the model equations is the user's, not fixed here.
-    Process noise takes no profile and is unrelated to ``control``. Indexed by
-    the declared time set when a horizon is declared. Tags attached Vars or
-    wraps one fresh Var.
+    A disturbance is the estimation-side dual of a control: a Var the
+    estimation frees and a simulation fixes at a realization. The ``profile``
+    (a pyomo-cvp profile) parameterizes it over the declared time set, one
+    value per sample, the same piecewise-constant representation a control
+    takes; process noise is a zero-order hold over a sampling interval, not a
+    value per collocation point. How the noise enters the model equations is
+    the user's, not fixed here. Requires pyomo-cvp installed; on a model with
+    no horizon the disturbance registers without a profile, since there is no
+    time to parameterize over. Tags attached Vars or wraps one fresh Var.
     """
     fn = "disturbance"
     if not components:
@@ -810,6 +813,11 @@ def disturbance(*components):
     for comp in components:
         _container(comp, fn)
         _check_ctype(comp, "Var", fn)
+    if not pyomo_cvp_available:
+        raise RuntimeError(
+            "drto: disturbance requires pyomo-cvp for the profile "
+            "(pip install pyomo-cvp)."
+        )
 
     def register(comps):
         reg = info(comps[0].model())
@@ -822,7 +830,10 @@ def disturbance(*components):
                         f"declared time set '{time.name}'; process noise is a "
                         f"free variable over the window."
                     )
-        _declare_many("disturbance", comps, fn)
+            _declare_many("disturbance", comps, fn, profile=profile)
+            pyomo_cvp.declare_profile(*comps, wrt=time, profile=profile)
+        else:
+            _declare_many("disturbance", comps, fn, profile=profile)
 
     if _wrap_form(components, fn):
         (comp,) = components

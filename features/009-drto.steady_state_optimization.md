@@ -48,11 +48,13 @@ directly as steady-state, so the same declaration surface serves both.
   economic cost is in currency units and is never scaled.
 - The estimation-category declarations (feature 018) are neutralized through
   the routine shared with the other control-side modes: the estimation costs
-  and the measurement Params are deleted, a disturbance is eliminated by
-  substituting zero, and an estimated parameter is fixed at the value it
-  holds and keeps its record. This matters more here than in a simulation: a
-  free disturbance would become a decision variable the optimizer exploits to
-  lower the economic cost, optimizing against fictitious noise.
+  and the measurement Params are deleted, and an estimated parameter is fixed
+  at the value it holds and keeps its record. Each disturbance is fixed at
+  zero, after the reduction collapses it to a point. This matters more here
+  than in a simulation: a disturbance left free would be a decision variable
+  the optimizer exploits to lower the economic cost, optimizing against
+  fictitious noise. Fixing it keeps it in the model without making it a
+  decision.
 - Unlike the simulation modes, the cost equations stay: this mode needs them.
   The terminal constraint and terminal cost need no handling either, since
   the reduction removes both and a steady-authored model cannot have them.

@@ -16,7 +16,7 @@ installs the simulation's constant-zero objective.
 from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
-from drto.dynamic_optimization import _neutralize_estimation
+from drto.dynamic_optimization import _fix_disturbances, _neutralize_estimation
 from drto.dynamic_simulation import _shed_optimization_constructs
 from drto.info import info
 from drto.objective import build_objective
@@ -48,6 +48,15 @@ class SteadyStateSimulationTransformation(Transformation):
             "the value they already hold.",
         ),
     )
+    CONFIG.declare(
+        "disturbances",
+        ConfigValue(
+            default=None,
+            description="Mapping of declared disturbance (component or name) to "
+            "the constant standing value it is fixed at. A disturbance not in "
+            "the mapping is fixed at zero.",
+        ),
+    )
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
@@ -57,11 +66,10 @@ class SteadyStateSimulationTransformation(Transformation):
                 "drto: steady_state_simulation requires declared states "
                 "(drto.state first)."
             )
-        # neutralize the estimation declarations before the reduction: the
-        # reduction collapses the control-side costs, not the window-based
-        # estimation costs, so those must leave the model before it runs, and
-        # a free disturbance would break the square equilibrium solve
-        outcome = _neutralize_estimation(model, reg, "steady_state_simulation")
+        # neutralize the estimation costs before the reduction: it collapses
+        # the control-side costs, not the window-based estimation costs, so
+        # those must leave the model before it runs
+        outcome = _neutralize_estimation(reg, "steady_state_simulation")
 
         if reg.has_declaration("horizon") and reg.has_declaration("dynamics"):
             TransformationFactory("drto.dynamic_to_steady_state").apply_to(model)
@@ -102,10 +110,17 @@ class SteadyStateSimulationTransformation(Transformation):
             shown = requested.get(name)
             fixed.append(f"{name}={shown}" if shown is not None else f"{name} (held)")
 
+        # the reduction collapsed a disturbance to a single point; fix it at
+        # the standing realization, defaulting to zero
+        noise = _fix_disturbances(
+            reg, config.disturbances or {}, "steady_state_simulation"
+        )
+
         build_objective(model, zero=True)
         reg.record_transformation(
             "drto.steady_state_simulation",
             controls=", ".join(fixed) if fixed else "(none declared)",
+            **({"disturbances": ", ".join(noise)} if noise else {}),
             **({"dropped": ", ".join(dropped)} if dropped else {}),
             **outcome,
         )

@@ -57,11 +57,14 @@ used across the modes.
   registry mirrors the model.
 - The estimation-category declarations (feature 018) are neutralized, before
   the reduction, through the routine shared with the dynamic modes: the
-  estimation costs and the measurement Params are deleted, a disturbance is
-  eliminated by substituting zero, and an estimated parameter is fixed at the
-  value it holds and keeps its record. It runs before the reduction, which
-  collapses the control-side costs and not the window-based estimation costs,
-  and it keeps the equilibrium solve square by removing the free disturbance.
+  estimation costs and the measurement Params are deleted, and an estimated
+  parameter is fixed at the value it holds and keeps its record. It runs before
+  the reduction, which collapses the control-side costs and not the
+  window-based estimation costs.
+- Each disturbance is fixed after the reduction collapses it to a single
+  point, at a standing value the `disturbances` option supplies, defaulting to
+  zero: the equilibrium under a persistent disturbance. Fixing keeps the
+  equilibrium solve square and keeps the disturbance in the model.
 - Solving the transformed model gives an equilibrium that satisfies the dynamics
   at rest and the model's algebraic relations.
 - It works through both `apply_to` (in place) and `create_using` (a transformed

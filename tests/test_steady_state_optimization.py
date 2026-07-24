@@ -190,10 +190,13 @@ def test_estimation_declarations_are_neutralized():
     m = econ_model(estimation=True)
     pyo.TransformationFactory(SSO).apply_to(m)
     reg = drto.info(m)
-    for kind in ("estimation_stage_cost", "measurement", "disturbance"):
+    for kind in ("estimation_stage_cost", "measurement"):
         assert not reg.has_declaration(kind), kind
-    assert m.component("w") is None
     assert m.component("y_meas") is None
+    # the disturbance is kept, collapsed to a point and fixed at zero, so it is
+    # not a free decision the optimizer could exploit
+    assert reg.has_declaration("disturbance")
+    assert m.w.fixed and pyo.value(m.w) == 0
     assert reg.has_declaration("estimated_parameter")
     assert m.k.fixed
 
