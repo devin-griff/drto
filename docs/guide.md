@@ -52,6 +52,20 @@ component; the one-of-each declarations error on a second,
 different object. Conventions are read from either side of the written
 equality, so `lhs == rhs` and `rhs == lhs` are equivalent.
 
+The estimation side (feature 018) declares the moving-horizon-estimation
+pieces through the same surface. `estimated_parameter` tags Vars for unknown
+model parameters, constant over the window (so it needs no horizon, and also
+serves steady-state data reconciliation). `disturbance` tags the process-noise
+Vars the estimator adjusts, and `measurement` tags the mutable Params holding
+the window's measured values, the estimation feedback hook. The estimation
+costs are scalar-side equalities like the tracking costs: `estimation_stage_cost`
+over the samples for the measurement residual plus the process-noise penalty,
+`estimation_terminal_cost` for the present-time residual, and `arrival_cost`
+for the soft prior on the initial state, the soft dual of `initial_condition`.
+Same tagging, wrapping, and decorator forms, same registry. These are the
+declaration surface only; the estimation mode transforms that consume them come
+with the moving-horizon-estimation follow-on.
+
 ## Objective assembly: `drto.build_objective`
 
 One routine owns every mode's objective. The bare call assembles the live

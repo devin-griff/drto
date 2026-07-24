@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""The dynamic optimization and simulation declarations (feature 002).
+"""The dynamic optimization, simulation, and estimation declarations
+(features 002 and 018).
 
 Each declaration function tags a Pyomo component, validates that it is of the
 expected type and meets the declaration's convention, and records it in the
@@ -24,12 +25,13 @@ declared by the time it registers, which writing the model top-down
 satisfies.
 
 Arity: the declarations that scale with the states and controls (``state``,
-``control``, ``dynamics``, ``initial_condition``) take varargs when tagging
-and accumulate across calls, rejecting duplicates; the wrapping form takes
-exactly one component, since it is returned for a single assignment. The
-one-of-each declarations (``horizon``, the stage and terminal costs, the
-terminal constraint) take exactly one object and error on a second call with
-a different one. ``steady_state`` and ``steady_state_control`` take one
+``control``, ``dynamics``, ``initial_condition``, and the estimation-side
+``estimated_parameter``, ``disturbance``, ``measurement``) take varargs when
+tagging and accumulate across calls, rejecting duplicates; the wrapping form
+takes exactly one component, since it is returned for a single assignment. The
+one-of-each declarations (``horizon``, the stage, terminal, and arrival costs,
+the terminal constraint) take exactly one object and error on a second call
+with a different one. ``steady_state`` and ``steady_state_control`` take one
 (state or control, target Param) pair per call and accumulate.
 """
 from pyomo.common.dependencies import attempt_import
@@ -515,25 +517,22 @@ def economic_stage_cost(*args, **kwargs):
     )
 
 
-def tracking_terminal_cost(*args, **kwargs):
-    """Declare the terminal tracking cost, a scalar equality.
+def _declare_scalar_cost(kind, args, fn, kwargs, scalar_reason, var_desc):
+    """Declare a scalar-LHS equality cost across the three calling styles.
 
-    One side is the scalar terminal-cost variable; the other defines the
-    cost. One per model. Tags, wraps, or builds as a decorator:
-    ``@drto.tracking_terminal_cost(m)``.
+    Shared by the terminal-form costs, a single scalar equality Constraint
+    whose one side is the scalar cost variable: the tracking terminal cost,
+    and the estimation terminal and arrival costs (feature 018).
     """
-    fn = "tracking_terminal_cost"
 
     def register(component):
         if component.is_indexed():
             raise ValueError(
                 f"drto: {fn}: '{component.name}' must be a scalar Constraint "
-                f"(the terminal cost applies at the final time only)."
+                f"({scalar_reason})."
             )
-        _side_matching(
-            component, _is_var_member, fn, "the scalar terminal-cost variable"
-        )
-        _declare_single("tracking_terminal_cost", component, fn)
+        _side_matching(component, _is_var_member, fn, var_desc)
+        _declare_single(kind, component, fn)
 
     if args and _is_block(args[0]):
         return _constraint_decorator(args[0], args[1:], register, kwargs)
@@ -545,6 +544,23 @@ def tracking_terminal_cost(*args, **kwargs):
         return _defer(component, lambda: register(component), fn)
     register(component)
     return component
+
+
+def tracking_terminal_cost(*args, **kwargs):
+    """Declare the terminal tracking cost, a scalar equality.
+
+    One side is the scalar terminal-cost variable; the other defines the
+    cost. One per model. Tags, wraps, or builds as a decorator:
+    ``@drto.tracking_terminal_cost(m)``.
+    """
+    return _declare_scalar_cost(
+        "tracking_terminal_cost",
+        args,
+        "tracking_terminal_cost",
+        kwargs,
+        "the terminal cost applies at the final time only",
+        "the scalar terminal-cost variable",
+    )
 
 
 def initial_condition(*components, **kwargs):
@@ -722,4 +738,169 @@ def steady_state_control(owner, target):
     """
     return _declare_target(
         "steady_state_control", owner, target, "steady_state_control", "control"
+    )
+
+
+# ----------------------------------------------------------------------
+# the estimation surface (feature 018)
+# ----------------------------------------------------------------------
+def estimated_parameter(*components):
+    """Declare one or more Vars for unknown model parameters to estimate.
+
+    The parameters are constant over the window, so they are not indexed by
+    the declared time set. Shared with the steady-state data-reconciliation
+    mode, so no horizon is required. Tags attached Vars or wraps one fresh Var.
+    """
+    fn = "estimated_parameter"
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
+    for comp in components:
+        _container(comp, fn)
+        _check_ctype(comp, "Var", fn)
+
+    def register(comps):
+        reg = info(comps[0].model())
+        if reg.has_declaration("horizon"):
+            time = _declared_horizon(reg, fn)
+            for comp in comps:
+                if comp.is_indexed() and any(
+                    s is time for s in comp.index_set().subsets()
+                ):
+                    raise ValueError(
+                        f"drto: {fn}: '{comp.name}' is indexed by the declared "
+                        f"time set '{time.name}'; an estimated parameter is "
+                        f"constant over the window."
+                    )
+        _declare_many("estimated_parameter", comps, fn)
+
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: register((comp,)), fn)
+    register(components)
+    return components[0] if len(components) == 1 else None
+
+
+def disturbance(*components):
+    """Declare one or more process-noise Vars.
+
+    The free variables the estimator adjusts to reconcile the model with the
+    data, penalized by their inverse covariance in the estimation stage cost.
+    How the noise enters the model equations is the user's, not fixed here.
+    Process noise takes no profile and is unrelated to ``control``. Indexed by
+    the declared time set when a horizon is declared. Tags attached Vars or
+    wraps one fresh Var.
+    """
+    fn = "disturbance"
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
+    for comp in components:
+        _container(comp, fn)
+        _check_ctype(comp, "Var", fn)
+
+    def register(comps):
+        reg = info(comps[0].model())
+        if reg.has_declaration("horizon"):
+            time = _declared_horizon(reg, fn)
+            for comp in comps:
+                if not any(s is time for s in comp.index_set().subsets()):
+                    raise ValueError(
+                        f"drto: {fn}: '{comp.name}' is not indexed by the "
+                        f"declared time set '{time.name}'; process noise is a "
+                        f"free variable over the window."
+                    )
+        _declare_many("disturbance", comps, fn)
+
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: register((comp,)), fn)
+    register(components)
+    return components[0] if len(components) == 1 else None
+
+
+def measurement(*components):
+    """Declare one or more measurement Params.
+
+    The measured values over the window, mutable Params drto refreshes each
+    step like the state feedback hook. They appear in the estimation cost
+    residuals; the measurement map ``h(z)`` is written inline in the cost, so
+    there is nothing else to tag. Indexed by the declared time set when a
+    horizon is declared. Tags attached Params or wraps one fresh Param.
+    """
+    fn = "measurement"
+    if not components:
+        raise TypeError(f"drto: {fn} needs at least one component.")
+    for comp in components:
+        _container(comp, fn)
+        _check_ctype(comp, "Param", fn)
+        if not comp.mutable:
+            raise ValueError(
+                f"drto: {fn}: Param '{comp.name}' must be mutable so the loop "
+                f"can write the incoming measurements into it."
+            )
+
+    def register(comps):
+        reg = info(comps[0].model())
+        if reg.has_declaration("horizon"):
+            time = _declared_horizon(reg, fn)
+            for comp in comps:
+                if not any(s is time for s in comp.index_set().subsets()):
+                    raise ValueError(
+                        f"drto: {fn}: '{comp.name}' is not indexed by the "
+                        f"declared time set '{time.name}'; measurements arrive "
+                        f"over the window."
+                    )
+        _declare_many("measurement", comps, fn)
+
+    if _wrap_form(components, fn):
+        (comp,) = components
+        return _defer(comp, lambda: register((comp,)), fn)
+    register(components)
+    return components[0] if len(components) == 1 else None
+
+
+def estimation_stage_cost(*args, **kwargs):
+    """Declare the estimation stage cost, a per-time-point equality.
+
+    One side of each member is the scalar running estimation-cost variable (the
+    measurement residual plus the process-noise penalty); the other defines it.
+    One per model, indexed over the samples minus the final time (the terminal
+    term owns it). Tags, wraps, or builds as a decorator.
+    """
+    return _declare_stage_cost(
+        "estimation_stage_cost", args, "estimation_stage_cost", kwargs
+    )
+
+
+def estimation_terminal_cost(*args, **kwargs):
+    """Declare the terminal estimation cost, a scalar equality.
+
+    One side is the scalar terminal estimation-cost variable (the current-state
+    measurement residual at the present time, no process noise); the other
+    defines it. One per model. Tags, wraps, or builds as a decorator.
+    """
+    return _declare_scalar_cost(
+        "estimation_terminal_cost",
+        args,
+        "estimation_terminal_cost",
+        kwargs,
+        "the terminal estimation cost applies at the present time only",
+        "the scalar terminal estimation-cost variable",
+    )
+
+
+def arrival_cost(*args, **kwargs):
+    """Declare the arrival cost, a scalar equality.
+
+    One side is the scalar arrival-cost variable (the soft prior on the
+    window's initial state); the other defines it. The soft dual of the
+    control-side initial condition. One per model. Tags, wraps, or builds as a
+    decorator.
+    """
+    return _declare_scalar_cost(
+        "arrival_cost",
+        args,
+        "arrival_cost",
+        kwargs,
+        "the arrival cost applies at the initial time only",
+        "the scalar arrival-cost variable",
     )

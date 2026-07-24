@@ -10,11 +10,17 @@ the surface fills in feature by feature, starting with the registry
 from importlib.metadata import PackageNotFoundError, version
 
 from drto.declarations import (
-    dynamics,
+    arrival_cost,
     control,
+    disturbance,
+    dynamics,
     economic_stage_cost,
+    estimated_parameter,
+    estimation_stage_cost,
+    estimation_terminal_cost,
     horizon,
     initial_condition,
+    measurement,
     state,
     steady_state,
     steady_state_control,
@@ -54,5 +60,11 @@ __all__ = [
     "terminal_constraint",
     "steady_state",
     "steady_state_control",
+    "estimated_parameter",
+    "disturbance",
+    "measurement",
+    "estimation_stage_cost",
+    "estimation_terminal_cost",
+    "arrival_cost",
     "__version__",
 ]
