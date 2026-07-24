@@ -26,8 +26,9 @@ pip install drto
 ```
 
 The [pounce](https://github.com/jkitchin/pounce) solver and pyomo-pounce are
-needed for full functionality (sensitivity updates, the advanced-step
-frameworks); any NLP solver runs the open-loop modes.
+needed for full functionality (the steady-state initializer, sensitivity
+updates, the advanced-step frameworks); any NLP solver runs the open-loop
+modes.
 
 ## Spec-driven development
 

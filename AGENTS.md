@@ -4,9 +4,15 @@ drto is a Python package: receding-horizon NMPC and moving horizon estimation
 for `pyomo.dae` models. This file is the entry point for coding agents. Read
 it before working in this repo.
 
-## Status: design phase
+## Status: alpha, implementation in progress
 
-There is no implementation yet. The design is settled and recorded:
+The registry, the declaration surface (control, simulation, and estimation),
+objective assembly, the control-profile application, the steady-state
+reduction and simulation, the steady-state initializer, and the
+infinite-horizon terminal segment are implemented and tested. The remaining
+mode transforms, the start strategies, and the closed-loop frameworks follow.
+`features/README.md` carries the per-feature status. The design is settled and
+recorded:
 
 - **DESIGN.md** is the authoritative design record: the six-mode framework,
   the declaration surface, and every locked decision.
@@ -27,13 +33,14 @@ which drive the tests and the definition of done. See `features/README.md`.
 Canonical commands (they mirror CI, so local green means CI green; do not
 hand-roll black or pytest flags):
 
-- `python -m pip install -e ".[dev]"` -- editable install with dev extras.
+- `python -m pip install -e ".[dev,docs]"` -- editable install with dev and docs extras.
 - `black --check --diff src/ tests/` then `typos` -- lint.
 - `python -m pytest -q --cov=drto --cov-report=term-missing` -- test with coverage.
+- `python -m sphinx -b html -W --keep-going docs docs/_build/html` -- docs build, warnings as errors.
 - `python -c "import drto; print('drto', drto.__version__)"` -- import drto with only base deps.
 
-These mirror the CI jobs one-to-one; `.github/workflows/ci.yml` is the source
-of truth for the exact steps.
+These mirror the CI lint, test, docs, and import-base jobs;
+`.github/workflows/ci.yml` is the source of truth for the exact steps.
 
 This is a single pure-Python package that matches its siblings pyomo-cvp and
 pyomo-cp. When adding a file, copy the shape of the nearest sibling rather
@@ -75,7 +82,7 @@ rationale, not development history. Design history lives in `dev-notes/` and
 
 - The declaration surface (bare nouns: `horizon`, `state`, `dynamics`,
   `control`, the cost and boundary declarations, the paired steady-state
-  targets, later the estimation declarations) is the public API. Each
+  targets, and the estimation declarations) is the public API. Each
   function serves tagging, wrapping, and (constraint roles) the decorator
   form; see feature 002.
 - One receding-horizon loop underlies the six modes (steady-state / dynamic

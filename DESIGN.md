@@ -75,9 +75,11 @@ single time point, solving f(z,u)=0 and g(z,u)=0 for an equilibrium
   jkitchin/pounce#199). The estimation-side machinery (covariance with
   hessian="lagrangian"|"gauss-newton" and active-bound projection)
   merged as #203 on 2026-07-12; it ships in the release after 0.8.0.
-- pounce coupling is a hard dependency for v1: simpler and honest about
-  what works today. A sensitivity-backend interface (with k_aug as a
-  legacy alternative) was considered and deferred.
+- drto couples directly to pounce for v1: simpler and honest about what
+  works today. pounce installs as an optional extra (`drto[pounce]`),
+  imported at call time, so `import drto` never touches it. A
+  sensitivity-backend interface (with k_aug as a legacy alternative) was
+  considered and deferred.
 
 ## Declarations
 
@@ -183,8 +185,8 @@ estimation-side surface follows below):
   for the online loop. Named "condition" deliberately: it pins the state
   (an equality), a different job from a boundary set. This is the exact
   seam where MHE will diverge, since its initial anchor is the soft
-  arrival cost, not a hard equality, so a soft mode or a separate
-  `arrival_cost` is the estimation follow-on, not this.
+  arrival cost, not a hard equality. That anchor is the separate
+  `arrival_cost` declaration below, not this one.
 - `terminal_constraint(m.terminal_con)`: tags the Constraint
   (equality or inequality) defining the terminal set/region z(tN) in X_f.
   Requirement (USER DECISION 2026-07-14): every Var it references is a
@@ -307,11 +309,12 @@ Shared conventions:
   what `@m.Constraint` would. Styles mix per component; prerequisites
   must be declared by the time a declaration registers.
 
-Estimation-side surface (surface designed now,
-built with the MHE follow-on). MHE is the dual of the control problem, so
-the same conventions hold (each tags a Var or a Constraint; cost
-constraints are equalities with the scalar on the LHS; drto assembles the
-estimation objective from the live cost-term Vars):
+Estimation-side surface (the declarations are built, feature 018; the
+estimation mode transforms come with the MHE follow-on). MHE is the dual of
+the control problem, so the same conventions hold (each tags a Var, a
+Constraint, or a Param; cost constraints are equalities with the scalar on
+the LHS; drto assembles the estimation objective from the live cost-term
+Vars):
 
 - `estimated_parameter(m.theta, ...)`: tags the Vars for unknown
   model parameters to estimate, constant over the window. Shared with the
@@ -343,4 +346,4 @@ estimation objective from the live cost-term Vars):
   weighted by the arrival-cost inverse covariance. The dual of the
   control-side initial condition, but SOFT (a cost, not a hard equality).
   Its weight is the piece the covariance propagation updates each step
-  (Gauss-Newton, the pounce#203 machinery in Follow-on).
+  (Gauss-Newton, the pounce#203 machinery).

@@ -22,17 +22,19 @@ three** of these land in the same PR:
    `CHANGELOG.md`, in the user's terms. At release time the section is renamed
    to the version and dated, and every feature sitting at `implemented` whose
    work the release carries flips to `shipped` in the same commit.
-3. **Docs.** The relevant README, docstring, or example-notebook update, so
-   the feature is documented where a user looks.
+3. **Docs.** The docstring, the relevant `docs/` guide or API page, and an
+   example notebook where it applies, so the feature is documented where a
+   user looks.
 
 ## Run the CI guards locally before pushing
 
-These mirror the CI jobs; run them for fast feedback:
+These mirror the CI lint, test, and docs jobs; run them for fast feedback:
 
 ```sh
 black --check --diff src/ tests/                          # formatting gate
 typos                                                     # spell-check
 python -m pytest -q --cov=drto --cov-report=term-missing  # tests
+python -m sphinx -b html -W --keep-going docs docs/_build/html  # docs build
 ```
 
 ## House style

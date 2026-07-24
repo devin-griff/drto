@@ -25,8 +25,8 @@ read it, so it is the one place drto looks for the model's declared pieces.
 
 ## The declarations
 
-The declaration surface (feature 002) declares the pieces of an optimization
-or simulation problem: `horizon`,
+The control-side declarations (feature 002) declare the pieces of an
+optimization or simulation problem: `horizon`,
 `state`, `dynamics`, `control` (with its
 pyomo-cvp `profile`), the stage and terminal costs, `initial_condition`
 (a state at the first time point equal to a mutable Param, the feedback hook),

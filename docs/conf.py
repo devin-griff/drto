@@ -22,8 +22,10 @@ extensions = [
     "sphinx_copybutton",
 ]
 
-# Notebook execution is off during the design phase: the example notebooks need
-# the not-yet-built core to run. Flip to "cache" once they are runnable.
+# Notebook execution is off: the docs tree carries no notebooks, and the docs
+# build installs neither the solvers nor the examples extra that the notebooks
+# under examples/ need. Flip to "cache" when a notebook lands in this tree and
+# the build can solve it.
 nb_execution_mode = "off"
 myst_enable_extensions = ["colon_fence", "deflist", "dollarmath"]
 

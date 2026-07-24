@@ -14,6 +14,6 @@ fi
 
 if ! black --check src/ tests/; then
     echo >&2
-    echo "pre-commit: black check failed; run 'make fmt', re-stage, and commit again." >&2
+    echo "pre-commit: black check failed; run 'black src/ tests/', re-stage, and commit again." >&2
     exit 1
 fi
