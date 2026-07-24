@@ -6,13 +6,10 @@ it before working in this repo.
 
 ## Status: alpha, implementation in progress
 
-The registry, the declaration surface (control, simulation, and estimation),
-objective assembly, the control-profile application, the steady-state
-reduction and simulation, the steady-state initializer, and the
-infinite-horizon terminal segment are implemented and tested. The remaining
-mode transforms, the start strategies, and the closed-loop frameworks follow.
-`features/README.md` carries the per-feature status. The design is settled and
-recorded:
+The surface lands one feature at a time. `features/README.md` carries the
+per-feature status and is the only place that tracks it: do not restate
+implementation status here or in README.md, since a second copy goes stale
+silently. The design is settled and recorded:
 
 - **DESIGN.md** is the authoritative design record: the six-mode framework,
   the declaration surface, and every locked decision.
