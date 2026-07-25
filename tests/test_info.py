@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Feature 001: the drto registry (drto.info)."""
 import pyomo.environ as pyo
+import pytest
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
@@ -180,6 +181,7 @@ def test_scalar_constraint_renders_directly():
 
 def unit_model():
     """A declared model carrying pyo.units, with one inconsistent equation."""
+    pytest.importorskip("pint")  # declaring Var(units=...) needs it
     U = pyo.units
     m = pyo.ConcreteModel()
     m.t = ContinuousSet(bounds=(0, 10), initialize=[0, 5, 10])
@@ -229,6 +231,7 @@ def test_degenerate_combinations_do_not_leak():
     # J/s is W and W*s is J, a kJ keeps its scale, and a ratio of preferred
     # units reduces (J/W is a time constant, s) rather than rendering as a
     # W-and-J compound
+    pytest.importorskip("pint")
     U = pyo.units
     from drto.info import _units_note
 
