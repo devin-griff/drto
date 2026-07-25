@@ -32,6 +32,7 @@ alongside the CHANGELOG section rename.
 | [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [019 Registry units](019-registry_units.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 

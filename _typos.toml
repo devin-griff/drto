@@ -6,6 +6,7 @@
 extend-exclude = ["*.ipynb"]
 
 [default.extend-words]
+IDAES = "IDAES"  # the process modeling framework
 # Domain terms, not misspellings.
 RTO = "RTO"  # real-time optimization
 pn = "pn"  # the n-propanol vapor pressure (binary column)
