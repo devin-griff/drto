@@ -132,6 +132,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **Breaking.** `drto.infinite_horizon` names its block `drto_ih` rather than
+  `drto_infinite_horizon`. The block is user-facing, since the segment's
+  states, controls and pins are read off it, so a model that referenced
+  `m.drto_infinite_horizon` must now say `m.drto_ih`. The short name also cuts
+  the prefix repeated on every component in `pprint()` output and in the
+  `cost_group` rows of the registry display.
+
+
 - The stage-cost declarations (`tracking_stage_cost`, `economic_stage_cost`)
   accept a scalar Constraint on a model with no declared horizon. A
   steady-state model has no sample grid to index over, so its cost is a single

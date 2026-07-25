@@ -5,7 +5,7 @@
 The functions read everything from the model's registry (``drto.info``): the
 declared horizon and its sample grid, the declared states or controls, and
 the paired steady-state targets for the dotted setpoint lines. If the model
-carries an infinite-horizon terminal segment (``drto_infinite_horizon``), the
+carries an infinite-horizon terminal segment (``drto_ih``), the
 tail is found automatically, mapped back to real time through
 ``t = tN + atanh(tau)/gamma``, and drawn with open markers, squares marking
 the segment's finite element boundaries (continuity extrapolations).
@@ -36,7 +36,7 @@ _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
 def _tail(m):
     """Return (segment block, tN, gamma) or None if no terminal segment."""
-    b = m.component("drto_infinite_horizon")
+    b = m.component("drto_ih")
     if b is None:
         return None
     time = drto.info(m).components("horizon")[0]

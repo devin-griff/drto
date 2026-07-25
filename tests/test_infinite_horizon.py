@@ -161,7 +161,7 @@ def test_assembled_objective_blocks_application():
 def test_segment_structure():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="none")
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     fe = b.tau.get_finite_elements()
     assert len(fe) == 4  # nfe=3 default
     # dilated dynamics at interior collocation points only
@@ -178,19 +178,19 @@ def test_segment_structure():
 def test_gamma_follows_the_mesh_rule_and_option_overrides():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m)
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     dt = 2.5  # the declared sample spacing
     tau11 = sorted(b.tau)[1]
     assert pyo.value(b.gamma) == pytest.approx(math.atanh(tau11) / dt)
 
     m2 = ready_model()
     pyo.TransformationFactory(IH).apply_to(m2, gamma=0.05)
-    assert pyo.value(m2.drto_infinite_horizon.gamma) == 0.05
+    assert pyo.value(m2.drto_ih.gamma) == 0.05
 
     m3 = ready_model()
     pyo.TransformationFactory(IH).apply_to(m3, gamma="rule")
-    assert pyo.value(m3.drto_infinite_horizon.gamma) == pytest.approx(
-        pyo.value(m.drto_infinite_horizon.gamma)
+    assert pyo.value(m3.drto_ih.gamma) == pytest.approx(
+        pyo.value(m.drto_ih.gamma)
     )
 
     m4 = ready_model()
@@ -225,7 +225,7 @@ def test_declared_terminal_cost_is_deactivated():
 def test_tail_terms_reach_the_objective():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="none")  # isolate the tail group
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     obj = drto.build_objective(m)
     from pyomo.common.collections import ComponentSet
     from pyomo.core.expr import identify_variables
@@ -243,7 +243,7 @@ def test_tail_terms_reach_the_objective():
 def test_beta_and_gamma_retune_without_reapply():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="none")  # tail is the only term
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     drto.build_objective(m)
     for t in m.t:
         m.cost[t].set_value(0.0)
@@ -258,8 +258,8 @@ def test_beta_and_gamma_retune_without_reapply():
 def test_create_using_leaves_the_source_alone():
     m = ready_model()
     m2 = pyo.TransformationFactory(IH).create_using(m)
-    assert m2.component("drto_infinite_horizon") is not None
-    assert m.component("drto_infinite_horizon") is None
+    assert m2.component("drto_ih") is not None
+    assert m.component("drto_ih") is None
     assert drto.info(m2).has_transformation(IH)
     assert not drto.info(m).has_transformation(IH)
 
@@ -369,7 +369,7 @@ def test_indexed_state_segment_structure():
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
     )
     pyo.TransformationFactory(IH).apply_to(m)
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     ntau = len(sorted(b.tau))
     assert len(b.x) == 2 * ntau  # a copy member per (i, tau)
     assert len(b.ode) == 2 * 15  # dilated dynamics per member
@@ -387,7 +387,7 @@ def test_indexed_state_reaches_the_fixed_point():
     drto.build_objective(m)
     r = pyo.SolverFactory("ipopt").solve(m)
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     for i in m.i:
         assert pyo.value(b.x[i, 1]) == pytest.approx(0.5, abs=1e-4)
 
@@ -398,7 +398,7 @@ def test_algebraic_variables_are_discovered_and_replicated():
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
     )
     pyo.TransformationFactory(IH).apply_to(m)
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     # the algebraic copy exists without a declaration
     assert b.component("w") is not None
     # its equation holds at the interior collocation points only
@@ -420,7 +420,7 @@ def test_algebraic_model_reaches_the_fixed_point():
     drto.build_objective(m)
     r = pyo.SolverFactory("ipopt").solve(m)
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     assert pyo.value(b.z[1]) == pytest.approx(0.5, abs=1e-4)
     assert pyo.value(b.w[1]) == pytest.approx(0.5, abs=1e-4)
 
@@ -433,7 +433,7 @@ def test_legendre_discretized_horizon_applies():
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-LEGENDRE"
     )
     pyo.TransformationFactory(IH).apply_to(m)
-    assert m.drto_infinite_horizon.component("z_link") is not None
+    assert m.drto_ih.component("z_link") is not None
 
 
 def test_derivative_reference_in_an_algebraic_equation_dilates():
@@ -451,7 +451,7 @@ def test_derivative_reference_in_an_algebraic_equation_dilates():
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
     )
     pyo.TransformationFactory(IH).apply_to(m)
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     s = sorted(b.tau)[1]  # an interior collocation point
     text = str(b.w_def[s].expr)
     assert "z_dtau" in text and "gamma" in text
@@ -496,7 +496,7 @@ def test_bad_profile_errors_before_the_model_is_touched():
     m = ready_model()
     with pytest.raises(ValueError, match="profile"):
         pyo.TransformationFactory(IH).apply_to(m, profile="colocation")
-    assert m.component("drto_infinite_horizon") is None
+    assert m.component("drto_ih") is None
 
 
 # ----------------------------------------------------------------------
@@ -532,7 +532,7 @@ def test_hicks_short_horizon_reproduces_the_long_one():
     assert pyo.value(m5.v2[0]) == pytest.approx(pyo.value(m50.v2[0]), rel=0.05)
 
     # the endpoint found the setpoint equilibrium with no pins
-    b = m5.drto_infinite_horizon
+    b = m5.drto_ih
     assert pyo.value(b.zc[1]) == pytest.approx(0.6416, abs=2e-3)
     assert pyo.value(b.zt[1]) == pytest.approx(0.5387, abs=2e-3)
 
@@ -543,7 +543,7 @@ def test_hicks_short_horizon_reproduces_the_long_one():
 def test_default_is_soft_pin():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m)  # default terminal='soft'
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     # per-state slacks, the endpoint equality, and the penalty weight
     assert b.component("z_pin_eq") is not None
     assert b.component("z_pin_up") is not None and b.component("z_pin_lo") is not None
@@ -560,7 +560,7 @@ def test_soft_pin_is_per_member_for_indexed_states():
         m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
     )
     pyo.TransformationFactory(IH).apply_to(m)  # default terminal='soft'
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     # one relaxed endpoint equality and one slack pair per member i, like x_link
     assert len(b.x_pin_eq) == 2
     assert len(b.x_pin_up) == 2 and len(b.x_pin_lo) == 2
@@ -569,7 +569,7 @@ def test_soft_pin_is_per_member_for_indexed_states():
 def test_soft_pin_slacks_are_nonnegative_and_reach_the_objective():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="soft")
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     slacks = list(b.z_pin_up.values()) + list(b.z_pin_lo.values())
     for v in slacks:
         assert v.lb == 0 and v.ub is None
@@ -584,7 +584,7 @@ def test_soft_pin_slacks_are_nonnegative_and_reach_the_objective():
 def test_soft_pin_mu_retunes_without_reapply():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="soft")
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     obj = drto.build_objective(m)
     slacks = list(b.z_pin_up.values()) + list(b.z_pin_lo.values())
     for v in b.component_data_objects(pyo.Var):
@@ -609,7 +609,7 @@ def test_soft_pin_lands_the_endpoint_on_the_setpoint():
     drto.build_objective(m)
     r = pyo.SolverFactory("ipopt").solve(m)
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
-    b = m.drto_infinite_horizon
+    b = m.drto_ih
     # the L1 penalty is exact: at the default mu the slacks vanish and the
     # extrapolated endpoint lands on the setpoint (soft reproduces the pin)
     assert pyo.value(b.zc[b.tau.last()]) == pytest.approx(0.6416, abs=1e-6)
@@ -633,7 +633,7 @@ def test_pin_requires_steady_state_targets():
     )
     with pytest.raises(ValueError, match="steady_state target"):
         pyo.TransformationFactory(IH).apply_to(m)
-    assert m.component("drto_infinite_horizon") is None
+    assert m.component("drto_ih") is None
 
 
 @pytest.mark.parametrize("bad", ["always", "hard"])
@@ -642,4 +642,4 @@ def test_bad_terminal_value_errors_before_the_model_is_touched(bad):
     m = ready_model()
     with pytest.raises(ValueError, match="terminal"):
         pyo.TransformationFactory(IH).apply_to(m, terminal=bad)
-    assert m.component("drto_infinite_horizon") is None
+    assert m.component("drto_ih") is None

@@ -72,7 +72,7 @@ def initialize_column(m):
     """The double column: interpolate the states, compute the algebraics."""
     _interpolate_states(m, _STATES)
     _solve_pairs(m, _PAIRS)
-    seg = m.component("drto_infinite_horizon")
+    seg = m.component("drto_ih")
     if seg is not None:
         _solve_pairs(seg, _PAIRS)
 
@@ -93,7 +93,7 @@ def initialize_binary_column(m):
             other = idx[:-1]
             dv[idx].set_value((pyo.value(ss[other]) - pyo.value(hat[other])) / tN)
     _solve_pairs(m, _BC_PAIRS)
-    seg = m.component("drto_infinite_horizon")
+    seg = m.component("drto_ih")
     if seg is not None:
         for var_name, _, _, _ in _BC_STATES:
             dtau = seg.component(var_name + "_dtau")
@@ -113,7 +113,7 @@ def initialize_asu(m):
         for v in m.component(name).values():
             v.set_value(0.0)
     _solve_pairs(m, [("cost", "stage"), ("term", "terminal")])
-    seg = m.component("drto_infinite_horizon")
+    seg = m.component("drto_ih")
     if seg is not None:
         for name in ("Mh", "Ml", "xh", "xl"):
             for v in seg.component(name + "_dtau").values():

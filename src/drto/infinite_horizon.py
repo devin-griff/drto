@@ -67,7 +67,7 @@ from drto.declarations import (
 from drto.info import info
 
 #: The block the transform adds to the model.
-_BLOCK_NAME = "drto_infinite_horizon"
+_BLOCK_NAME = "drto_ih"
 
 #: The declarations the transform requires.
 _REQUIRED = ("horizon", "state", "dynamics", "control", "tracking_stage_cost")
