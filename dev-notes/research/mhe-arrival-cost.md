@@ -133,3 +133,14 @@ it; drto decides what to reduce, what the arrival cost weights, and what to do
 when the active set moves. The one pounce-side requirement this note depends on
 is that a pinned direction reports its finite retained-row value rather than a
 zero, since that number cannot be recovered downstream.
+
+That value comes at a cost the spec should not discover by measurement. It is
+recovered by subtracting the barrier diagonal, `H = W - Sigma`, and at a
+strongly active bound `Sigma` grows as `z^2 / mu`. The subtraction turns the
+factorization's relative error into an absolute one of `eps * Sigma`, so the
+pinned weight loses roughly `log10(Sigma)` digits. An arrival cost built at a
+bound-active state is therefore least accurate at the tightest solve
+tolerance, which is the opposite of what anyone would assume, and it is
+specific to the pinned directions: a weakly active one has `Sigma` of the same
+order as the curvature it is subtracted from and holds full precision at every
+`mu`.
