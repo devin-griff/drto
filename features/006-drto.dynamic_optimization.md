@@ -1,6 +1,6 @@
 # drto.dynamic_optimization
 
-**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
+**Status:** ![shipped](https://img.shields.io/badge/shipped-brightgreen)
 
 ## Description
 

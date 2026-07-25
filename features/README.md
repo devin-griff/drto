@@ -18,12 +18,12 @@ alongside the CHANGELOG section rename.
 | [002 Dynamic optimization and simulation declarations](002-dynamic_optimization_and_simulation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [003 drto.build_objective](003-drto.build_objective.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [004 drto.infinite_horizon](004-drto.infinite_horizon.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [005 drto.dynamic_to_steady_state](005-drto.dynamic_to_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [006 drto.dynamic_optimization](006-drto.dynamic_optimization.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [007 drto.dynamic_simulation](007-drto.dynamic_simulation.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [008 drto.steady_state_simulation](008-drto.steady_state_simulation.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [009 drto.steady_state_optimization](009-drto.steady_state_optimization.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [010 drto.initialize_steady_state](010-drto.initialize_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [005 drto.dynamic_to_steady_state](005-drto.dynamic_to_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [006 drto.dynamic_optimization](006-drto.dynamic_optimization.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [007 drto.dynamic_simulation](007-drto.dynamic_simulation.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [008 drto.steady_state_simulation](008-drto.steady_state_simulation.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [009 drto.steady_state_optimization](009-drto.steady_state_optimization.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [010 drto.initialize_steady_state](010-drto.initialize_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [011 drto.cold_start_dynamic](011-drto.cold_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [012 drto.advanced_step_controller](012-drto.advanced_step_controller.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [013 drto.warm_start_dynamic](013-drto.warm_start_dynamic.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
@@ -31,7 +31,7 @@ alongside the CHANGELOG section rename.
 | [015 drto.asnmpc](015-drto.asnmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [018 Estimation declarations](018-estimation_declarations.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 
 ## Template
 
