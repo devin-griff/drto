@@ -332,9 +332,17 @@ def _units_note(obj):
         return None
     try:
         reg = pyo_units._pint_registry
-        q = (1.0 * u._get_pint_unit()).to_preferred([reg.W, reg.J, reg.Pa])
-        if q.magnitude == 1.0:
-            return f"{q.units:~}".replace(" ", "") or None
+        q = 1.0 * u._get_pint_unit()
+        # exact dimensionality match only: pint's to_preferred substitutes
+        # through degenerate combinations (W/J for 1/s), where this maps an
+        # energy to J and a power to W and otherwise leaves the declared
+        # form alone, so kJ stays kJ and mol/s stays mol/s
+        for target in (reg.W, reg.J, reg.Pa, reg.N, reg.s):
+            if q.dimensionality == target.dimensionality:
+                qc = q.to(target)
+                if qc.magnitude == 1.0:
+                    return f"{qc.units:~}".replace(" ", "")
+                break  # right dimension at another scale: keep the declared form
     except Exception:
         pass
     s = str(u)

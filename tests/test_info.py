@@ -225,6 +225,26 @@ def test_units_annotate_variables_and_constraints():
     assert line.rstrip().endswith("(mol)")
 
 
+def test_degenerate_combinations_do_not_leak():
+    # J/s is W and W*s is J, a kJ keeps its scale, and a ratio of preferred
+    # units reduces (J/W is a time constant, s) rather than rendering as a
+    # W-and-J compound
+    U = pyo.units
+    from drto.info import _units_note
+
+    m = pyo.ConcreteModel()
+    m.a = pyo.Var(units=U.J / U.s)
+    m.b = pyo.Var(units=U.W * U.s)
+    m.c = pyo.Var(units=U.kJ)
+    m.d = pyo.Var(units=U.J / U.W)
+    m.e = pyo.Var(units=U.mol / U.s)
+    assert _units_note(m.a) == "W"
+    assert _units_note(m.b) == "J"
+    assert _units_note(m.c) == "kJ"
+    assert _units_note(m.d) == "s"
+    assert _units_note(m.e) == "mol/s"
+
+
 def test_inconsistent_body_renders_inc():
     r = repr(drto.info(unit_model()))
     line = next(l for l in r.splitlines() if "terminal constraint" in l)
