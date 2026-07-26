@@ -48,6 +48,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- A Reference-declared control gets one segment family (#18). The terminal
+  segment classified Block members against declared controls by component
+  identity, which only ever matches flat declarations, so a control
+  declared as a time-indexed Reference into Block members (the IDAES inlet
+  idiom) split in two on the segment: an algebraic member copy carrying
+  the replicated equations and the cost, and a vestigial control copy
+  connected to nothing but its own profile rows, parked wherever the
+  solver left it. Members now route to their declared control by data
+  identity, the map feature 020 built for disturbances, so the control's
+  own copy carries the tail and the shadow family is gone: 15 activated
+  variables fewer on the two-control IDAES CSTR with the constraint count
+  unchanged, and the solution identical.
 - The simulation modes resolve component keys before their rebuilds.
   `steady_state_simulation`'s reduction and `dynamic_simulation`'s profile
   application both replace the very components the `controls` and
