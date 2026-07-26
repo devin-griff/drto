@@ -64,6 +64,7 @@ from drto.declarations import (
     pyomo_cvp,
     pyomo_cvp_available,
 )
+from drto.dynamic_optimization import _spread
 from drto.info import info
 
 #: The block the transform adds to the model.
@@ -152,6 +153,16 @@ class InfiniteHorizonTransformation(Transformation):
     """
 
     CONFIG = ConfigDict("drto.infinite_horizon")
+    CONFIG.declare(
+        "disturbances",
+        ConfigValue(
+            default=None,
+            description="Mapping of declared disturbance (component or name) "
+            "to the constant its segment copy is fixed at. Disturbances not "
+            "in the mapping fix at zero: the tail continues under nominal "
+            "disturbance unless told otherwise.",
+        ),
+    )
     CONFIG.declare(
         "nfe",
         ConfigValue(
@@ -328,6 +339,16 @@ class InfiniteHorizonTransformation(Transformation):
         states_set = ComponentSet(states)
         controls_set = ComponentSet(controls)
 
+        # declared disturbances, by member data-id: a disturbance may be
+        # declared as a flat Var or as a time-indexed Reference into Block
+        # members (the IDAES inlet idiom), and data identity covers both
+        disturbances = list(reg.components("disturbance"))
+        disturbance_data = {}
+        for d in disturbances:
+            for vd in (d.values() if d.is_indexed() else (d,)):
+                disturbance_data[id(vd)] = d
+        disturbed = ComponentSet()
+
         # --- index layout helpers -------------------------------------
         layout = {}
 
@@ -418,7 +439,9 @@ class InfiniteHorizonTransformation(Transformation):
                         f"'{where}': it references '{v.name}' away from "
                         f"the constraint's own time point."
                     )
-                if (
+                if id(v) in disturbance_data:
+                    disturbed.add(disturbance_data[id(v)])
+                elif (
                     comp not in states_set
                     and comp not in controls_set
                     and not isinstance(comp, DerivativeVar)
@@ -480,7 +503,9 @@ class InfiniteHorizonTransformation(Transformation):
         b.beta = Param(initialize=config.beta, mutable=True)
 
         seg = {}
-        for comp in list(states) + list(controls) + list(algebraic):
+        for comp in list(states) + list(controls) + list(algebraic) + list(
+            disturbed
+        ):
             _, others = _layout(comp)
             u = _units_of(comp)
             v = Var(*others, b.tau, units=u) if others else Var(b.tau, units=u)
@@ -495,6 +520,32 @@ class InfiniteHorizonTransformation(Transformation):
         def _seg_at(comp, o, s):
             v = seg[comp]
             return v[tuple(o) + (s,)] if o else v[s]
+
+        # --- disturbance copies fixed at their constants: the tail
+        # continues under nominal disturbance unless told otherwise ------
+        if config.disturbances:
+            declared_names = {d.name: d for d in disturbances}
+            for key, val in config.disturbances.items():
+                name = key if isinstance(key, str) else key.name
+                if name not in declared_names:
+                    raise ValueError(
+                        f"drto: infinite_horizon got a disturbance value for "
+                        f"'{name}', which is not a declared disturbance; "
+                        f"declared: {', '.join(declared_names) or '(none)'}."
+                    )
+        dist_values = {}
+        for d in disturbed:
+            key = next(
+                (
+                    k
+                    for k in (config.disturbances or {})
+                    if (k if isinstance(k, str) else k.name) == d.name
+                ),
+                None,
+            )
+            val = (config.disturbances or {}).get(key, 0.0) if key else 0.0
+            vals = _spread(val, 1, d.name, "infinite_horizon")
+            dist_values[d] = vals[0]
 
         # the model DerivativeVar of each declared state, for mapping
         # derivative references inside replicated equations
@@ -614,6 +665,13 @@ class InfiniteHorizonTransformation(Transformation):
                     v.setub(src.ub)
                     v.set_value(src.value)
 
+        # --- disturbance copies fixed at their realization, after the mesh
+        # exists (fixing at construction touches only the endpoints) and
+        # after the horizon-end init, which would overwrite the values ---
+        for d in disturbed:
+            for vd in seg[d].values():
+                vd.fix(dist_values[d])
+
         # --- the tracking stage cost, replicated as named Expressions at the
         # interior collocation points: the tail integrand. Expressions add no
         # variables and no constraints (a replicated cost Var would sit on an
@@ -725,6 +783,15 @@ class InfiniteHorizonTransformation(Transformation):
                     + " replicated"
                 }
                 if algebraic
+                else {}
+            ),
+            **(
+                {
+                    "disturbances": ", ".join(
+                        f"{d.name} fixed at {dist_values[d]}" for d in disturbed
+                    )
+                }
+                if disturbed
                 else {}
             ),
             **(

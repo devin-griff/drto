@@ -703,3 +703,67 @@ def test_segment_unitless_stays_unitless():
     for comp in (b.z, b.z_dtau):
         member = next(iter(comp.values()))
         assert member.get_units() is None, comp.name
+
+
+# ── the tail's disturbance handling (feature 020) ────────────────────────────
+
+
+def disturbed_model():
+    """The linear model with an additive disturbance in the ode."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.w = pyo.Var(m.t, initialize=0.0)
+    m.cost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.u[t] - mm.z[t] + mm.w[t]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.disturbance(m.w)
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_tail_fixes_disturbance_at_zero_by_default():
+    m = disturbed_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    copy = m.drto_ih.w
+    assert all(vd.fixed for vd in copy.values())
+    assert all(pyo.value(vd) == 0.0 for vd in copy.values())
+    log = drto.info(m)._transformations[-1]["outcome"]
+    assert "w fixed at 0.0" in log["disturbances"]
+
+
+def test_tail_fixes_disturbance_at_the_given_constant():
+    m = disturbed_model()
+    pyo.TransformationFactory(IH).apply_to(m, disturbances={"w": 0.25})
+    copy = m.drto_ih.w
+    assert all(vd.fixed and pyo.value(vd) == 0.25 for vd in copy.values())
+
+
+def test_tail_rejects_an_undeclared_disturbance_value():
+    m = disturbed_model()
+    with pytest.raises(ValueError, match="not a declared disturbance"):
+        pyo.TransformationFactory(IH).apply_to(m, disturbances={"nope": 1.0})
