@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Registry units (feature 019): every registry row shows its units, read from
+  `pyo.units.get_units`. Variables and parameters annotate their existing
+  parenthetical notes (`free`, `piecewise_constant`, ...); constraint rows
+  carry a parenthetical after the `for` clause with what the equation balances
+  in (`mol/s` for a material balance, `W` for an energy balance). Dimensionless
+  renders as nothing, so unitless models display exactly as before. A
+  constraint body whose units are inconsistent renders `(inc)`, display only:
+  it flags a dimensionally inconsistent equation, which solves without
+  complaint, in the view already being checked. Units render compact where an
+  exact conversion exists (`J`, `W`, `Pa`, `N`, `s`), keeping declared scales
+  (`kJ` stays `kJ`) and declared forms (`mol/s` stays `mol/s`).
+
 ## [0.3.0] - 2026-07-25
 
 ### Added
