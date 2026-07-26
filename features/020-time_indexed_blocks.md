@@ -7,15 +7,18 @@
 As a user of DRTO with an IDAES flowsheet (or any model that keeps per-time
 structure in `Block(time)` members rather than time-indexed Vars), I want
 `drto.infinite_horizon` to treat that structure the way it already treats
-flat components, so the transform produces the same square tail it produces
-today for a flat model.
+flat components, so the transform stays degree-of-freedom neutral on these
+models the way it is on flat ones: the tail adds unknowns and equations in
+equal number, and the model keeps exactly the freedom it had, its control
+moves.
 
 Discovery classifies a referenced variable by its own component's index. A
 variable inside `properties_out[t]` is indexed by component, not by time; its
 time lives on the parent Block, which the walk never looks at. So the walk
 calls it time-invariant and shares the single `t=0` member with every segment
 collocation point: ~330 segment references into `properties_out[0.0]` on the
-dynamic IDAES CSTR, and an overdetermined tail (gh #12).
+dynamic IDAES CSTR, and a tail that destroys degrees of freedom instead of preserving them,
+21 before the transform to -48 after (gh #12).
 
 The feature is the discovery fix, with everything downstream unchanged:
 
