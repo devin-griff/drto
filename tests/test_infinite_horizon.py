@@ -641,3 +641,65 @@ def test_bad_terminal_value_errors_before_the_model_is_touched(bad):
     with pytest.raises(ValueError, match="terminal"):
         pyo.TransformationFactory(IH).apply_to(m, terminal=bad)
     assert m.component("drto_ih") is None
+
+
+# ── segment units (gh #10) ───────────────────────────────────────────────────
+
+
+def unit_model_ih():
+    pytest.importorskip("pint")
+    U = pyo.units
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True, units=U.mol)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True, units=U.mol)
+    m.z = pyo.Var(m.t, initialize=0.2, units=U.mol)
+    m.dz = DerivativeVar(m.z, wrt=m.t, units=U.mol)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3, units=U.mol)
+    m.cost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.u[t] - mm.z[t]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 / U.mol**2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_segment_carries_units():
+    U = pyo.units
+    m = unit_model_ih()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    for comp in (b.z, b.u, b.z_dtau, b.z_pin_up, b.z_pin_lo):
+        member = next(iter(comp.values())) if comp.is_indexed() else comp
+        assert str(U.get_units(member)) == "mol", comp.name
+    # the replicated dynamics stay dimensionally consistent on the segment
+    con = next(iter(b.ode.values()))
+    assert str(U.get_units(con.body)) == "mol"
+
+
+def test_segment_unitless_stays_unitless():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    for comp in (b.z, b.z_dtau):
+        member = next(iter(comp.values()))
+        assert member.get_units() is None, comp.name
