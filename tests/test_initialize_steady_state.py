@@ -6,6 +6,7 @@ import pytest
 
 import drto
 from test_declarations import declared_model
+from test_infinite_horizon import ref_control_model
 
 pyomo_pounce = pytest.importorskip("pyomo_pounce")
 
@@ -46,6 +47,17 @@ def test_steady_path_initializes_in_place():
     assert not m.u.fixed  # the pipeline restores the fixed flags
     assert report.ok
     assert "block" in str(report) or "initialize" in str(report)
+
+
+def test_dynamic_path_broadcasts_a_reference_control():
+    # the inlet idiom: the collapsed copy of a Reference-declared control
+    # is a container even over its single member, and the broadcast reads
+    # the member, not the container
+    m = ref_control_model()
+    report = drto.initialize_steady_state(m, controls={"fin": 0.5})
+    assert all(pyo.value(m.props[t].f) == pytest.approx(0.5, abs=1e-8) for t in m.t)
+    assert all(pyo.value(m.z[t]) == pytest.approx(0.5, abs=1e-8) for t in m.t)
+    assert report.n_grid_points == len(m.t)
 
 
 def test_dynamic_path_broadcasts_flat():

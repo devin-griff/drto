@@ -901,6 +901,99 @@ def test_fixed_inputs_stay_fixed_on_the_tail():
         assert all(pyo.value(vd) == 3.0 for vd in copy.values()), f"flat={flat}"
 
 
+def ref_control_model(flat=False):
+    """The inlet idiom: the declared control is a Reference into Block
+    members. ``flat=True`` builds the same physics with a flat control,
+    the twin for the parity assertion (gh #18)."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.cost = pyo.Var(m.t)
+
+    if flat:
+        m.f = pyo.Var(m.t, bounds=(0, 2), initialize=0.3)
+        fin = m.f
+    else:
+        m.props = pyo.Block(
+            m.t,
+            rule=lambda blk, t: setattr(
+                blk, "f", pyo.Var(bounds=(0, 2), initialize=0.3)
+            ),
+        )
+        m.fin = pyo.Reference(m.props[:].f)
+        fin = m.fin
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == fin[t] - mm.z[t]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.1 * (fin[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(fin, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_reference_control_has_one_segment_family():
+    from pyomo.core.expr.visitor import identify_variables
+
+    m = ref_control_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    # the control's own copy serves; no shadow member family is built
+    assert b.component("fin") is not None
+    assert b.component("props_f") is None
+    # and the replicated equations are wired to it, not orphaning it
+    seg_ids = {id(vd) for vd in b.fin.values()}
+    assert any(
+        id(v) in seg_ids
+        for c in b.component_data_objects(pyo.Constraint, active=True)
+        for v in identify_variables(c.body, include_fixed=True)
+    )
+
+
+def test_reference_control_matches_the_flat_route():
+    from pyomo.util.model_size import build_model_size_report
+
+    sizes = {}
+    for flat in (True, False):
+        m = ref_control_model(flat=flat)
+        pyo.TransformationFactory(IH).apply_to(m)
+        r = build_model_size_report(m)
+        sizes[flat] = (r.activated.variables, r.activated.constraints)
+    assert sizes[False] == sizes[True]
+
+
+@needs_ipopt
+def test_reference_control_solves_through_the_tail():
+    m = ref_control_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+    res = pyo.SolverFactory("ipopt").solve(m)
+    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    # at rest dz = f - z = 0 and the cost pins z at the setpoint, so the
+    # tail control settles at the steady input through its own copy
+    tail_end = max(m.drto_ih.fin.keys())
+    assert pyo.value(m.drto_ih.fin[tail_end]) == pytest.approx(0.5, abs=1e-2)
+
+
 def test_nested_time_indexed_block_is_rejected():
     m = block_model(nested=True)
     with pytest.raises(ValueError, match="nested in another"):

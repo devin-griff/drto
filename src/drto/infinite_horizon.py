@@ -350,6 +350,15 @@ class InfiniteHorizonTransformation(Transformation):
                 disturbance_data[id(vd)] = d
         disturbed = ComponentSet()
 
+        # declared controls likewise, by member data-id: a control declared
+        # as a Reference into Block members routes its members to the
+        # declared control, so the control's own segment copy serves and no
+        # separate member family is built (gh #18)
+        control_data = {}
+        for u in controls:
+            for vd in u.values() if u.is_indexed() else (u,):
+                control_data[id(vd)] = u
+
         # --- index layout helpers -------------------------------------
         layout = {}
 
@@ -488,6 +497,11 @@ class InfiniteHorizonTransformation(Transformation):
                         )
                     if id(v) in disturbance_data:
                         disturbed.add(disturbance_data[id(v)])
+                    elif id(v) in control_data:
+                        # the declared control's segment copy serves; a
+                        # member family here would shadow it in the
+                        # expression map and orphan the control copy
+                        pass
                     elif (B, lname) not in block_alg:
                         block_alg[(B, lname)] = (
                             list(comp.index_set().subsets())
