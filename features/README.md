@@ -34,7 +34,7 @@ alongside the CHANGELOG section rename.
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [019 Registry units](019-registry_units.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 
 ## Template
 

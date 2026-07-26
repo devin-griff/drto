@@ -1,6 +1,6 @@
 # Time-indexed Blocks in the steady-state reduction
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
