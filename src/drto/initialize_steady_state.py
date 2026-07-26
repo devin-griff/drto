@@ -130,9 +130,17 @@ def initialize_steady_state(m, controls=None):
         counterpart = work.find_component(comp.name)
         if counterpart is None:
             continue
+        # a collapsed Reference is a container even over a single member
+        # (a Reference-declared control, gh #18's shape), so a time-only
+        # component reads its one member rather than the container
+        point = (
+            next(iter(counterpart.values()))
+            if counterpart.is_indexed()
+            else counterpart
+        )
         for idx, vd in comp.items():
             o, _ = _split_index(idx, pos, len(subs))
-            src = counterpart[o] if o else counterpart
+            src = counterpart[o] if o else point
             vd.set_value(src.value)
         n_vars += 1
     n_deriv = 0

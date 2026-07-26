@@ -60,6 +60,12 @@ All notable changes to this project are documented here. The format is based on
   own copy carries the tail and the shadow family is gone: 15 activated
   variables fewer on the two-control IDAES CSTR with the constraint count
   unchanged, and the solution identical.
+- `initialize_steady_state` broadcasts a Reference-declared control. The
+  collapsed copy of a control declared as a time-indexed Reference is a
+  container even over its single member, and the dynamic path's broadcast
+  read `.value` on the container and raised
+  (`AttributeError: 'IndexedVar' object has no attribute 'value'`). The
+  broadcast reads the member.
 - The simulation modes resolve component keys before their rebuilds.
   `steady_state_simulation`'s reduction and `dynamic_simulation`'s profile
   application both replace the very components the `controls` and
