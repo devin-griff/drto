@@ -25,13 +25,16 @@ All notable changes to this project are documented here. The format is based on
 - The IDAES CSTR example notebook (`examples/idaes_cstr.ipynb`): a
   saponification CSTR taken straight from `idaes.models.unit_models`,
   declared through the drto surface with no changes to the flowsheet and
-  driven in two solves. The setpoint comes from the declarations,
+  driven in two solves. The manipulated variables are the jacket duty and
+  the feed flow, the flow declared on the inlet Port's time-indexed
+  Reference since its variables live inside the property-block members (the
+  IDAES inlet idiom). The setpoint comes from the declarations,
   `drto.steady_state_simulation` collapsing the flowsheet to its feed-alone
   equilibrium (feature 021), and the controller is the infinite-horizon
   problem, `drto.infinite_horizon` replicating the property blocks onto the
-  tail and the fixed feeds carrying over at their horizon-end values
-  (feature 020). The initial condition takes no solve at all: the setpoint
-  composition perturbed hot, the energy holdup closed-form in T.
+  tail and the fixed feed conditions carrying over at their horizon-end
+  values (feature 020). The initial condition takes no solve at all: the
+  setpoint composition perturbed hot, the energy holdup closed-form in T.
 - Time-indexed Blocks in the terminal segment (feature 020).
   `drto.infinite_horizon` now treats a variable inside a `Block(time)` member
   as time-varying: discovery climbs from the variable to its parent Blocks,
@@ -58,6 +61,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `steady_state_simulation` resolves component keys before the reduction.
+  `create_using` remaps the `controls` and `disturbances` mappings onto the
+  clone, and the reduction then replaces the very components the keys point
+  at, detaching them; a detached component's name degrades to its local
+  name, so a control below the top level errored as undeclared. The names
+  are now resolved while the keys are still attached. The docstring's
+  `controls={m.u: 0.3}` example only ever worked because a top-level local
+  name equals its full name; the IDAES CSTR's `control_volume.heat` exposed
+  the defect.
 - The terminal segment carries the declared model's units (#10). The segment
   copies of states, controls and algebraics, the segment derivatives, and the
   soft-pin slacks were all built unitless, so every replicated equation on a
