@@ -1,6 +1,6 @@
 # Time-indexed Blocks in the terminal segment
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
@@ -36,6 +36,12 @@ The feature is the discovery fix, with everything downstream unchanged:
   replicated equation determines is the existing descriptive error, which is
   how a fixed feed surfaces and gets declared (disturbance or control), the
   same as any flat input.
+- Declared disturbances gain the tail handling the mode transforms already
+  have, closing a hole this model exposes but any flat model with a declared
+  disturbance hits today: the transform takes a `disturbances` option, and
+  each declared disturbance's segment copy is fixed at the given constant,
+  default zero. The tail continues under nominal disturbance unless told
+  otherwise, mirroring `drto.dynamic_simulation`.
 - Time-invariant components, including Params and parameter blocks, are
   shared as-is, which is current behavior.
 
@@ -67,3 +73,7 @@ machinery that is already tested.
   ValueError naming the offending component.
 - The registry's transformation log counts the replicated Block families
   alongside the existing algebraic-components count.
+- A flat model with a declared disturbance goes through the transform with
+  the disturbance's segment copy fixed at the `disturbances` value (default
+  zero), on a model with no Blocks at all: the hole is closed for the flat
+  case too, and tested there.
