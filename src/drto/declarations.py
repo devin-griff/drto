@@ -734,6 +734,25 @@ def terminal_constraint(*args, **kwargs):
 
 def _declare_target(kind, owner, target, fn, owner_kind):
     """Pair a declared state or control with its setpoint target Param."""
+    if isinstance(owner, IndexedComponent_slice):
+        # the same slice that declared the member-subset state resolves to
+        # the wrapped Reference by data identity (gh #20)
+        referents = list(owner)
+        ids = {id(v) for v in referents}
+        reg_s = info(referents[0].model())
+        owner = next(
+            (
+                c
+                for c in reg_s.components(owner_kind)
+                if {id(vd) for vd in (c.values() if c.is_indexed() else (c,))} == ids
+            ),
+            None,
+        )
+        if owner is None:
+            raise ValueError(
+                f"drto: {fn}: the slice matches no declared {owner_kind}; "
+                f"drto.{owner_kind} first."
+            )
     _container(owner, fn)
     _check_ctype(owner, "Var", fn)
     if not owner.is_constructed():

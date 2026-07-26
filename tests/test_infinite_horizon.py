@@ -1027,12 +1027,13 @@ def packed_model():
         return mm.x[0, "A"] == mm.z_hat
 
     drto.horizon(m.t)
-    za = drto.state(m.x[:, "A"])
+    drto.state(m.x[:, "A"])
     drto.dynamics(m.bal)
     drto.control(m.u, profile="piecewise_constant")
     drto.tracking_stage_cost(m.stage)
     drto.initial_condition(m.z_init)
-    drto.steady_state(za, m.z_ss)
+    # the pairing takes the same slice, resolving to the wrapped Reference
+    drto.steady_state(m.x[:, "A"], m.z_ss)
     pyo.TransformationFactory("dae.collocation").apply_to(
         m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
     )
