@@ -17,6 +17,7 @@ applied transformations with their outcomes.
 """
 import html
 import inspect
+import logging
 import re
 
 from pyomo.core.base.units_container import InconsistentUnitsError
@@ -421,7 +422,17 @@ def _compact_constraint(con, index_set_label=None):
     index coordinates replaced by the free index names.
     """
     try:
-        tmpl, indices = templatize_constraint(con)
+        # Pyomo logs an ERROR on its way to raising when a rule cannot be
+        # templatized. The failure is expected and handled here, so the
+        # logger is quieted for just this call; a registry display must not
+        # shout about a condition it recovers from (gh #11).
+        _log = logging.getLogger("pyomo.core")
+        _level = _log.level
+        _log.setLevel(logging.CRITICAL)
+        try:
+            tmpl, indices = templatize_constraint(con)
+        finally:
+            _log.setLevel(_level)
         s = str(tmpl)
         names = _index_names(con, len(indices))
         for n in reversed(range(len(indices))):
@@ -454,18 +465,45 @@ def _compact_constraint(con, index_set_label=None):
         # index coordinates replaced by the free index names, one per set.
         if not con.is_indexed():
             return str(con.expr)
-        idx = next(iter(con.keys()))
+        # The member whose coordinate strings are most distinctive: concrete
+        # coordinates are swapped back to free names by text, so t=0 invites
+        # collisions with unrelated [0] indexes where an interior collocation
+        # point like 1.6125 collides with nothing (gh #11).
+        idx = max(
+            con.keys(),
+            key=lambda i: sum(
+                len(str(c)) for c in (i if isinstance(i, tuple) else (i,))
+            ),
+        )
         s = str(con[idx].expr)
         coords = idx if isinstance(idx, tuple) else (idx,)
         names = _index_names(con, len(coords))
         s = s.replace(
             "[" + ",".join(str(v) for v in coords) + "]", "[" + ",".join(names) + "]"
         )
-        for n, (v, nm) in enumerate(zip(coords, names)):
-            first = "[" if n == 0 else ","
-            last = "]" if n == len(coords) - 1 else ","
-            s = s.replace(f"{first}{v}{last}", f"{first}{nm}{last}")
-        s = s.replace(f"[{coords[-1]}]", f"[{names[-1]}]")
+        if len({str(v) for v in coords}) == len(coords):
+            # each coordinate everywhere it appears bracket-delimited, which
+            # reaches indexes on OTHER components inside the expression
+            # (properties_in[0.0].flow_vol -> properties_in[t].flow_vol); run
+            # the comma-comma form twice since adjacent matches overlap
+            for v, nm in zip(coords, names):
+                vs = str(v)
+                for pre, post in (
+                    ("[", "]"),
+                    ("[", ","),
+                    (",", "]"),
+                    (",", ","),
+                    (",", ","),
+                ):
+                    s = s.replace(f"{pre}{vs}{post}", f"{pre}{nm}{post}")
+        else:
+            # duplicated coordinate values cannot be told apart by text, so
+            # only the positional forms are swapped, as before
+            for n, (v, nm) in enumerate(zip(coords, names)):
+                first = "[" if n == 0 else ","
+                last = "]" if n == len(coords) - 1 else ","
+                s = s.replace(f"{first}{v}{last}", f"{first}{nm}{last}")
+            s = s.replace(f"[{coords[-1]}]", f"[{names[-1]}]")
         if index_set_label is not None and len(coords) == 1:
             return f"{s}  for {names[0]} in {index_set_label}"
         subsets = list(con.index_set().subsets())

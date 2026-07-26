@@ -270,3 +270,55 @@ def test_units_never_raise_on_odd_components():
     reg.record_declaration("horizon", m.t)
     reg.record_declaration("state", m.z)
     repr(reg)  # a registry with no constraints and no units renders fine
+
+
+# ── feature 011 fixes: rendering noise and the fallback substitution ─────────
+
+
+def untemplatizable_model():
+    """A rule with a dict lookup on the index, which templatization cannot
+    execute, referencing a fixed [0] index on another component that a naive
+    text swap would wrongly rename."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(bounds=(0, 5), initialize=[0, 2.5, 5])
+    m.z = pyo.Var(m.t)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.other = pyo.Var(m.t)
+    gain = {0: 1.0, 2.5: 2.0, 5: 1.5}
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dzdt[t] == gain[t] * mm.z[t] + mm.other[0]
+
+    reg = drto.info(m)
+    reg.record_declaration("horizon", m.t)
+    reg.record_declaration("state", m.z)
+    reg.record_declaration("dynamics", m.ode)
+    return m
+
+
+def test_fallback_swaps_the_index_on_other_components_too():
+    r = repr(drto.info(untemplatizable_model()))
+    line = next(l for l in r.splitlines() if "dynamics" in l)
+    assert "z[t]" in line and "dzdt[t]" in line
+    assert "2.5" not in line  # the member's coordinate is gone
+    assert "other[0]" in line  # the unrelated fixed index survives
+
+
+def test_fallback_picks_a_distinctive_member():
+    # with t=0 as the member, other[0] would collide and wrongly rename;
+    # the picker must choose a coordinate that appears nowhere else
+    m = untemplatizable_model()
+    from drto.info import _compact_constraint
+
+    s = _compact_constraint(m.ode)
+    assert "other[0]" in s and "other[t]" not in s
+
+
+def test_templatize_failure_is_quiet(caplog):
+    import logging
+
+    m = untemplatizable_model()
+    with caplog.at_level(logging.ERROR, logger="pyomo.core"):
+        repr(drto.info(m))
+    assert not [rec for rec in caplog.records if rec.levelno >= logging.ERROR]

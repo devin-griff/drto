@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- The registry renders quietly and symbolically on IDAES models (#11). Pyomo
+  logs an ERROR on its way to raising when a rule cannot be re-run for the
+  compact symbolic form; the failure is expected and handled, so the logger is
+  quieted for just that call, and a correctly rendered registry no longer sits
+  under blocks of red. The fallback rendering also swaps the member's index
+  coordinates everywhere they appear bracket-delimited, reaching indexes on
+  other components (`properties_in[0.0].flow_vol` renders as
+  `properties_in[t].flow_vol`), and picks the member whose coordinates are
+  most distinctive rather than the first, so a `t=0` coordinate no longer
+  collides with unrelated `[0]` indexes.
+
 ### Added
 
 - Registry units (feature 019): every registry row shows its units, read from
