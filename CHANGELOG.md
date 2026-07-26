@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Time-indexed Blocks in the steady-state reduction (feature 021).
+  `drto.dynamic_to_steady_state` now collapses a `Block(time)` family to its
+  single steady member: the `t=0` member stays as written, values, bounds,
+  units, and fixed status untouched, and the other members leave the model
+  with their contents. A time-indexed Reference is a view, not a variable:
+  it collapses to a view of the surviving member (a Port entry) or of the
+  collapsed Var (an IDAES `heat_duty`), never to a fresh independent Var,
+  and Ports keep pointing at their referents. Previously the member Blocks
+  survived at every time point and the reduced IDAES CSTR came out broken,
+  284 free variables against 95 active constraints; it now reduces to the
+  steady system, `drto.steady_state_simulation` leaves it square, and pounce
+  solves it to the same equilibrium as a hand-built `dynamic=False`
+  flowsheet. Nested time-indexed Blocks and Blocks indexed beyond time are
+  rejected with descriptive errors.
+- The IDAES CSTR example notebook (`examples/idaes_cstr.ipynb`): a
+  saponification CSTR taken straight from `idaes.models.unit_models`,
+  declared through the drto surface with no changes to the flowsheet and
+  driven in two solves. The setpoint comes from the declarations,
+  `drto.steady_state_simulation` collapsing the flowsheet to its feed-alone
+  equilibrium (feature 021), and the controller is the infinite-horizon
+  problem, `drto.infinite_horizon` replicating the property blocks onto the
+  tail and the fixed feeds carrying over at their horizon-end values
+  (feature 020). The initial condition takes no solve at all: the setpoint
+  composition perturbed hot, the energy holdup closed-form in T.
 - Time-indexed Blocks in the terminal segment (feature 020).
   `drto.infinite_horizon` now treats a variable inside a `Block(time)` member
   as time-varying: discovery climbs from the variable to its parent Blocks,
