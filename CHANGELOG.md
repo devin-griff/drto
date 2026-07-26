@@ -61,15 +61,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- `steady_state_simulation` resolves component keys before the reduction.
-  `create_using` remaps the `controls` and `disturbances` mappings onto the
-  clone, and the reduction then replaces the very components the keys point
-  at, detaching them; a detached component's name degrades to its local
-  name, so a control below the top level errored as undeclared. The names
-  are now resolved while the keys are still attached. The docstring's
-  `controls={m.u: 0.3}` example only ever worked because a top-level local
-  name equals its full name; the IDAES CSTR's `control_volume.heat` exposed
-  the defect.
+- The simulation modes resolve component keys before their rebuilds.
+  `steady_state_simulation`'s reduction and `dynamic_simulation`'s profile
+  application both replace the very components the `controls` and
+  `disturbances` mapping keys point at, detaching them; a detached
+  component's name degrades to its local name, so a control below the top
+  level errored as undeclared. Both modes now resolve the names at entry
+  while the keys are still attached. The docstrings' `controls={m.u: 0.3}`
+  example only ever worked because a top-level local name equals its full
+  name; the IDAES CSTR's `control_volume.heat` exposed the defect.
+  `dynamic_optimization` and `steady_state_optimization` take no such
+  mappings and are unaffected.
 - The terminal segment carries the declared model's units (#10). The segment
   copies of states, controls and algebraics, the segment derivatives, and the
   soft-pin slacks were all built unitless, so every replicated equation on a
