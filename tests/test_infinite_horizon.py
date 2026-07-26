@@ -189,9 +189,7 @@ def test_gamma_follows_the_mesh_rule_and_option_overrides():
 
     m3 = ready_model()
     pyo.TransformationFactory(IH).apply_to(m3, gamma="rule")
-    assert pyo.value(m3.drto_ih.gamma) == pytest.approx(
-        pyo.value(m.drto_ih.gamma)
-    )
+    assert pyo.value(m3.drto_ih.gamma) == pytest.approx(pyo.value(m.drto_ih.gamma))
 
     m4 = ready_model()
     with pytest.raises(ValueError, match="'rule' .* or a number"):

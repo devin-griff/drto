@@ -1,6 +1,6 @@
 # Registry units
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 

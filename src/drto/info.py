@@ -19,7 +19,9 @@ import html
 import inspect
 import re
 
+from pyomo.core.base.units_container import InconsistentUnitsError
 from pyomo.core.expr.template_expr import templatize_constraint
+from pyomo.environ import units as pyo_units
 
 #: The ``Block.private_data`` scope drto stores its registry under.
 _DRTO_SCOPE = "drto"
@@ -238,9 +240,13 @@ class Info:
             ctype = _component_category(records[0]["component"])
             if ctype == "constraint":
                 for r in records:
-                    yield label, _compact_constraint(
+                    text = _compact_constraint(
                         r["component"], self._index_set_label(kind, r["component"])
                     )
+                    unit = _constraint_units(r["component"])
+                    if unit:
+                        text = f"{text}  ({unit})"
+                    yield label, text
             else:
                 yield label, ", ".join(_entry(r, kind) for r in records)
 
@@ -310,6 +316,57 @@ def _component_category(comp):
     return "data"
 
 
+def _units_note(obj):
+    """Compact display units of a Var/Param member or expression body.
+
+    ``None`` when dimensionless or undeterminable, so unitless models render
+    exactly as before; ``'inc'`` when the body's units are inconsistent, the
+    display-only flag of feature 019. Preferred derived names (``J``, ``W``,
+    ``Pa``) render instead of base units where pint can reduce to them.
+    """
+    try:
+        u = pyo_units.get_units(obj)
+    except InconsistentUnitsError:
+        return "inc"
+    except Exception:
+        return None
+    try:
+        reg = pyo_units._pint_registry
+        q = 1.0 * u._get_pint_unit()
+        # exact dimensionality match only: pint's to_preferred substitutes
+        # through degenerate combinations (W/J for 1/s), where this maps an
+        # energy to J and a power to W and otherwise leaves the declared
+        # form alone, so kJ stays kJ and mol/s stays mol/s
+        for target in (reg.W, reg.J, reg.Pa, reg.N, reg.s):
+            if q.dimensionality == target.dimensionality:
+                qc = q.to(target)
+                if qc.magnitude == 1.0:
+                    return f"{qc.units:~}".replace(" ", "")
+                break  # right dimension at another scale: keep the declared form
+    except Exception:
+        pass
+    s = str(u)
+    return None if s in ("dimensionless", "None") else s
+
+
+def _component_units(comp):
+    """The units note for a component, read off one member."""
+    try:
+        member = next(iter(comp.values())) if comp.is_indexed() else comp
+    except Exception:
+        return None
+    return _units_note(member)
+
+
+def _constraint_units(con):
+    """The units note for a constraint family, read off one member's body."""
+    try:
+        member = next(iter(con.values()))
+    except Exception:
+        return None
+    return _units_note(member.body)
+
+
 def _entry(record, kind):
     """Render one non-constraint declaration record as a short entry."""
     comp = record["component"]
@@ -328,6 +385,10 @@ def _entry(record, kind):
         notes.append(f"{type(comp).__name__}, {points}")
     elif kind in ("state", "control"):
         notes.append(_var_status(comp))
+    if _component_category(comp) != "set":
+        unit = _component_units(comp)
+        if unit:
+            notes.append(unit)
     return comp.name + (f" ({', '.join(notes)})" if notes else "")
 
 

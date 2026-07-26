@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Feature 001: the drto registry (drto.info)."""
 import pyomo.environ as pyo
+import pytest
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
@@ -173,3 +174,99 @@ def test_scalar_constraint_renders_directly():
     reg = drto.info(m)
     reg.record_declaration("initial_condition", m.init)
     assert "initial conditions: z[0]  ==  z_hat" in repr(reg)
+
+
+# ── feature 019: registry units ───────────────────────────────────────────────
+
+
+def unit_model():
+    """A declared model carrying pyo.units, with one inconsistent equation."""
+    pytest.importorskip("pint")  # declaring Var(units=...) needs it
+    U = pyo.units
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(bounds=(0, 10), initialize=[0, 5, 10])
+    m.z = pyo.Var(m.t, units=U.mol)
+    # t carries no units, so the derivative's units are given explicitly;
+    # without them dz/dt is dimensionless and the ode would render (inc)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t, units=U.mol)
+    m.u = pyo.Var(m.t, units=U.mol)
+    m.w = pyo.Var(m.t, units=U.kg * U.m**2 / U.s**3)  # base units of W
+    m.tau = pyo.Param(initialize=2.0, mutable=True)
+
+    @m.Constraint(m.t)
+    def ode(m, t):
+        return m.dzdt[t] == m.u[t] - m.z[t] / m.tau
+
+    @m.Constraint(m.t)
+    def mixed(m, t):
+        return m.z[t] + m.w[t] == 0.0  # mol + W: inconsistent
+
+    m.z0 = pyo.Param(initialize=1.0, units=U.mol, mutable=True)
+    m.ic = pyo.Constraint(expr=m.z[0] == m.z0)
+
+    reg = drto.info(m)
+    reg.record_declaration("horizon", m.t)
+    reg.record_declaration("state", m.z)
+    reg.record_declaration("dynamics", m.ode)
+    reg.record_declaration("control", m.w, profile="piecewise_constant")
+    reg.record_declaration("initial_condition", m.ic)
+    reg.record_declaration("terminal_constraint", m.mixed)
+    return m
+
+
+def test_units_annotate_variables_and_constraints():
+    r = repr(drto.info(unit_model()))
+    assert "z (free, mol)" in r
+    assert "w (piecewise_constant, free, W)" in r  # compact, not kg*m**2/s**3
+    # the constraint suffix, asserted on a plain constraint: the ode's
+    # compact rendering is hostage to an order-dependent templatization
+    # flake (a DerivativeVar body renders '[Unattached VarData]' after a
+    # failed templatization earlier in the process), pre-existing and
+    # independent of the units annotation
+    line = next(l for l in r.splitlines() if "initial conditions" in l)
+    assert line.rstrip().endswith("(mol)")
+
+
+def test_degenerate_combinations_do_not_leak():
+    # J/s is W and W*s is J, a kJ keeps its scale, and a ratio of preferred
+    # units reduces (J/W is a time constant, s) rather than rendering as a
+    # W-and-J compound
+    pytest.importorskip("pint")
+    U = pyo.units
+    from drto.info import _units_note
+
+    m = pyo.ConcreteModel()
+    m.a = pyo.Var(units=U.J / U.s)
+    m.b = pyo.Var(units=U.W * U.s)
+    m.c = pyo.Var(units=U.kJ)
+    m.d = pyo.Var(units=U.J / U.W)
+    m.e = pyo.Var(units=U.mol / U.s)
+    assert _units_note(m.a) == "W"
+    assert _units_note(m.b) == "J"
+    assert _units_note(m.c) == "kJ"
+    assert _units_note(m.d) == "s"
+    assert _units_note(m.e) == "mol/s"
+
+
+def test_inconsistent_body_renders_inc():
+    r = repr(drto.info(unit_model()))
+    line = next(l for l in r.splitlines() if "terminal constraint" in l)
+    assert line.rstrip().endswith("(inc)")
+
+
+def test_unitless_model_renders_unchanged():
+    r = repr(drto.info(declared_model()))
+    assert "(free)" in r and "(piecewise_constant, free)" in r
+    assert "(inc)" not in r and "dimensionless" not in r
+    for line in r.splitlines():
+        assert not line.rstrip().endswith("(mol)")
+
+
+def test_units_never_raise_on_odd_components():
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(bounds=(0, 1), initialize=[0, 1])
+    m.z = pyo.Var(m.t)
+    reg = drto.info(m)
+    reg.record_declaration("horizon", m.t)
+    reg.record_declaration("state", m.z)
+    repr(reg)  # a registry with no constraints and no units renders fine
