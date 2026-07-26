@@ -33,9 +33,13 @@ The feature is the discovery fix, with everything downstream unchanged:
   a representative member, exactly as flat algebraic constraints do.
 - The existing validations apply unchanged: a reference away from the
   constraint's own time point is rejected, and a copied variable that no
-  replicated equation determines is the existing descriptive error, which is
-  how a fixed feed surfaces and gets declared (disturbance or control), the
-  same as any flat input.
+  replicated equation determines is the existing descriptive error.
+- A fixed variable is a specification, not a decision: its segment copy is
+  fixed at the horizon-end value, with no declaration involved. An IDAES
+  feed, a fixed volume, or any given input carries onto the tail as itself.
+  Declared disturbances remain zero-mean noise, which the optimization modes
+  fix at zero on the horizon, so an absolute input must not be declared as
+  one.
 - Declared disturbances gain the tail handling the mode transforms already
   have, closing a hole this model exposes but any flat model with a declared
   disturbance hits today: the transform takes a `disturbances` option, and
@@ -61,7 +65,7 @@ machinery that is already tested.
 ## Acceptance criteria
 
 - The dynamic IDAES CSTR (saponification packages, feature-002 declarations,
-  inputs declared per the existing errors) keeps its degrees of
+  no declarations beyond them) keeps its degrees of
   freedom across `drto.infinite_horizon`, up to the documented pin slacks, and ipopt solves the result.
 - No segment constraint references a main-model Block member.
 - Segment copies of block-borne variables carry their source units, and the

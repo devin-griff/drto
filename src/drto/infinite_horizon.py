@@ -839,6 +839,10 @@ class InfiniteHorizonTransformation(Transformation):
                     v.setlb(src.lb)
                     v.setub(src.ub)
                     v.set_value(src.value)
+                    # fixed means fixed: a given input's copy holds the
+                    # horizon-end value on the tail
+                    if comp in algebraic and src.fixed:
+                        v.fix()
 
         for (B, lname), bsubs in block_alg.items():
             for o in _bcombos(bsubs):
@@ -848,6 +852,8 @@ class InfiniteHorizonTransformation(Transformation):
                     v.setlb(src.lb)
                     v.setub(src.ub)
                     v.set_value(src.value)
+                    if src.fixed:
+                        v.fix()
 
         # --- disturbance copies fixed at their realization, after the mesh
         # exists (fixing at construction touches only the endpoints) and

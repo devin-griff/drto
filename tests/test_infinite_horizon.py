@@ -786,12 +786,16 @@ def block_model(nested=False, indirect=False, flat=False):
     m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
     m.cost = pyo.Var(m.t)
 
+    m.q = pyo.Var(m.t, initialize=3.0)  # a given input, fixed everywhere
+    for vd in m.q.values():
+        vd.fix()
+
     if flat:
         m.y = pyo.Var(m.t, initialize=0.4)
 
         @m.Constraint(m.t)
         def gain(mm, t):
-            return mm.y[t] == 2.0 * mm.z[t]
+            return mm.y[t] == 2.0 * mm.z[t] + 0.1 * mm.q[t]
 
     def props_rule(blk, t):
         mm = blk.model()
@@ -805,7 +809,7 @@ def block_model(nested=False, indirect=False, flat=False):
             blk.gain = pyo.Constraint(expr=blk.sub[t].y == 2.0 * mm.z[t])
         else:
             blk.y = pyo.Var(initialize=0.4)
-            blk.gain = pyo.Constraint(expr=blk.y == 2.0 * mm.z[t])
+            blk.gain = pyo.Constraint(expr=blk.y == 2.0 * mm.z[t] + 0.1 * mm.q[t])
 
     if not flat:
         m.props = pyo.Block(m.t, rule=props_rule)
@@ -883,6 +887,18 @@ def test_block_support_is_dof_neutral_relative_to_flat():
         pyo.TransformationFactory(IH).apply_to(m)
         deltas[flat] = _dof(m) - before
     assert deltas[False] == deltas[True]
+
+
+def test_fixed_inputs_stay_fixed_on_the_tail():
+    """A fixed variable is a specification, not a decision: its segment
+    copy is fixed at the horizon-end value, with no declaration involved,
+    in both the flat and the Block-member form."""
+    for flat in (True, False):
+        m = block_model(flat=flat)
+        pyo.TransformationFactory(IH).apply_to(m)
+        copy = m.drto_ih.q
+        assert all(vd.fixed for vd in copy.values()), f"flat={flat}"
+        assert all(pyo.value(vd) == 3.0 for vd in copy.values()), f"flat={flat}"
 
 
 def test_nested_time_indexed_block_is_rejected():

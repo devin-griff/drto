@@ -27,7 +27,10 @@ All notable changes to this project are documented here. The format is based on
   otherwise. A dict gives one constant per non-time index (a multi-component
   feed), and a disturbance declared as a time-indexed Reference into Block
   members routes identically to a flat Var. Previously a declared disturbance
-  referenced by a replicated equation errored as an orphan copy.
+  referenced by a replicated equation errored as an orphan copy. Disturbances
+  are zero-mean noise; an absolute given input needs no declaration at all: a
+  fixed variable's segment copy is fixed at the horizon-end value, so an
+  IDAES feed or a fixed volume carries onto the tail as itself.
 
 ### Fixed
 
