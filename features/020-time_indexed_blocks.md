@@ -55,9 +55,8 @@ machinery that is already tested.
 ## Acceptance criteria
 
 - The dynamic IDAES CSTR (saponification packages, feature-002 declarations,
-  inputs declared per the existing errors) goes through
-  `drto.infinite_horizon` square: degrees of freedom preserved across the
-  transform up to the documented pin slacks, and ipopt solves the result.
+  inputs declared per the existing errors) keeps its degrees of
+  freedom across `drto.infinite_horizon`, up to the documented pin slacks, and ipopt solves the result.
 - No segment constraint references a main-model Block member.
 - Segment copies of block-borne variables carry their source units, and the
   replicated equations are dimensionally consistent on the segment.
