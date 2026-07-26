@@ -11,6 +11,14 @@ intact (a derivative-carrying energy balance keeps its form, its derivative
 fixed), and a per-sample stage cost becomes the single-point cost that
 ``drto.build_objective`` assembles for the steady modes.
 
+A ``Block(time)`` family (the IDAES property-block idiom) collapses to its
+single steady member: the ``t0`` member stays as written, its variables and
+internal equations untouched, and the other members leave the model with
+their contents (feature 021). A time-indexed Reference is a view, not a
+variable: it collapses to a view of the surviving member (a Port entry) or
+of the collapsed Var (an IDAES ``heat_duty``), never to a fresh independent
+Var, and Ports keep pointing at their referents.
+
 A derivative is fixed, not eliminated: ``dz/dt = 0`` is what steady state
 means, so pinning it keeps the user's equations readable instead of leaving a
 side missing, and the solver folds a fixed Var in as a constant. Pyomo cannot
@@ -29,15 +37,18 @@ its references collapsed.
 from pyomo.common.collections import ComponentSet
 from pyomo.common.config import ConfigDict
 from pyomo.core import (
+    Block,
     Constraint,
     Expression,
     Objective,
+    Reference,
     Transformation,
     TransformationFactory,
     Var,
 )
 from pyomo.core.expr import identify_variables, replace_expressions
 from pyomo.dae import DerivativeVar
+from pyomo.network import Port
 
 from drto.declarations import _side_matching, pyomo_cvp_available
 from drto.infinite_horizon import _is_derivative, _split_index, _time_index
@@ -123,6 +134,61 @@ class DynamicToSteadyStateTransformation(Transformation):
                 con.parent_block().del_component(con)
                 n_artifacts += 1
 
+        # --- time-indexed Blocks collapse to their single steady member --
+        # a Block(time) member is per-time structure (the IDAES
+        # property-block idiom): the t0 member is the steady point and
+        # stays as written, values, bounds, units, and fixed status
+        # untouched; the other members leave the model with their contents
+        t0 = time.first()
+        tblocks = []
+        for B in model.component_objects(Block, active=True):
+            pos, _bsubs = _time_index(B, time)
+            if pos is None:
+                continue
+            bd = B.parent_block()
+            while bd is not None and bd is not model:
+                pc = bd.parent_component()
+                if _time_index(pc, time)[0] is not None:
+                    raise ValueError(
+                        f"drto: dynamic_to_steady_state cannot reduce "
+                        f"'{B.name}': it is a time-indexed Block nested in "
+                        f"another time-indexed Block ('{pc.name}'), which "
+                        f"is not supported."
+                    )
+                bd = bd.parent_block()
+            if len(_bsubs) != 1:
+                raise ValueError(
+                    f"drto: dynamic_to_steady_state cannot reduce "
+                    f"'{B.name}': it is indexed by more than the declared "
+                    f"time set, which is not supported."
+                )
+            tblocks.append(B)
+        n_members = 0
+        for B in tblocks:
+            for t in [t for t in B.keys() if t != t0]:
+                del B[t]
+                n_members += 1
+
+        # --- time-indexed References leave the Var collapse ---------------
+        # a Reference is a view, not a variable: it collapses to a view of
+        # the surviving member (a Port entry) or of the collapsed Var (an
+        # IDAES heat_duty), never to a fresh independent Var. The t0 slice
+        # is recorded here and rebuilt after the collapse maps its referents.
+        refs = []
+        for comp in list(model.component_objects(Var, active=True)):
+            if not comp.is_reference():
+                continue
+            pos, subs = _time_index(comp, time)
+            if pos is None:
+                continue
+            entries = {}
+            for idx, vd in comp.items():
+                o, t = _split_index(idx, pos, len(subs))
+                if t == t0:
+                    entries[o] = vd
+            refs.append((comp.local_name, comp.parent_block(), id(comp), entries))
+            comp.parent_block().del_component(comp)
+
         # --- no member may span more than one time point ----------------
         for con in model.component_objects(Constraint, active=True):
             for cd in con.values() if con.is_indexed() else (con,):
@@ -164,7 +230,6 @@ class DynamicToSteadyStateTransformation(Transformation):
         # a derivative collapses like any other time-indexed Var and is then
         # fixed at zero: dz/dt = 0 is what steady state means, so the declared
         # dynamics stay readable as written instead of losing a side
-        t0 = time.first()
         submap = {}
         replaced = {}
         tvars, tvar_seen = [], set()
@@ -210,6 +275,24 @@ class DynamicToSteadyStateTransformation(Transformation):
             for (o, t), vd in members.items():
                 submap[id(vd)] = new[o] if o else new
 
+        # --- rebuild the References onto the collapsed model --------------
+        for name, parent, old_id, entries in refs:
+            entries = {o: submap.get(id(vd), vd) for o, vd in entries.items()}
+            if list(entries) == [()]:
+                new = Reference(entries[()])
+            else:
+                new = Reference(
+                    {(o[0] if len(o) == 1 else o): vd for o, vd in entries.items()}
+                )
+            parent.add_component(name, new)
+            replaced[old_id] = new
+        # a Port holds its entries by object: swap in the rebuilt views
+        for port in model.component_objects(Port, active=True):
+            for pname, item in list(port.vars.items()):
+                new = replaced.get(id(item))
+                if new is not None:
+                    port.vars[pname] = new
+
         # --- collapse the constraints ------------------------------------
         stage_cons = ComponentSet()
         for kind in _STAGE_KINDS:
@@ -219,13 +302,18 @@ class DynamicToSteadyStateTransformation(Transformation):
             pos, subs = _time_index(con, time)
             name, parent = con.local_name, con.parent_block()
             if pos is not None:
-                # one member per other-combo: the representative's expression
+                # one member per other-combo: the t0 representative's
+                # expression, since only the t0 Block members survive; a
+                # family with no t0 member falls back to its first
                 others = [s for n, s in enumerate(subs) if n != pos]
-                reps = {}
+                chosen = {}
                 for idx, cd in con.items():
-                    o, _ = _split_index(idx, pos, len(subs))
-                    if o not in reps:
-                        reps[o] = replace_expressions(cd.expr, submap)
+                    o, t = _split_index(idx, pos, len(subs))
+                    if t == t0 or o not in chosen:
+                        chosen[o] = cd
+                reps = {
+                    o: replace_expressions(cd.expr, submap) for o, cd in chosen.items()
+                }
                 parent.del_component(con)
                 if others:
                     new = Constraint(*others, rule=lambda m, *o, _r=reps: _r[o])
@@ -281,6 +369,14 @@ class DynamicToSteadyStateTransformation(Transformation):
             collapsed=f"{len(tvars)} Vars and {n_cons} Constraints to a "
             f"single point",
             derivatives=f"{n_derivs} fixed at zero",
+            **(
+                {
+                    "blocks": f"{len(tblocks)} time-indexed Block(s) collapsed "
+                    f"to the steady member, {n_members} member(s) removed"
+                }
+                if tblocks
+                else {}
+            ),
             **(
                 {"discarded": f"{n_artifacts} discretization artifacts"}
                 if n_artifacts

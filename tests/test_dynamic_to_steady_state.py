@@ -4,10 +4,11 @@
 import pyomo.environ as pyo
 import pytest
 from pyomo.dae import ContinuousSet, DerivativeVar
+from pyomo.network import Port
 
 import drto
 from test_declarations import base_model, declared_model
-from test_infinite_horizon import indexed_model, ready_model
+from test_infinite_horizon import _dof, block_model, indexed_model, ready_model
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
@@ -161,3 +162,109 @@ def test_apply_to_reduces_in_place():
     pyo.TransformationFactory(SS).apply_to(m)
     assert not m.z.is_indexed()
     assert m.component("t") is None
+
+
+# ── time-indexed Blocks in the reduction (feature 021) ───────────────────────
+
+
+def test_block_family_collapses_to_the_steady_member():
+    m = block_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert list(m.props.keys()) == [0]
+    # the surviving member is untouched: its variable and equation as written
+    assert m.props[0].y.value == 0.4
+    assert m.props[0].gain.active
+    rec = [r for r in drto.info(m).transformations if r["name"] == SS][0]
+    assert "1 time-indexed Block" in rec["outcome"]["blocks"]
+
+
+def test_no_constraint_reaches_a_removed_member():
+    from pyomo.core.expr.visitor import identify_variables
+
+    m = block_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    live = set(id(vd) for vd in m.props[0].component_data_objects(pyo.Var))
+    for c in m.component_data_objects(pyo.Constraint, active=True):
+        for v in identify_variables(c.body, include_fixed=True):
+            blk = v.parent_block()
+            while blk is not None and blk is not m:
+                if blk.parent_component() is m.props:
+                    assert id(v) in live, c.name
+                blk = blk.parent_block()
+
+
+def test_block_reduction_dof_matches_flat():
+    # the same physics through a Block(t) member and through a flat Var
+    # reduce to the same freedom
+    dofs = {}
+    for flat in (True, False):
+        m = block_model(flat=flat)
+        pyo.TransformationFactory(SS).apply_to(m)
+        dofs[flat] = _dof(m)
+    assert dofs[False] == dofs[True]
+
+
+def test_references_collapse_to_views():
+    # the Port idiom: a Reference into members follows the surviving
+    # member, a Reference onto a flat Var follows the collapsed Var,
+    # and the Port keeps pointing at its referents
+    m = block_model()
+    m.yref = pyo.Reference(m.props[:].y)
+    m.zref = pyo.Reference(m.z[:])
+    m.big = pyo.Var(m.t, [1, 2], initialize=0.0)
+    m.bigref = pyo.Reference(m.big[:, :])
+    m.w = pyo.Var(initialize=1.5)
+    m.wref = pyo.Reference(m.w)
+    m.port = Port()
+    m.port.add(m.yref, "y")
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert m.yref.is_reference()
+    assert next(iter(m.yref.values())) is m.props[0].y
+    assert m.zref.is_reference()
+    assert next(iter(m.zref.values())) is m.z
+    assert m.port.vars["y"] is m.yref
+    # an extra index survives the collapse; a time-invariant Reference
+    # is untouched
+    assert m.bigref[1] is m.big[1] and m.bigref[2] is m.big[2]
+    assert next(iter(m.wref.values())) is m.w
+
+
+def test_block_under_a_plain_container_collapses():
+    # the IDAES shape: the time-indexed Block sits levels below the model,
+    # under plain containers; a time-invariant Block is shared as-is
+    m = block_model()
+    m.side = pyo.Block()
+    m.side.sub = pyo.Block(
+        m.t, rule=lambda b, t: setattr(b, "v", pyo.Var(initialize=t))
+    )
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert list(m.side.sub.keys()) == [0]
+    assert m.side.active
+
+
+def test_nested_time_indexed_block_is_rejected():
+    m = block_model(nested=True)
+    with pytest.raises(ValueError, match="nested in another"):
+        pyo.TransformationFactory(SS).apply_to(m)
+
+
+def test_block_indexed_beyond_time_is_rejected():
+    m = block_model()
+    m.extra = pyo.Block(m.t, [1, 2])
+    with pytest.raises(ValueError, match="more than the declared time set"):
+        pyo.TransformationFactory(SS).apply_to(m)
+
+
+@needs_ipopt
+def test_block_reduction_reaches_the_fixed_point():
+    m = block_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    drto.build_objective(m)
+    r = pyo.SolverFactory("ipopt").solve(m)
+    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    # dz/dt = u - y at rest with y = 2z + 0.1q and u in [0, 1]: the
+    # setpoint needs u = 1.3, so the optimum rides the bound, u = y = 1
+    # and z = (1 - 0.3) / 2, the member equation carrying the physics
+    assert pyo.value(m.u) == pytest.approx(1.0, abs=1e-6)
+    assert pyo.value(m.props[0].y) == pytest.approx(1.0, abs=1e-6)
+    assert pyo.value(m.z) == pytest.approx(0.35, abs=1e-6)
