@@ -767,3 +767,140 @@ def test_tail_rejects_an_undeclared_disturbance_value():
     m = disturbed_model()
     with pytest.raises(ValueError, match="not a declared disturbance"):
         pyo.TransformationFactory(IH).apply_to(m, disturbances={"nope": 1.0})
+
+
+# ── time-indexed Blocks on the segment (feature 020) ─────────────────────────
+
+
+def block_model(nested=False, indirect=False, flat=False):
+    """The linear model with its gain routed through a Block(t) member,
+    the minimal shape of the IDAES property-block idiom. ``flat=True``
+    builds the same physics with a flat algebraic Var, the twin for the
+    dof-parity assertion."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.cost = pyo.Var(m.t)
+
+    if flat:
+        m.y = pyo.Var(m.t, initialize=0.4)
+
+        @m.Constraint(m.t)
+        def gain(mm, t):
+            return mm.y[t] == 2.0 * mm.z[t]
+
+    def props_rule(blk, t):
+        mm = blk.model()
+        if indirect:
+            blk.inner = pyo.Block()
+            blk.inner.y = pyo.Var(initialize=0.4)
+            blk.gain = pyo.Constraint(expr=blk.inner.y == 2.0 * mm.z[t])
+        elif nested:
+            blk.sub = pyo.Block(mm.t)
+            blk.sub[t].y = pyo.Var(initialize=0.4)
+            blk.gain = pyo.Constraint(expr=blk.sub[t].y == 2.0 * mm.z[t])
+        else:
+            blk.y = pyo.Var(initialize=0.4)
+            blk.gain = pyo.Constraint(expr=blk.y == 2.0 * mm.z[t])
+
+    if not flat:
+        m.props = pyo.Block(m.t, rule=props_rule)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        if flat:
+            y = mm.y[t]
+        elif indirect:
+            y = mm.props[t].inner.y
+        elif nested:
+            y = mm.props[t].sub[t].y
+        else:
+            y = mm.props[t].y
+        return mm.dz[t] == mm.u[t] - y
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def _dof(m):
+    from pyomo.util.model_size import build_model_size_report
+
+    r = build_model_size_report(m)
+    return r.activated.variables - r.activated.constraints
+
+
+def test_block_members_replicate_onto_the_segment():
+    m = block_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    assert hasattr(b, "props_y") and hasattr(b, "props_gain")
+    log = drto.info(m)._transformations[-1]["outcome"]
+    assert "1 time-indexed Block" in log["blocks"]
+
+
+def test_no_segment_reference_into_main_model_members():
+    from pyomo.core.expr.visitor import identify_variables
+
+    m = block_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    for c in m.drto_ih.component_data_objects(pyo.Constraint, active=True):
+        for v in identify_variables(c.body, include_fixed=True):
+            blk = v.parent_block()
+            while blk is not None and blk is not m:
+                assert blk.parent_component() is not m.props, c.name
+                blk = blk.parent_block()
+
+
+def test_block_support_is_dof_neutral_relative_to_flat():
+    """The Block route adds exactly the dof delta the flat route adds to
+    the same physics: the original defect was a relative swing (21 to -48
+    on the IDAES CSTR)."""
+    deltas = {}
+    for flat in (True, False):
+        m = block_model(flat=flat)
+        before = _dof(m)
+        pyo.TransformationFactory(IH).apply_to(m)
+        deltas[flat] = _dof(m) - before
+    assert deltas[False] == deltas[True]
+
+
+def test_nested_time_indexed_block_is_rejected():
+    m = block_model(nested=True)
+    with pytest.raises(ValueError, match="nested in another"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_indirect_member_child_is_rejected():
+    m = block_model(indirect=True)
+    with pytest.raises(ValueError, match="not a direct child"):
+        pyo.TransformationFactory(IH).apply_to(m)
+
+
+@needs_ipopt
+def test_block_model_solves_through_the_tail():
+    m = block_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+    res = pyo.SolverFactory("ipopt").solve(m)
+    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
