@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Time-indexed Blocks in the terminal segment (feature 020).
+  `drto.infinite_horizon` now treats a variable inside a `Block(time)` member
+  as time-varying: discovery climbs from the variable to its parent Blocks,
+  the member components get segment copies exactly as flat ones do, and the
+  equations inside the members replicate as algebraic families, collected to
+  a fixpoint. On the dynamic IDAES CSTR the transform previously wired ~330
+  segment references into the single `properties_out[0.0]` member and
+  destroyed 69 degrees of freedom; it now replicates the property blocks,
+  leaves zero references into the main model, and ipopt solves the
+  transformed flowsheet to optimality. Nested time-indexed Blocks, members
+  indexed beyond time, and indirect children are rejected with descriptive
+  errors.
+- The tail handles declared disturbances (feature 020). `infinite_horizon`
+  takes a `disturbances` option mirroring `drto.dynamic_simulation`: each
+  declared disturbance's segment copy is fixed at the given constant, default
+  zero, so the tail continues under nominal disturbance unless told
+  otherwise. A dict gives one constant per non-time index (a multi-component
+  feed), and a disturbance declared as a time-indexed Reference into Block
+  members routes identically to a flat Var. Previously a declared disturbance
+  referenced by a replicated equation errored as an orphan copy.
+
 ### Fixed
 
 - The terminal segment carries the declared model's units (#10). The segment

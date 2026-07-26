@@ -346,7 +346,7 @@ class InfiniteHorizonTransformation(Transformation):
         disturbances = list(reg.components("disturbance"))
         disturbance_data = {}
         for d in disturbances:
-            for vd in (d.values() if d.is_indexed() else (d,)):
+            for vd in d.values() if d.is_indexed() else (d,):
                 disturbance_data[id(vd)] = d
         disturbed = ComponentSet()
 
@@ -633,9 +633,7 @@ class InfiniteHorizonTransformation(Transformation):
         b.beta = Param(initialize=config.beta, mutable=True)
 
         seg = {}
-        for comp in list(states) + list(controls) + list(algebraic) + list(
-            disturbed
-        ):
+        for comp in list(states) + list(controls) + list(algebraic) + list(disturbed):
             _, others = _layout(comp)
             u = _units_of(comp)
             v = Var(*others, b.tau, units=u) if others else Var(b.tau, units=u)
@@ -659,8 +657,7 @@ class InfiniteHorizonTransformation(Transformation):
             if not bsubs:
                 return [()]
             return [
-                (i if isinstance(i, tuple) else (i,))
-                for i in itertools.product(*bsubs)
+                (i if isinstance(i, tuple) else (i,)) for i in itertools.product(*bsubs)
             ]
 
         def _bmember(B, lname, o, t):
