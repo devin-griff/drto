@@ -73,6 +73,17 @@ _BLOCK_NAME = "drto_ih"
 _REQUIRED = ("horizon", "state", "dynamics", "control", "tracking_stage_cost")
 
 
+def _units_of(comp):
+    """The component's declared units, read off one member; None if unitless.
+
+    The segment copies, derivatives and pin slacks are built with these, so a
+    unit-carrying model keeps its units across the transform (gh #10). tau is
+    dimensionless, so a derivative over it takes the state's own units.
+    """
+    vd = next(iter(comp.values())) if comp.is_indexed() else comp
+    return vd.get_units()
+
+
 def _gauss_weights(nodes):
     """Quadrature weights for interior ``nodes`` on [0, 1], by moment solve.
 
@@ -471,12 +482,13 @@ class InfiniteHorizonTransformation(Transformation):
         seg = {}
         for comp in list(states) + list(controls) + list(algebraic):
             _, others = _layout(comp)
-            v = Var(*others, b.tau) if others else Var(b.tau)
+            u = _units_of(comp)
+            v = Var(*others, b.tau, units=u) if others else Var(b.tau, units=u)
             b.add_component(comp.local_name, v)
             seg[comp] = v
         derivs = {}
         for z in states:
-            dv = DerivativeVar(seg[z], wrt=b.tau)
+            dv = DerivativeVar(seg[z], wrt=b.tau, units=_units_of(z))
             b.add_component(z.local_name + "_dtau", dv)
             derivs[z] = dv
 
@@ -656,15 +668,16 @@ class InfiniteHorizonTransformation(Transformation):
             pin_terms = []
             for z in states:
                 _, others = _layout(z)
+                zu = _units_of(z)
                 up = (
-                    Var(*others, domain=NonNegativeReals)
+                    Var(*others, domain=NonNegativeReals, units=zu)
                     if others
-                    else Var(domain=NonNegativeReals)
+                    else Var(domain=NonNegativeReals, units=zu)
                 )
                 lo = (
-                    Var(*others, domain=NonNegativeReals)
+                    Var(*others, domain=NonNegativeReals, units=zu)
                     if others
-                    else Var(domain=NonNegativeReals)
+                    else Var(domain=NonNegativeReals, units=zu)
                 )
                 b.add_component(z.local_name + "_pin_up", up)
                 b.add_component(z.local_name + "_pin_lo", lo)

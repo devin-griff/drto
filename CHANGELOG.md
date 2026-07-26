@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- The terminal segment carries the declared model's units (#10). The segment
+  copies of states, controls and algebraics, the segment derivatives, and the
+  soft-pin slacks were all built unitless, so every replicated equation on a
+  unit-carrying model stopped being dimensionally consistent, which feature
+  019 now makes visible as `(inc)`. Each is built with its source component's
+  units; tau is dimensionless, so a derivative over it takes the state's own
+  units, and a unitless model is unchanged. The segment cost is an Expression
+  and always carried its units. Same defect class as pyomo-cvp#1.
+
+
 - The registry renders quietly and symbolically on IDAES models (#11). Pyomo
   logs an ERROR on its way to raising when a rule cannot be re-run for the
   compact symbolic form; the failure is expected and handled, so the logger is
