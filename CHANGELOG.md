@@ -22,19 +22,6 @@ All notable changes to this project are documented here. The format is based on
   solves it to the same equilibrium as a hand-built `dynamic=False`
   flowsheet. Nested time-indexed Blocks and Blocks indexed beyond time are
   rejected with descriptive errors.
-- The IDAES CSTR example notebook (`examples/idaes_cstr.ipynb`): a
-  saponification CSTR taken straight from `idaes.models.unit_models`,
-  declared through the drto surface with no changes to the flowsheet and
-  driven in two solves. The manipulated variables are the jacket duty and
-  the feed flow, the flow declared on the inlet Port's time-indexed
-  Reference since its variables live inside the property-block members (the
-  IDAES inlet idiom). The setpoint comes from the declarations,
-  `drto.steady_state_simulation` collapsing the flowsheet to its feed-alone
-  equilibrium (feature 021), and the controller is the infinite-horizon
-  problem, `drto.infinite_horizon` replicating the property blocks onto the
-  tail and the fixed feed conditions carrying over at their horizon-end
-  values (feature 020). The initial condition takes no solve at all: the
-  setpoint composition perturbed hot, the energy holdup closed-form in T.
 - Time-indexed Blocks in the terminal segment (feature 020).
   `drto.infinite_horizon` now treats a variable inside a `Block(time)` member
   as time-varying: discovery climbs from the variable to its parent Blocks,
