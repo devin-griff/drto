@@ -152,6 +152,41 @@ def test_a_constant_is_held_across_the_horizon():
     assert [pyo.value(m.u[i]) for i in sorted(m.u)] == [0.9] * 4
 
 
+def test_a_nested_control_component_resolves():
+    # parameterizing replaces the control component, detaching the mapping's
+    # key, whose name then degrades to its local name; resolution happens
+    # while the key is still attached, so a control below the top level
+    # passes as a component
+    from pyomo.dae import ContinuousSet, DerivativeVar
+
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1, 2])
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.sub = pyo.Block()
+    m.sub.u = pyo.Var(m.t, initialize=0.3)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.sub.u[t] - mm.z[t]
+
+    @m.Constraint()
+    def init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.sub.u, profile="piecewise_constant")
+    drto.initial_condition(m.init)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=2, ncp=2, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory(DS).apply_to(m, controls={m.sub.u: 0.7})
+    assert all(vd.fixed and pyo.value(vd) == 0.7 for vd in m.sub.u.values())
+
+
 def test_one_value_per_free_point():
     m = sim_model()
     pyo.TransformationFactory(DS).apply_to(m, controls={"u": [0.2, 0.4, 0.6, 0.8]})

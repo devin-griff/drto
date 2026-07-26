@@ -111,6 +111,18 @@ class DynamicSimulationTransformation(Transformation):
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
+        # resolve component keys to names before the profiles are applied:
+        # parameterizing replaces the very components the keys point at,
+        # detaching them, and a detached component's name degrades to its
+        # local name
+        controls = {
+            (k if isinstance(k, str) else k.name): v
+            for k, v in (config.controls or {}).items()
+        }
+        disturbances = {
+            (k if isinstance(k, str) else k.name): v
+            for k, v in (config.disturbances or {}).items()
+        }
         reg = info(model)
         missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
         if missing:
@@ -128,8 +140,8 @@ class DynamicSimulationTransformation(Transformation):
         # the declared profiles shape the simulated input, so they are applied
         # before the controls and disturbances are fixed
         TransformationFactory("drto.parameterize").apply_to(model)
-        fixed = self._fix_controls(reg, config.controls or {})
-        noise = _fix_disturbances(reg, config.disturbances or {}, "dynamic_simulation")
+        fixed = self._fix_controls(reg, controls)
+        noise = _fix_disturbances(reg, disturbances, "dynamic_simulation")
 
         build_objective(model, zero=True)
         reg.record_transformation(
