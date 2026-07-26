@@ -3,6 +3,7 @@
 """Feature 008: drto.steady_state_simulation."""
 import pyomo.environ as pyo
 import pytest
+from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
 from test_declarations import declared_model
@@ -63,6 +64,32 @@ def test_create_using_resolves_source_model_controls_by_name():
     assert sim is not m
     assert sim.u.fixed and pyo.value(sim.u) == 0.4
     assert not m.u[0].fixed  # the source dynamic model is untouched
+
+
+def test_create_using_resolves_a_nested_control_component():
+    # create_using remaps the mapping's keys onto the clone and the
+    # reduction replaces the control component, detaching the key, whose
+    # name then degrades to its local name; resolution happens while the
+    # key is still attached, so a control below the top level passes too
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1, 2])
+    m.sub = pyo.Block()
+    m.sub.u = pyo.Var(m.t, initialize=0.3)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.sub.u[t] - mm.z[t]
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.sub.u, profile="piecewise_constant")
+    sim = pyo.TransformationFactory("drto.steady_state_simulation").create_using(
+        m, controls={m.sub.u: 0.7}
+    )
+    assert sim.sub.u.fixed and pyo.value(sim.sub.u) == 0.7
 
 
 def test_stage_cost_is_dropped():

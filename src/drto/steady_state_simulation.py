@@ -60,6 +60,18 @@ class SteadyStateSimulationTransformation(Transformation):
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
+        # resolve component keys to names before any rebuild: create_using
+        # remaps the mapping onto the clone, and the reduction below
+        # replaces the very components the keys point at, detaching them,
+        # and a detached component's name degrades to its local name
+        controls = {
+            (k if isinstance(k, str) else k.name): v
+            for k, v in (config.controls or {}).items()
+        }
+        disturbances = {
+            (k if isinstance(k, str) else k.name): v
+            for k, v in (config.disturbances or {}).items()
+        }
         reg = info(model)
         if not reg.has_declaration("state"):
             raise ValueError(
@@ -80,13 +92,11 @@ class SteadyStateSimulationTransformation(Transformation):
         # records stay with them and the registry mirrors the model.
         dropped = _shed_optimization_constructs(reg)
 
-        # resolve the requested values against THIS model: create_using
-        # hands keys from the source model, and the reduction above replaces
-        # the control components, so names are the stable handle
+        # the reduction replaced the control components; names are the
+        # stable handle, resolved above while the keys were still attached
         declared = {c.name: c for c in reg.components("control")}
         requested = {}
-        for key, val in (config.controls or {}).items():
-            name = key if isinstance(key, str) else key.name
+        for name, val in controls.items():
             if name not in declared:
                 raise ValueError(
                     f"drto: steady_state_simulation got a value for "
@@ -112,9 +122,7 @@ class SteadyStateSimulationTransformation(Transformation):
 
         # the reduction collapsed a disturbance to a single point; fix it at
         # the standing realization, defaulting to zero
-        noise = _fix_disturbances(
-            reg, config.disturbances or {}, "steady_state_simulation"
-        )
+        noise = _fix_disturbances(reg, disturbances, "steady_state_simulation")
 
         build_objective(model, zero=True)
         reg.record_transformation(
