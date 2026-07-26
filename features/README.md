@@ -35,6 +35,7 @@ alongside the CHANGELOG section rename.
 | [019 Registry units](019-registry_units.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [022 drto.plotting](022-drto.plotting.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
