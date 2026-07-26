@@ -34,9 +34,12 @@ the terminal constraint) take exactly one object and error on a second call
 with a different one. ``steady_state`` and ``steady_state_control`` take one
 (state or control, target Param) pair per call and accumulate.
 """
+import re as _re
+
 from pyomo.common.dependencies import attempt_import
-from pyomo.core import Constraint
+from pyomo.core import Constraint, Reference
 from pyomo.core.base.block import BlockData
+from pyomo.core.base.indexed_component_slice import IndexedComponent_slice
 from pyomo.core.expr import identify_variables
 from pyomo.core.expr.relational_expr import EqualityExpression
 from pyomo.dae import ContinuousSet, DerivativeVar
@@ -317,16 +320,52 @@ def horizon(component):
     return component
 
 
+def _attach_slice_reference(sl, fn):
+    """Wrap a member-subset slice as an attached, named Reference.
+
+    A packed Var (an IDAES holdup) can hold members that are not states;
+    a slice like ``holdup[:, "Liq", "NaOH"]`` declares the true state
+    member (gh #20). The Reference attaches to the sliced component's
+    parent block, named from the component and the constant coordinates.
+    """
+    ref = Reference(sl)
+    vds = list(ref.values())
+    root = vds[0].parent_component()
+    idx0 = vds[0].index()
+    idx0 = idx0 if isinstance(idx0, tuple) else (idx0,)
+    if len(vds) > 1:
+        idx1 = vds[1].index()
+        idx1 = idx1 if isinstance(idx1, tuple) else (idx1,)
+        const = [a for a, b in zip(idx0, idx1) if a == b]
+    else:
+        const = list(idx0)
+    parent = root.parent_block()
+    name = _re.sub(r"\W+", "_", "_".join([root.local_name] + [str(c) for c in const]))
+    if parent.component(name) is not None:
+        raise ValueError(
+            f"drto: {fn}: cannot wrap the slice as '{name}': the component "
+            f"already exists on '{parent.name}'."
+        )
+    parent.add_component(name, ref)
+    return ref
+
+
 def state(*components):
     """Declare one or more state Vars.
 
     A state carries a DerivativeVar only in a dynamic model, so no derivative
     is required here: a steady-state model's states qualify as written. Tags
-    attached Vars or wraps one fresh Var.
+    attached Vars, wraps one fresh Var, or wraps member-subset slices
+    (``holdup[:, "Liq", "NaOH"]``) as attached References, so a packed
+    Var's algebraic member stays undeclared.
     """
     fn = "state"
     if not components:
         raise TypeError(f"drto: {fn} needs at least one component.")
+    components = tuple(
+        _attach_slice_reference(c, fn) if isinstance(c, IndexedComponent_slice) else c
+        for c in components
+    )
     for comp in components:
         _container(comp, fn)
         _check_ctype(comp, "Var", fn)
@@ -373,6 +412,14 @@ def _register_dynamics(components):
     states = reg.components("state")
     if not states:
         raise ValueError(f"drto: {fn} requires drto.state first.")
+    # a container with any declared member is covered: a state may be a
+    # Reference over a member subset (gh #20), and the rows differentiating
+    # the undeclared members are the algebraic residue the transforms
+    # replicate as written
+    covered = {id(s) for s in states}
+    for s in states:
+        for vd in s.values() if s.is_indexed() else (s,):
+            covered.add(id(vd.parent_component()))
     for comp in components:
         for cd in _members(comp):
             deriv, _ = _side_matching(
@@ -385,7 +432,7 @@ def _register_dynamics(components):
             )
             dv = deriv.parent_component()
             state = dv.get_state_var()
-            if not _declared_in(state, states):
+            if id(state) not in covered:
                 raise ValueError(
                     f"drto: {fn}: '{cd.name}' differentiates "
                     f"'{state.name}', which is not a declared state."
@@ -611,12 +658,18 @@ def _register_initial_condition(components):
     time = _declared_horizon(reg, fn)
     states = reg.components("state")
     t0 = time.first()
+    # by data identity: a declared state may be a Reference over a member
+    # subset (gh #20), and the pinned member is the referent, not a member
+    # of the Reference container
+    state_data = set()
+    for s in states:
+        for vd in s.values() if s.is_indexed() else (s,):
+            state_data.add(id(vd))
     for comp in components:
         for cd in _members(comp):
             state_side, param_side = _side_matching(
                 cd,
-                lambda s: _is_var_member(s)
-                and _declared_in(s.parent_component(), states),
+                lambda s: _is_var_member(s) and id(s) in state_data,
                 fn,
                 "a declared state",
             )

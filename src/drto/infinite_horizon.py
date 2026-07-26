@@ -52,6 +52,7 @@ from pyomo.core import (
     Expression,
     NonNegativeReals,
     Param,
+    Set,
     Transformation,
     TransformationFactory,
     Var,
@@ -359,6 +360,24 @@ class InfiniteHorizonTransformation(Transformation):
             for vd in u.values() if u.is_indexed() else (u,):
                 control_data[id(vd)] = u
 
+        # declared state members by data-id, with their declared component
+        # and other-index: a state may be a Reference over a member subset
+        # of a packed Var (gh #20). A container with any declared member is
+        # covered for the derivative checks, and the undeclared members of
+        # a covered container (with their derivatives) copy per member as
+        # the algebraic residue.
+        state_member = {}
+        for z in states:
+            zpos, zsubs = _time_index(z, time)
+            for idx, vd in z.items():
+                zo, _zt = _split_index(idx, zpos, len(zsubs))
+                state_member[id(vd)] = (z, zo)
+        covered = {id(z) for z in states}
+        for z in states:
+            for vd in z.values():
+                covered.add(id(vd.parent_component()))
+        flat_partial = {}  # container -> set of residue combos referenced
+
         # --- index layout helpers -------------------------------------
         layout = {}
 
@@ -472,10 +491,9 @@ class InfiniteHorizonTransformation(Transformation):
                     # replication maps it to the segment derivative with
                     # the dilation factor, the same rewrite the dynamics
                     # get (an index-reduced energy balance is the real case)
-                    if (
-                        comp.get_state_var() not in states_set
-                        or comp.get_continuousset_list() != [time]
-                    ):
+                    if id(
+                        comp.get_state_var()
+                    ) not in covered or comp.get_continuousset_list() != [time]:
                         raise ValueError(
                             f"drto: infinite_horizon cannot replicate "
                             f"'{where}': it references the derivative "
@@ -518,26 +536,47 @@ class InfiniteHorizonTransformation(Transformation):
                     )
                 if id(v) in disturbance_data:
                     disturbed.add(disturbance_data[id(v)])
-                elif (
-                    comp not in states_set
-                    and comp not in controls_set
-                    and not isinstance(comp, DerivativeVar)
-                ):
+                elif id(v) in state_member or id(v) in control_data:
+                    pass  # routed to the declared component's copy
+                elif isinstance(comp, DerivativeVar):
+                    # a residue member's derivative copies per member; a
+                    # declared member's maps to the dilated segment deriv
+                    xvd = comp.get_state_var()[v.index()]
+                    if id(xvd) not in state_member:
+                        o2, _t2 = _split_index(v.index(), pos, len(subs))
+                        flat_partial.setdefault(comp, set()).add(o2)
+                elif id(comp) in covered:
+                    # a partially declared container: the residue member
+                    # copies per member, not the container wholesale
+                    o2, _t2 = _split_index(v.index(), pos, len(subs))
+                    flat_partial.setdefault(comp, set()).add(o2)
+                elif comp not in states_set and comp not in controls_set:
                     algebraic.add(comp)
 
         dyn_reps = {}
+        dyn_residue = {}
         for con in dynamics:
             entries = {}
+            residue = {}
             for o, (t_rep, cd) in _representatives(con).items():
                 deriv_side, rhs = _side_matching(
                     cd, _is_derivative, "infinite_horizon", "a DerivativeVar"
                 )
-                z = deriv_side.parent_component().get_state_var()
-                zpos, zsubs = _time_index(z, time)
-                zo, _ = _split_index(deriv_side.index(), zpos, len(zsubs))
+                zvd = deriv_side.parent_component().get_state_var()[deriv_side.index()]
+                hit = state_member.get(id(zvd))
+                if hit is None:
+                    # a row differentiating an undeclared member is the
+                    # residue: replicated as written, an algebraic equation
+                    # determining the member's derivative copy
+                    _scan(cd.expr, t_rep, cd.name)
+                    residue[o] = (cd.expr, t_rep)
+                    continue
+                z, zo = hit
                 _scan(rhs, t_rep, cd.name)
                 entries[o] = (z, zo, rhs, t_rep)
             dyn_reps[con] = entries
+            if residue:
+                dyn_residue[con] = residue
 
         alg_reps = {}
         for con in alg_cons:
@@ -684,6 +723,24 @@ class InfiniteHorizonTransformation(Transformation):
             v = bseg[key]
             return v[tuple(o) + (s,)] if o else v[s]
 
+        # residue members of partially declared containers copy per member,
+        # over a set of the referenced combos, not the container wholesale
+        pseg = {}
+        for pcomp, combos in flat_partial.items():
+            u = _units_of(pcomp)
+            pset = sorted(combos)
+            if pset == [()]:
+                v = Var(b.tau, units=u)
+            else:
+                cset = Set(initialize=pset, dimen=len(pset[0]))
+                v = Var(cset, b.tau, units=u)
+            b.add_component(f"{pcomp.local_name}_members", v)
+            pseg[pcomp] = v
+
+        def _pseg_at(comp, o, s):
+            v = pseg[comp]
+            return v[tuple(o) + (s,)] if o else v[s]
+
         def _seg_at(comp, o, s):
             v = seg[comp]
             return v[tuple(o) + (s,)] if o else v[s]
@@ -715,16 +772,17 @@ class InfiniteHorizonTransformation(Transformation):
                 val = float(val)
             dist_values[d] = val
 
-        # the model DerivativeVar of each declared state, for mapping
-        # derivative references inside replicated equations
-        model_derivs = {}
+        # the model DerivativeVars over covered states, for mapping
+        # derivative references inside replicated equations per member
+        deriv_infos = []
         for dv in model.component_objects(Var, active=True):
             if (
                 isinstance(dv, DerivativeVar)
-                and dv.get_state_var() in states_set
+                and id(dv.get_state_var()) in covered
                 and dv.get_continuousset_list() == [time]
             ):
-                model_derivs[dv.get_state_var()] = dv
+                dpos, dsubs = _time_index(dv, time)
+                deriv_infos.append((dv, dpos, len(dsubs)))
 
         _emaps = {}
 
@@ -745,12 +803,23 @@ class InfiniteHorizonTransformation(Transformation):
                         mmap[id(_bmember(B, lname, o, t_rep))] = _bseg_at(
                             (B, lname), o, s
                         )
-                for z, dv in model_derivs.items():
-                    dvd = derivs[z]
-                    for o in _combos(z):
-                        seg_deriv = dvd[tuple(o) + (s,)] if o else dvd[s]
-                        mmap[id(_member(dv, o, t_rep))] = (
-                            b.gamma * (1 - s**2) * seg_deriv
+                for dv, dpos, dn in deriv_infos:
+                    for idx, dvd in dv.items():
+                        do, dt = _split_index(idx, dpos, dn)
+                        if dt != t_rep:
+                            continue
+                        hit = state_member.get(id(dv.get_state_var()[idx]))
+                        if hit is None:
+                            continue  # residue: the partial loop maps it
+                        z, zo = hit
+                        dseg = derivs[z]
+                        seg_deriv = dseg[tuple(zo) + (s,)] if zo else dseg[s]
+                        mmap[id(dvd)] = b.gamma * (1 - s**2) * seg_deriv
+                for pcomp, combos in flat_partial.items():
+                    ppos, _psubs = _time_index(pcomp, time)
+                    for o in combos:
+                        mmap[id(pcomp[_join_index(o, t_rep, ppos)])] = _pseg_at(
+                            pcomp, o, s
                         )
                 _emaps[key] = mmap
             return _emaps[key]
@@ -806,6 +875,24 @@ class InfiniteHorizonTransformation(Transformation):
                 return replace_expressions(expr, _emap(t_rep, s))
 
             b.add_component(con.local_name, Constraint(*others, b.tau, rule=alg_rule))
+
+        # --- residue rows of the declared dynamics, replicated as written
+        # at the interior collocation points like algebraic equations -----
+        for con, residue in dyn_residue.items():
+            pos, subs = _time_index(con, time)
+            others = [s_ for n, s_ in enumerate(subs) if n != pos]
+
+            def res_rule(blk, *idx, _entries=residue):
+                sp = idx[-1]
+                o = tuple(idx[:-1])
+                if sp in blk.tau.get_finite_elements() or o not in _entries:
+                    return Constraint.Skip
+                expr, tr = _entries[o]
+                return replace_expressions(expr, _emap(tr, sp))
+
+            b.add_component(
+                con.local_name + "_residue", Constraint(*others, b.tau, rule=res_rule)
+            )
 
         # --- link the segment to the end of the horizon ------------------
         for z in states:
@@ -863,6 +950,18 @@ class InfiniteHorizonTransformation(Transformation):
                 src = _bmember(B, lname, o, t_end)
                 for sp in sorted(b.tau):
                     v = _bseg_at((B, lname), o, sp)
+                    v.setlb(src.lb)
+                    v.setub(src.ub)
+                    v.set_value(src.value)
+                    if src.fixed:
+                        v.fix()
+
+        for pcomp, combos in flat_partial.items():
+            ppos, _psubs = _time_index(pcomp, time)
+            for o in combos:
+                src = pcomp[_join_index(o, t_end, ppos)]
+                for sp in sorted(b.tau):
+                    v = _pseg_at(pcomp, o, sp)
                     v.setlb(src.lb)
                     v.setub(src.ub)
                     v.set_value(src.value)
@@ -1025,6 +1124,14 @@ class InfiniteHorizonTransformation(Transformation):
                     )
                 }
                 if disturbed
+                else {}
+            ),
+            **(
+                {
+                    "partial": f"{len(flat_partial)} partially declared "
+                    f"container(s) copied per member"
+                }
+                if flat_partial
                 else {}
             ),
             **(

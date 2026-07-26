@@ -51,7 +51,7 @@ from pyomo.dae import DerivativeVar
 from pyomo.network import Port
 
 from drto.declarations import _side_matching, pyomo_cvp_available
-from drto.infinite_horizon import _is_derivative, _split_index, _time_index
+from drto.infinite_horizon import _is_derivative, _join_index, _split_index, _time_index
 from drto.info import info
 
 #: The declarations the transform requires.
@@ -98,6 +98,16 @@ class DynamicToSteadyStateTransformation(Transformation):
                 )
 
         states_set = ComponentSet(reg.components("state"))
+        # a state may be a Reference over a member subset of a packed Var
+        # (gh #20): a container with any declared member is covered, and
+        # only the declared members' derivatives are pinned at zero; the
+        # residue members stay free, their collapsed rows determining them
+        state_member_ids = set()
+        covered = {id(s) for s in states_set}
+        for s in states_set:
+            for vd in s.values() if s.is_indexed() else (s,):
+                state_member_ids.add(id(vd))
+                covered.add(id(vd.parent_component()))
         for con in reg.components("dynamics"):
             for cd in con.values() if con.is_indexed() else (con,):
                 side, _ = _side_matching(
@@ -106,7 +116,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                     "dynamic_to_steady_state",
                     "a DerivativeVar (dz/dt)",
                 )
-                if side.parent_component().get_state_var() not in states_set:
+                if id(side.parent_component().get_state_var()) not in covered:
                     raise ValueError(
                         f"drto: dynamic_to_steady_state: '{cd.name}' "
                         f"differentiates an undeclared state."
@@ -219,11 +229,12 @@ class DynamicToSteadyStateTransformation(Transformation):
                     isinstance(dv, DerivativeVar)
                     and id(dv) not in seen
                     and dv.get_continuousset_list() == [time]
-                    and dv.get_state_var() in states_set
+                    and id(dv.get_state_var()) in covered
                 ):
                     seen.add(id(dv))
                     derivs.append(dv)
         deriv_ids = {id(dv) for dv in derivs}
+        deriv_state = {id(dv): dv.get_state_var() for dv in derivs}
         n_derivs = len(derivs)
 
         # --- collapse the time-indexed Vars, the derivatives included ----
@@ -262,10 +273,14 @@ class DynamicToSteadyStateTransformation(Transformation):
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
             if id(comp) in deriv_ids:
-                # zero at steady state, by definition
-                for vd in new.values() if new.is_indexed() else (new,):
-                    vd.set_value(0.0)
-                    vd.fix()
+                # zero at steady state, by definition, for the declared
+                # members; a packed Var's residue member stays free
+                z = deriv_state[id(comp)]
+                for o in attrs:
+                    if id(z[_join_index(o, t0, pos)]) in state_member_ids:
+                        vd = new[o] if o else new
+                        vd.set_value(0.0)
+                        vd.fix()
             else:
                 # a fixed input stays fixed through the collapse
                 for o, a in attrs.items():

@@ -8,7 +8,13 @@ from pyomo.network import Port
 
 import drto
 from test_declarations import base_model, declared_model
-from test_infinite_horizon import _dof, block_model, indexed_model, ready_model
+from test_infinite_horizon import (
+    _dof,
+    block_model,
+    indexed_model,
+    packed_model,
+    ready_model,
+)
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
@@ -240,6 +246,16 @@ def test_block_under_a_plain_container_collapses():
     pyo.TransformationFactory(SS).apply_to(m)
     assert list(m.side.sub.keys()) == [0]
     assert m.side.active
+
+
+def test_member_subset_state_pins_only_declared_derivatives():
+    # gh #20: a packed Var's declared member has its derivative fixed at
+    # zero; the residue member's derivative stays free, its collapsed
+    # balance row determining it
+    m = packed_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert m.dx["A"].fixed and pyo.value(m.dx["A"]) == 0
+    assert not m.dx["W"].fixed
 
 
 def test_nested_time_indexed_block_is_rejected():
