@@ -1,6 +1,6 @@
 # drto.plotting
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
@@ -25,6 +25,9 @@ The helper is registry-driven already: everything it draws comes from
   multi-index component expanding to one panel per member, up to a cap;
   past the cap, a descriptive error names the multi-index components and
   the member syntax.
+- Controls draw as a staircase on the finite horizon: each move holds
+  over its sampling interval, the last one to the end of the horizon. The
+  tail draws as open points at the free values in every profile.
 - matplotlib is optional to drto: it goes through
   `pyomo.common.dependencies.attempt_import` and a `plot` extra, so the
   package imports cleanly without it and a plot call without it raises
@@ -51,6 +54,8 @@ infrastructure.
 - With no selection every declared component draws, a multi-index
   component expanding to one panel per member; past the panel cap the
   error names the multi-index components and the member-string syntax.
+- Controls draw as a staircase on the finite horizon, the last move held
+  to the end of the horizon; states and the stage cost draw as points.
 - With a terminal segment present, the tail points draw at
   `t = tN + atanh(tau)/gamma`, open markers, element-boundary squares on
   state panels, clipped to `t_max`.
