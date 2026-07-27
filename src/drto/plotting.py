@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""drto-aware plotting for the example notebooks.
+"""Registry-aware plotting: ``drto.plot_states``, ``drto.plot_controls``,
+``drto.plot_stage_cost`` (feature 022).
 
 The functions read everything from the model's registry (``drto.info``): the
 declared horizon and its sample grid, the declared states or controls, and
@@ -11,25 +12,41 @@ tail is found automatically, mapped back to real time through
 the segment's finite element boundaries (continuity extrapolations).
 
 Each selected quantity gets its own fixed-size panel in a two-column grid.
-Selection takes component names or components for time-only Vars, and member
-strings like ``"x1[41,1]"`` for states carrying other index sets (a
-multi-index Var must be selected by member: one panel per tray-by-component
-combination is not a plot). With no selection, all time-only declared
-components are drawn and multi-index ones must be named. Points only, finite
-horizon filled, tail open, clipped to ``t_max``. The functions return the
-list of panel axes for further tweaking.
+Selection takes component names, components, or member strings like
+``"x1[41,1]"``. With no selection every declared component is drawn, a
+multi-index component expanding to one panel per member up to a panel cap;
+past the cap, members must be selected by name. States and the stage cost
+draw as points, finite horizon filled and tail open; controls draw as a
+staircase on the finite horizon, each move held over its sampling interval.
+Everything clips to ``t_max``, and the functions return the list of panel
+axes for further tweaking.
+
+matplotlib is optional to drto: it is imported here through
+``attempt_import``, so the package imports cleanly without it and a plot
+call raises with the ``pip install drto[plot]`` instruction.
 """
+import itertools
 import math
 import re
 
-import matplotlib.pyplot as plt
 import pyomo.environ as pyo
-from matplotlib.lines import Line2D
+from pyomo.common.dependencies import attempt_import
 
 import drto
 
+_MPL_MESSAGE = (
+    "drto plotting draws with matplotlib, which is not installed; "
+    "install it with: pip install drto[plot]"
+)
+plt, _plt_available = attempt_import("matplotlib.pyplot", error_message=_MPL_MESSAGE)
+_mlines, _ = attempt_import("matplotlib.lines", error_message=_MPL_MESSAGE)
+
 #: Fixed panel size (inches): every plot the same size regardless of count.
 _PANEL = (5.0, 3.2)
+
+#: With no selection, a multi-index component expands to one panel per
+#: member up to this many total panels; past it, select members by name.
+_MAX_PANELS = 12
 
 _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
@@ -73,18 +90,32 @@ def _coerce(token):
 
 
 def _select(declared, selection, what, time):
-    """Resolve a selection into (component, other-index, label) panels."""
+    """Resolve a selection into (component, other-index, label) panels.
+
+    With no selection every declared component is drawn, a multi-index
+    component expanding to one panel per member, up to ``_MAX_PANELS``
+    panels in total; past the cap, members must be selected by name."""
     by_name = {c.local_name: c for c in declared}
     if selection is None:
-        multi = [c.local_name for c in declared if _time_pos(c, time)[1] > 1]
-        if multi:
+        panels = []
+        for c in declared:
+            pos, nsub = _time_pos(c, time)
+            if nsub == 1:
+                panels.append((c, (), c.local_name))
+                continue
+            others = [s for n, s in enumerate(c.index_set().subsets()) if n != pos]
+            for raw in itertools.product(*others):
+                o = tuple(x for i in raw for x in (i if isinstance(i, tuple) else (i,)))
+                label = f"{c.local_name}[{','.join(str(i) for i in o)}]"
+                panels.append((c, o, label))
+        if len(panels) > _MAX_PANELS:
+            multi = [c.local_name for c in declared if _time_pos(c, time)[1] > 1]
             raise ValueError(
-                f"select members of the multi-index {what}s "
-                f"({', '.join(multi)}) by name, like "
-                f"'{multi[0]}[1,1]'; a panel per member of every index "
-                f"combination is not a plot."
+                f"drawing every {what} needs {len(panels)} panels; select "
+                f"members of the multi-index {what}s ({', '.join(multi)}) "
+                f"by name, like '{multi[0]}[1,1]'."
             )
-        return [(c, (), c.local_name) for c in declared]
+        return panels
     panels = []
     for item in selection:
         if isinstance(item, str):
@@ -144,10 +175,11 @@ def _tail_points(b, tN, gamma, comp, other, taus, t_max):
     return interior, boundary
 
 
-def _draw(m, panels, targets, sample_slice, t_max, boundary_squares):
+def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=False):
     reg = drto.info(m)
     time = reg.components("horizon")[0]
-    samples = reg.declarations("horizon")[0]["samples"][sample_slice]
+    all_samples = reg.declarations("horizon")[0]["samples"]
+    samples = all_samples[sample_slice]
     tail = _tail(m)
     rows = max(1, math.ceil(len(panels) / 2))
     fig, axes = plt.subplots(
@@ -159,7 +191,18 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares):
     drew_tail = drew_boundary = drew_target = False
     for ax, (comp, other, label) in zip(flat, panels):
         pos, _ = _time_pos(comp, time)
-        ax.plot(samples, [pyo.value(_at(comp, other, t, pos)) for t in samples], "o", color="C0")
+        values = [pyo.value(_at(comp, other, t, pos)) for t in samples]
+        if staircase:
+            # a move holds over its sampling interval: the last one extends
+            # to the end of the horizon
+            ax.step(
+                list(samples) + [all_samples[-1]],
+                values + [values[-1]],
+                where="post",
+                color="C0",
+            )
+        else:
+            ax.plot(samples, values, "o", color="C0")
         target = targets.get(id(comp))
         if target is not None:
             tval = target[tuple(other)] if other else target
@@ -184,18 +227,30 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares):
         ax.set_title(label)
     for ax in flat[max(0, len(panels) - 2) : len(panels)]:
         ax.set_xlabel("time")
-    handles = [Line2D([], [], marker="o", color="C0", linestyle="")]
+    handles = [
+        (
+            _mlines.Line2D([], [], color="C0", drawstyle="steps-post")
+            if staircase
+            else _mlines.Line2D([], [], marker="o", color="C0", linestyle="")
+        )
+    ]
     labels = ["finite horizon"]
     if drew_tail:
-        handles.append(Line2D([], [], marker="o", mfc="none", color="C0", linestyle=""))
+        handles.append(
+            _mlines.Line2D([], [], marker="o", mfc="none", color="C0", linestyle="")
+        )
         labels.append("tail")
     if drew_boundary:
-        handles.append(Line2D([], [], marker="s", mfc="none", color="C0", linestyle=""))
+        handles.append(
+            _mlines.Line2D([], [], marker="s", mfc="none", color="C0", linestyle="")
+        )
         labels.append("element boundary")
     if drew_target:
-        handles.append(Line2D([], [], color="C0", linestyle=":"))
+        handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
-    fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0))
+    fig.legend(
+        handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return flat[: len(panels)]
 
@@ -204,7 +259,9 @@ def plot_states(m, states=None, t_max=50):
     """Plot declared states, one fixed-size panel each, two columns.
 
     ``states`` selects by name, component, or member string like
-    ``"x1[41,1]"`` (required for states with index sets besides time).
+    ``"x1[41,1]"``. With no selection every declared state is drawn, a
+    multi-index state expanding to one panel per member, up to a cap of
+    ``_MAX_PANELS`` panels; past it, select members by name.
     Setpoint lines come from the ``steady_state`` pairings; squares mark the
     segment's element boundaries, where the state value is the continuity
     extrapolation rather than a collocation point. Returns the panel axes.
@@ -212,7 +269,14 @@ def plot_states(m, states=None, t_max=50):
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("state"), states, "state", time)
-    return _draw(m, panels, _targets(reg, "steady_state"), slice(None), t_max, boundary_squares=True)
+    return _draw(
+        m,
+        panels,
+        _targets(reg, "steady_state"),
+        slice(None),
+        t_max,
+        boundary_squares=True,
+    )
 
 
 def plot_stage_cost(m, t_max=50):
@@ -238,20 +302,31 @@ def plot_stage_cost(m, t_max=50):
     if cost is None:
         raise ValueError("no scalar cost variable side on the stage cost.")
     panels = [(cost, (), cost.local_name)]
-    return _draw(m, panels, {id(cost): 0}, slice(None, -1), t_max, boundary_squares=False)
+    return _draw(
+        m, panels, {id(cost): 0}, slice(None, -1), t_max, boundary_squares=False
+    )
 
 
 def plot_controls(m, controls=None, t_max=50):
     """Plot declared controls, one fixed-size panel each, two columns.
 
     ``controls`` selects by name or component (all by default; controls are
-    time-only). The finite points sit at the start of each sampling interval
-    (the final sample belongs to the terminal cost, so no move starts
-    there). Setpoint lines come from the ``steady_state_control`` pairings.
+    time-only). The finite horizon draws as a staircase: each move holds
+    over its sampling interval, the last one to the end of the horizon (the
+    final sample belongs to the terminal cost, so no move starts there).
+    Setpoint lines come from the ``steady_state_control`` pairings.
     Segment controls have no boundary values, so no squares. Returns the
     panel axes.
     """
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("control"), controls, "control", time)
-    return _draw(m, panels, _targets(reg, "steady_state_control"), slice(None, -1), t_max, boundary_squares=False)
+    return _draw(
+        m,
+        panels,
+        _targets(reg, "steady_state_control"),
+        slice(None, -1),
+        t_max,
+        boundary_squares=False,
+        staircase=True,
+    )

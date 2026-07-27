@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Registry-aware plotting in the package (feature 022): `drto.plot_states`,
+  `drto.plot_controls`, and `drto.plot_stage_cost`, moved from
+  `examples/plotting.py`. Everything draws from the registry: the sample
+  grid, the declared components, the steady-state pairings as dotted
+  setpoint lines, and the `drto_ih` terminal segment mapped back to real
+  time through `t = tN + atanh(tau)/gamma` as open points. With no
+  selection every declared component draws, a multi-index component
+  expanding to one panel per member up to a cap; controls draw as a
+  staircase on the finite horizon, each move held over its sampling
+  interval. matplotlib rides behind `attempt_import` and a `plot` extra,
+  so the base import stays clean and a plot call without it raises with
+  the install instruction. The example notebooks import from the package
+  and `examples/plotting.py` is gone.
+
 - Time-indexed Blocks in the steady-state reduction (feature 021).
   `drto.dynamic_to_steady_state` now collapses a `Block(time)` family to its
   single steady member: the `t=0` member stays as written, values, bounds,
