@@ -98,6 +98,15 @@ class DynamicToSteadyStateTransformation(Transformation):
                 )
 
         states_set = ComponentSet(reg.components("state"))
+        # a state may be a Reference over a member subset of a packed Var
+        # (gh #20): a container with any declared member is covered, its
+        # dynamics rows accepted and every one of its accumulations pinned
+        # at zero, the residue members' too, since steady state is steady
+        # for the residue
+        covered = {id(s) for s in states_set}
+        for s in states_set:
+            for vd in s.values() if s.is_indexed() else (s,):
+                covered.add(id(vd.parent_component()))
         for con in reg.components("dynamics"):
             for cd in con.values() if con.is_indexed() else (con,):
                 side, _ = _side_matching(
@@ -106,7 +115,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                     "dynamic_to_steady_state",
                     "a DerivativeVar (dz/dt)",
                 )
-                if side.parent_component().get_state_var() not in states_set:
+                if id(side.parent_component().get_state_var()) not in covered:
                     raise ValueError(
                         f"drto: dynamic_to_steady_state: '{cd.name}' "
                         f"differentiates an undeclared state."
@@ -219,7 +228,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                     isinstance(dv, DerivativeVar)
                     and id(dv) not in seen
                     and dv.get_continuousset_list() == [time]
-                    and dv.get_state_var() in states_set
+                    and id(dv.get_state_var()) in covered
                 ):
                     seen.add(id(dv))
                     derivs.append(dv)
@@ -262,7 +271,10 @@ class DynamicToSteadyStateTransformation(Transformation):
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
             if id(comp) in deriv_ids:
-                # zero at steady state, by definition
+                # zero at steady state, by definition: every accumulation
+                # of a covered container rests, the residue members too,
+                # which is what closes the residue rows at the point (the
+                # water balance determining the outlet flow)
                 for vd in new.values() if new.is_indexed() else (new,):
                     vd.set_value(0.0)
                     vd.fix()

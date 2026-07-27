@@ -994,6 +994,87 @@ def test_reference_control_solves_through_the_tail():
     assert pyo.value(m.drto_ih.fin[tail_end]) == pytest.approx(0.5, abs=1e-2)
 
 
+def packed_model():
+    """A packed Var with an algebraic member: the true state is declared
+    as a member-subset slice, and the W member (constant by closure) stays
+    undeclared with its balance row as the residue (gh #20)."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.j = pyo.Set(initialize=["A", "W"])
+    m.x = pyo.Var(m.t, m.j, initialize=0.2)
+    m.dx = DerivativeVar(m.x, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 2), initialize=0.3)
+    m.cost = pyo.Var(m.t)
+
+    @m.Constraint(m.t, m.j)
+    def bal(mm, t, j):
+        if j == "A":
+            return mm.dx[t, j] == mm.u[t] - mm.x[t, j]
+        return mm.dx[t, j] == 0 * mm.u[t]
+
+    @m.Constraint(m.t)
+    def closure(mm, t):
+        return mm.x[t, "W"] == 55.0
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.x[t, "A"] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.x[0, "A"] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.x[:, "A"])
+    drto.dynamics(m.bal)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    # the pairing takes the same slice, resolving to the wrapped Reference
+    drto.steady_state(m.x[:, "A"], m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_member_subset_state_declares_by_slice():
+    m = packed_model()
+    (za,) = [c for c in drto.info(m).components("state") if c.local_name == "x_A"]
+    # the slice wrapped as an attached Reference, indexed by the time set
+    assert za.is_reference() and za.index_set() is m.t
+    assert next(iter(za.values())) is m.x[0, "A"]
+
+
+def test_member_subset_state_segment_structure():
+    m = packed_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    # one family per declared state; the residue members copy per member
+    assert b.component("x_A") is not None
+    assert b.component("bal_residue") is not None
+    xm = b.component("x_members")
+    assert {k[0] for k in xm.keys()} == {"W"}
+    assert {k[0] for k in b.component("dx_members").keys()} == {"W"}
+    log = drto.info(m)._transformations[-1]["outcome"]
+    assert "partially declared" in log["partial"]
+
+
+@needs_ipopt
+def test_member_subset_state_solves_through_the_tail():
+    m = packed_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+    res = pyo.SolverFactory("ipopt").solve(m)
+    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    b = m.drto_ih
+    assert pyo.value(b.x_A[1]) == pytest.approx(0.5, abs=1e-6)
+    sp = sorted(b.tau)[3]
+    assert pyo.value(b.component("x_members")["W", sp]) == pytest.approx(55.0, abs=1e-6)
+
+
 def test_nested_time_indexed_block_is_rejected():
     m = block_model(nested=True)
     with pytest.raises(ValueError, match="nested in another"):

@@ -48,6 +48,20 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- A state may be declared as a member subset of a packed Var (#20). A
+  slice like `holdup[:, "Liq", "NaOH"]` passed to `drto.state` wraps as an
+  attached time-indexed Reference, so a packed Var's algebraic member (an
+  IDAES water holdup, constant by the property package's closure) stays
+  undeclared and the declared surface matches the true state dimension.
+  Classification resolves by data identity everywhere: the dynamics and
+  initial-condition declarations accept rows on covered containers, the
+  steady-state pairing takes the same slice, the reduction pins every
+  accumulation of a covered container at zero (steady state is steady for
+  the residue, which closes its row at the point), and the terminal
+  segment builds one family per declared state, copies the residue
+  members per member over just the referenced combos, and replicates the
+  residue balance rows as written. Family-level declarations are
+  unchanged.
 - A Reference-declared control gets one segment family (#18). The terminal
   segment classified Block members against declared controls by component
   identity, which only ever matches flat declarations, so a control
