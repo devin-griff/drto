@@ -6,7 +6,7 @@ implemented. A feature spec is one Markdown file, numbered in order
 
 ## Status
 
-Lifecycle: ![draft](https://img.shields.io/badge/draft-lightgrey) &rarr; ![ready](https://img.shields.io/badge/ready-blue) &rarr; ![implemented](https://img.shields.io/badge/implemented-yellowgreen) &rarr; ![shipped](https://img.shields.io/badge/shipped-brightgreen)
+Lifecycle: ![draft](https://img.shields.io/badge/draft-lightgrey) &rarr; ![ready](https://img.shields.io/badge/ready-blue) &rarr; ![shipped](https://img.shields.io/badge/shipped-brightgreen) &rarr; ![shipped](https://img.shields.io/badge/shipped-brightgreen)
 
 `implemented` means the work is merged to main; `shipped` means a tagged
 release carries it. The flip to `shipped` happens in the release commit,
@@ -32,10 +32,10 @@ alongside the CHANGELOG section rename.
 | [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [019 Registry units](019-registry_units.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [022 drto.plotting](022-drto.plotting.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [019 Registry units](019-registry_units.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 
 ## Template
 
