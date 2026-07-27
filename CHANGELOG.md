@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The IDAES CSTR example notebook (`examples/idaes_cstr.ipynb`): a
+  saponification CSTR taken straight from `idaes.models.unit_models`,
+  declared through the drto surface with no changes to the flowsheet and
+  driven in two solves. The true states declare as member-subset slices of
+  the packed holdup, the water member staying algebraic (#20); the
+  manipulated variables are the jacket duty and the feed flow, the flow
+  declared on the inlet Port's time-indexed Reference; the setpoint comes
+  from the declarations, `drto.steady_state_simulation` collapsing the
+  flowsheet to its feed-alone equilibrium (feature 021); the initial
+  condition takes no solve, the setpoint composition knocked back along
+  the reaction stoichiometry and hot; `drto.initialize_steady_state`
+  broadcasts the equilibrium across the horizon before the transforms; and
+  the controller is the infinite-horizon problem (feature 020). Every
+  solve runs through a units-driven scaled clone, and the results read
+  back with the package plotting (feature 022).
 - Registry-aware plotting in the package (feature 022): `drto.plot_states`,
   `drto.plot_controls`, and `drto.plot_stage_cost`, moved from
   `examples/plotting.py`. Everything draws from the registry: the sample
