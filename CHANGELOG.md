@@ -55,12 +55,13 @@ All notable changes to this project are documented here. The format is based on
   undeclared and the declared surface matches the true state dimension.
   Classification resolves by data identity everywhere: the dynamics and
   initial-condition declarations accept rows on covered containers, the
-  reduction pins only the declared members' derivatives at zero (the
-  residue members stay free, their collapsed rows determining them), and
-  the terminal segment builds one family per declared state, copies the
-  residue members per member over just the referenced combos, and
-  replicates the residue balance rows as written. Family-level
-  declarations are unchanged.
+  steady-state pairing takes the same slice, the reduction pins every
+  accumulation of a covered container at zero (steady state is steady for
+  the residue, which closes its row at the point), and the terminal
+  segment builds one family per declared state, copies the residue
+  members per member over just the referenced combos, and replicates the
+  residue balance rows as written. Family-level declarations are
+  unchanged.
 - A Reference-declared control gets one segment family (#18). The terminal
   segment classified Block members against declared controls by component
   identity, which only ever matches flat declarations, so a control

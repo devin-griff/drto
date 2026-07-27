@@ -248,14 +248,15 @@ def test_block_under_a_plain_container_collapses():
     assert m.side.active
 
 
-def test_member_subset_state_pins_only_declared_derivatives():
-    # gh #20: a packed Var's declared member has its derivative fixed at
-    # zero; the residue member's derivative stays free, its collapsed
-    # balance row determining it
+def test_member_subset_state_derivatives_all_rest():
+    # gh #20: every accumulation of a covered container is fixed at zero,
+    # the residue member's too. Steady state is steady for the residue,
+    # which is what closes its row at the point (the water balance
+    # determining the outlet flow on the IDAES CSTR).
     m = packed_model()
     pyo.TransformationFactory(SS).apply_to(m)
     assert m.dx["A"].fixed and pyo.value(m.dx["A"]) == 0
-    assert not m.dx["W"].fixed
+    assert m.dx["W"].fixed and pyo.value(m.dx["W"]) == 0
 
 
 def test_nested_time_indexed_block_is_rejected():

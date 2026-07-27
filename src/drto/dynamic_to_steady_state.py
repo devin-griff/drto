@@ -51,7 +51,7 @@ from pyomo.dae import DerivativeVar
 from pyomo.network import Port
 
 from drto.declarations import _side_matching, pyomo_cvp_available
-from drto.infinite_horizon import _is_derivative, _join_index, _split_index, _time_index
+from drto.infinite_horizon import _is_derivative, _split_index, _time_index
 from drto.info import info
 
 #: The declarations the transform requires.
@@ -99,14 +99,13 @@ class DynamicToSteadyStateTransformation(Transformation):
 
         states_set = ComponentSet(reg.components("state"))
         # a state may be a Reference over a member subset of a packed Var
-        # (gh #20): a container with any declared member is covered, and
-        # only the declared members' derivatives are pinned at zero; the
-        # residue members stay free, their collapsed rows determining them
-        state_member_ids = set()
+        # (gh #20): a container with any declared member is covered, its
+        # dynamics rows accepted and every one of its accumulations pinned
+        # at zero, the residue members' too, since steady state is steady
+        # for the residue
         covered = {id(s) for s in states_set}
         for s in states_set:
             for vd in s.values() if s.is_indexed() else (s,):
-                state_member_ids.add(id(vd))
                 covered.add(id(vd.parent_component()))
         for con in reg.components("dynamics"):
             for cd in con.values() if con.is_indexed() else (con,):
@@ -234,7 +233,6 @@ class DynamicToSteadyStateTransformation(Transformation):
                     seen.add(id(dv))
                     derivs.append(dv)
         deriv_ids = {id(dv) for dv in derivs}
-        deriv_state = {id(dv): dv.get_state_var() for dv in derivs}
         n_derivs = len(derivs)
 
         # --- collapse the time-indexed Vars, the derivatives included ----
@@ -273,14 +271,13 @@ class DynamicToSteadyStateTransformation(Transformation):
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
             if id(comp) in deriv_ids:
-                # zero at steady state, by definition, for the declared
-                # members; a packed Var's residue member stays free
-                z = deriv_state[id(comp)]
-                for o in attrs:
-                    if id(z[_join_index(o, t0, pos)]) in state_member_ids:
-                        vd = new[o] if o else new
-                        vd.set_value(0.0)
-                        vd.fix()
+                # zero at steady state, by definition: every accumulation
+                # of a covered container rests, the residue members too,
+                # which is what closes the residue rows at the point (the
+                # water balance determining the outlet flow)
+                for vd in new.values() if new.is_indexed() else (new,):
+                    vd.set_value(0.0)
+                    vd.fix()
             else:
                 # a fixed input stays fixed through the collapse
                 for o, a in attrs.items():
