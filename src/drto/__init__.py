@@ -31,6 +31,7 @@ from drto.declarations import (
 from drto.info import Info, info
 from drto.initialize_steady_state import SteadyStateInitReport, initialize_steady_state
 from drto.objective import build_objective
+from drto.plotting import plot_controls, plot_stage_cost, plot_states
 
 # importing registers the drto.* transformations
 from drto import dynamic_optimization as _dynamic_optimization  # noqa: F401
@@ -50,6 +51,9 @@ __all__ = [
     "Info",
     "info",
     "build_objective",
+    "plot_states",
+    "plot_controls",
+    "plot_stage_cost",
     "initialize_steady_state",
     "SteadyStateInitReport",
     "horizon",
