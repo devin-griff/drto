@@ -12,26 +12,30 @@ guess with no prior solution in hand.
 ```python
 import drto
 
-# ... declared and discretized model m, initial condition set ...
+# ... declared and discretized model m, initial condition set,
+# steady-state targets filled ...
 
-drto.cold_start_dynamic(m, controls={m.u.name: 0.3})
+drto.cold_start_dynamic(m)
 ```
 
-Values only, before any drto transformation, the feature 010 conventions.
-The initialization:
+Values only, before any drto transformation. The steady-state values come
+from the declarations: every declared state needs a `steady_state` pairing
+and every declared control a `steady_state_control` pairing, filled with
+model-consistent values, and a missing pairing is a descriptive error
+naming the component. No equilibrium solve is run; the targets give only
+the states and controls, and the endpoint's algebraic variables come out
+of the same per-point solve as every other grid point's. The
+initialization:
 
-- The steady state solves on a reduced clone, the pipeline
-  `drto.initialize_steady_state` already runs, with the controls held at
-  the mapping's nominal values.
 - **States**: a straight line from the declared initial condition to the
-  steady state, one value per grid point. Each state's DerivativeVar gets
-  the line's slope, `(z_ss - z0) / T`, one constant per member; a state
-  starting on its steady value gets zero.
-- **Controls**: held constant at the nominal values the steady solve used.
+  declared steady-state target, one value per grid point. Each state's
+  DerivativeVar gets the line's slope, `(z_ss - z0) / T`, one constant per
+  member; a state starting on its target gets zero.
+- **Controls**: held constant at their declared steady-state targets.
 - **Algebraic variables**: solved, not guessed. At each grid point the
   states and controls hold the values above and the model's remaining
   equations, everything except the declared dynamics, solve for the rest:
-  one small square solve per point, the same block pipeline.
+  one small square solve per point, the block pipeline feature 010 uses.
 
 The guess then satisfies every equation at every grid point except the
 declared dynamics: the discretization rows hold exactly, since a line is
@@ -40,9 +44,10 @@ the algebra is consistent pointwise. The declared dynamics carry the
 mismatch between the line and the true transient, which is the optimizer's
 job to resolve.
 
-An initial condition already at the steady state reduces to the flat
-broadcast of `drto.initialize_steady_state`: zero slopes and the
-equilibrium everywhere. The two functions share their internals.
+`drto.initialize_steady_state` remains the solve-based seed: it computes
+the equilibrium and broadcasts it flat. `cold_start_dynamic` reads the
+declared targets instead and interpolates; an initial condition already at
+the targets gives the same flat trajectory.
 
 Forward simulation, this feature's earlier draft, is rejected: simulating
 forward is itself a full dynamic solve needing its own initial guess, and
@@ -61,17 +66,21 @@ its fixed point.
 
 ## Acceptance criteria
 
-- `drto.cold_start_dynamic(m, controls=...)` takes a declared, discretized
-  dynamic model before any drto transformation, populates variable values
-  only, adds and removes nothing, and restores the fixed flags it touches.
-  The controls mapping follows the feature 008 convention.
-- States run linearly from the declared initial condition to the solved
-  steady state; their DerivativeVars hold the slope; controls hold the
-  nominal values.
+- `drto.cold_start_dynamic(m)` takes a declared, discretized dynamic model
+  before any drto transformation, populates variable values only, adds and
+  removes nothing, and restores the fixed flags it touches.
+- A declared state without a `steady_state` pairing, or a declared control
+  without a `steady_state_control` pairing, raises a descriptive error
+  naming the component. No equilibrium solve is run; the endpoint's
+  algebraic variables come from its per-point solve like every other
+  grid point's.
+- States run linearly from the declared initial condition to the declared
+  targets; their DerivativeVars hold the slope; controls hold their
+  declared targets.
 - At every grid point, every equation except the declared dynamics is
   satisfied to the pipeline's tolerance.
-- An initial condition at the steady state reproduces the
-  `drto.initialize_steady_state` flat result.
+- An initial condition at the targets reproduces the
+  `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
   solves; a model with `Block(time)` structure initializes the same way.
 - Returns a readable report in the feature 010 shape, adding the
