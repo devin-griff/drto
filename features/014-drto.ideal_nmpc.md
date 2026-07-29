@@ -15,8 +15,24 @@ import drto
 
 # m: the declared, discretized model, untransformed
 
-history = drto.ideal_nmpc(m, steps=50, infinite_horizon=True,
-                          disturbances={"w": 0.05}, seed=0)
+history = drto.ideal_nmpc(
+    m,
+    steps=50,                          # loop length, in samples
+    initial_condition={"z": 0.2},      # written into the hooks; omitted,
+                                       # the hooks' current values
+    infinite_horizon=True,             # attach the terminal segment:
+                                       # True for defaults, a dict for
+                                       # its options, omit for none
+    dynamic_optimization={},           # options through to the transform
+    disturbances={"w": 0.05},          # per declared disturbance: a
+                                       # number is a std dev of zero-mean
+                                       # draws, a sequence the per-step
+                                       # values; omitted is zero
+    seed=0,                            # makes the draws reproducible
+    cold_start=True,                   # cold start the first solve
+    solve=None,                        # callable for every solve;
+                                       # None is a plain pounce solve
+)
 
 drto.plot_states(history)
 drto.plot_controls(history)
