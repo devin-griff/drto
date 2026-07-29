@@ -4,71 +4,50 @@
 
 ## Description
 
-As a user of DRTO, I want a function that shifts the previous solution one
-sample forward to seed the next solve, so that every receding-horizon
-iteration after the first starts warm.
+As a user of DRTO, I want to reuse the previous solution, moved one step
+forward, as the initialization of the current problem, so that each solve
+in a closed loop starts from the last one.
 
 ```python
 import drto
 
-# ... m solved at time k; the loop implements the first move and
-# updates the initial-condition Params with the measurement ...
+# ... m solved; the loop implements the first move and sets the
+# initial condition from the measurement ...
 
 drto.warm_start_dynamic(m)
 ```
 
-Values only, in place, on the model the loop holds: a dynamic optimization
-or dynamic simulation, with or without a terminal segment, or the declared
-discretized model. The registry reads the live components at every stage.
+It sets values only and changes nothing else. It works on the model the
+loop holds, transformed or not, with or without the infinite-horizon tail.
 
-Everything moves one sampling interval forward in real time. Every
-time-indexed variable, states, controls and their move variables,
-algebraic variables, derivatives, and `Block(time)` members alike, takes
-the previous solution's value at `t + h` wherever the previous solution
-covers that time, and the declared steady-state targets wherever it does
-not, the state derivatives zero and the algebraic variables keeping the
-values they hold on those points. A target needed but not declared is a
-descriptive error naming the component. No solve is run.
+Every variable takes the value the previous solution had one sampling time
+later. Where the grids line up, that is a copy. Where they do not, between
+grid points and on the tail, whose points sit in time through
+`t = tN + atanh(tau)/gamma`, the previous solution is interpolated. Past
+the end of the previous solution, which only exists when there is no tail,
+states and controls take their declared steady-state targets, derivatives
+zero, and algebraic variables keep their values. Nothing is solved.
 
-Reading the previous solution: on the horizon the grid repeats interval to
-interval, so the shift is an exact copy, `v[t] <- v[t + h]`. Everywhere
-else the value comes from evaluating the previous solution's collocation
-polynomial at the shifted time. The terminal segment's points sit at the
-real times `t = tN + atanh(tau)/gamma`, and the shift reads and writes
-them at those times like any other point.
-
-The shift leaves the initial-condition Params alone: the shifted state at
-the first point is the model's one-sample prediction, and the loop
-overwrites the Params with the measurement.
-
-`drto.cold_start_dynamic` (feature 011) seeds the first solve from the
-declarations; this seeds every solve after it from the previous solution.
+The initial condition is not touched: the loop sets it from the
+measurement.
 
 ## Benefit hypothesis
 
-The receding-horizon warm start is what makes each iteration converge in a
-few steps instead of from scratch: the shifted solution is already nearly
-optimal for the new problem. Shifting by copy and interpolant evaluation
-is cheap and solve-free, and with the infinite tail the previous solution
-already contains the horizon end.
+Under closed-loop control the next problem is the last one moved one step,
+so the last solution moved one step is nearly its answer. Starting there
+is what makes each solve fast, and it costs only copies and interpolation.
 
 ## Acceptance criteria
 
-- `drto.warm_start_dynamic(m)` populates variable values only, in place,
-  adds and removes nothing, and restores the fixed flags it touches, on
-  the declared discretized model, a dynamic optimization, and a dynamic
-  simulation, each with or without a terminal segment.
-- Every time-indexed variable, `Block(time)` members included, takes the
-  previous solution's value at `t + h` where the previous solution covers
-  it, and the declared targets where it does not, state derivatives zero
-  and algebraic variables keeping their values on the filled points; a
-  missing needed pairing raises a descriptive error naming the component.
-  No solve is run.
-- Values read as exact copies on the repeating grid, and off it by
-  evaluating the previous solution's collocation polynomial, the terminal
-  segment's points at their real times.
-- With a segment attached, the previous solution covers the entire
-  shifted problem and no steady-state pairing is required.
+- `drto.warm_start_dynamic(m)` sets values only: nothing added, nothing
+  removed, fixed variables left fixed.
+- Every variable takes the previous solution's value one sampling time
+  later: copied where the grids line up, interpolated where they do not,
+  tail included.
+- Past the end of the previous solution, states and controls take their
+  steady-state targets, derivatives zero, and algebraic variables keep
+  their values; a missing target is an error naming the component.
+- With a tail there is no past the end: the previous solution covers the
+  whole problem and no targets are needed.
 - A solution resting at the targets shifts to itself.
-- Returns a readable report in the feature 010 shape: what was copied,
-  what was evaluated, what was filled.
+- Returns a readable report of what was copied, interpolated, and filled.
