@@ -4,10 +4,10 @@
 
 ## Description
 
-As a user of DRTO, I want a function that initializes a declared, discretized
-dynamic model whose initial condition sits away from the steady state, so
-that the first solve of a receding-horizon run starts from a consistent
-guess with no prior solution in hand.
+As a user of DRTO, I want a function that initializes a dynamic model whose
+initial condition sits away from the steady state, so that the first solve
+of a receding-horizon run starts from a consistent guess with no prior
+solution in hand.
 
 ```python
 import drto
@@ -18,24 +18,37 @@ import drto
 drto.cold_start_dynamic(m)
 ```
 
-Values only, before any drto transformation. The steady-state values come
-from the declarations: every declared state needs a `steady_state` pairing
-and every declared control a `steady_state_control` pairing, filled with
-model-consistent values, and a missing pairing is a descriptive error
-naming the component. No equilibrium solve is run; the targets give only
-the states and controls, and the endpoint's algebraic variables come out
-of the same per-point solve as every other grid point's. The
-initialization:
+Values only, at any stage: the declared discretized model, or after
+`drto.infinite_horizon`, `drto.dynamic_optimization`, or
+`drto.dynamic_simulation`. The registry's records follow the transforms, so
+the same function reads the live components at every stage.
+
+The steady-state values come from the declarations: every declared state
+needs a `steady_state` pairing and every declared control a
+`steady_state_control` pairing, filled with model-consistent values, and a
+missing pairing is a descriptive error naming the component. No
+equilibrium solve is run; the targets give only the states and controls,
+and everything else comes out of the per-point solves. The initialization:
 
 - **States**: a straight line from the declared initial condition to the
-  declared steady-state target, one value per grid point. Each state's
-  DerivativeVar gets the line's slope, `(z_ss - z0) / T`, one constant per
-  member; a state starting on its target gets zero.
-- **Controls**: held constant at their declared steady-state targets.
+  declared steady-state target, one value per grid point; a state starting
+  on its target gets a flat line.
+- **Derivative variables**: a declared state's DerivativeVar members hold
+  the line's slope, `(z_ss - z0) / T`, one constant per member, zero for a
+  state on its target. Any other DerivativeVar member (a packed Var's
+  undeclared members) comes out of the per-point solves through its own
+  balance row.
+- **Controls**: held constant at their declared steady-state targets. A
+  parameterized control's move variables hold the same target; a fixed
+  control (a simulation's) keeps the value it holds.
 - **Algebraic variables**: solved, not guessed. At each grid point the
   states and controls hold the values above and the model's remaining
   equations, everything except the declared dynamics, solve for the rest:
   one small square solve per point, the block pipeline feature 010 uses.
+- **The terminal segment**, when one is attached: the tail rests at the
+  targets. State copies and segment controls hold the targets, the tau
+  derivatives and the pin slacks are zero, and the segment's algebraic
+  copies come from the same per-point solves at the segment's points.
 
 The guess then satisfies every equation at every grid point except the
 declared dynamics: the discretization rows hold exactly, since a line is
@@ -60,25 +73,26 @@ The first solve of a receding-horizon run has no previous solution to
 warm-start from, and a raw or flat guess leaves the solver to find the
 whole transient on its own. A guess that is consistent everywhere except
 the declared dynamics starts the solver at the problem's actual content,
-and it composes with the terminal segment: the segment initializes from the
-horizon end, so a trajectory ending at the equilibrium starts the tail at
-its fixed point.
+and it composes with the terminal segment: the tail starts at rest on its
+fixed point, the soft pin already satisfied.
 
 ## Acceptance criteria
 
-- `drto.cold_start_dynamic(m)` takes a declared, discretized dynamic model
-  before any drto transformation, populates variable values only, adds and
-  removes nothing, and restores the fixed flags it touches.
+- `drto.cold_start_dynamic(m)` populates variable values only, adds and
+  removes nothing, and restores the fixed flags it touches, on all four
+  shapes: the declared discretized model, an infinite-horizon model, a
+  dynamic optimization, and a dynamic simulation.
 - A declared state without a `steady_state` pairing, or a declared control
   without a `steady_state_control` pairing, raises a descriptive error
-  naming the component. No equilibrium solve is run; the endpoint's
-  algebraic variables come from its per-point solve like every other
-  grid point's.
+  naming the component. No equilibrium solve is run.
 - States run linearly from the declared initial condition to the declared
-  targets; their DerivativeVars hold the slope; controls hold their
-  declared targets.
+  targets; their DerivativeVar members hold the line's slope; controls,
+  and a parameterized control's moves, hold their declared targets; a
+  fixed control keeps its value.
 - At every grid point, every equation except the declared dynamics is
-  satisfied to the pipeline's tolerance.
+  satisfied to the pipeline's tolerance; on an infinite-horizon model the
+  same holds at the segment's points, with the tail at the targets and
+  the pin slacks at zero.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
