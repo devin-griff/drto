@@ -34,9 +34,9 @@ Reading the previous solution: on the horizon the grid repeats interval to
 interval, so the shift is an exact copy, `v[t] <- v[t + h]`. Everywhere
 else the value comes from evaluating the previous solution at the shifted
 time through the element's collocation interpolant, the Lagrange
-evaluation `control_value` already does for controls. A segment
-variable's time reads through its map, `t = tN + atanh(tau)/gamma`, on
-both sides of the shift.
+evaluation `control_value` already does for controls. The terminal
+segment's points sit at the real times `t = tN + atanh(tau)/gamma`, and
+the shift reads and writes them at those times like any other point.
 
 The shift leaves the initial-condition Params alone: the shifted state at
 the first point is the model's one-sample prediction, and the loop
@@ -66,8 +66,8 @@ already contains the horizon end.
   missing needed pairing raises a descriptive error naming the component.
   No solve is run.
 - Values read as exact copies on the repeating grid and through the
-  element's collocation interpolant off it, a segment variable's time
-  through its map.
+  element's collocation interpolant off it, the terminal segment's points
+  at their real times.
 - With a segment attached, the previous solution covers the entire
   shifted problem and no steady-state pairing is required.
 - A solution resting at the targets shifts to itself.
