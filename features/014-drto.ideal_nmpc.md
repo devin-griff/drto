@@ -35,14 +35,12 @@ drto.plot_states(history)
 drto.plot_controls(history)
 ```
 
-The input is the declared, discretized model, before any transform. The
-loop builds both sides from it: a clone becomes the process, transformed
-by `drto.dynamic_simulation` with its controls first fixed at the
-declared control targets, and the model itself becomes the controller,
-`drto.infinite_horizon` then `drto.dynamic_optimization`. The tail's
-tuning Params, beta, gamma, and mu, retune on the transformed model as
-always; the `dynamic_optimization` options pass through to the transform
-as given.
+The input is the declared, discretized model, with
+`drto.infinite_horizon` applied or not, before `drto.dynamic_optimization`.
+The loop builds both sides from it: a clone becomes the process,
+transformed by `drto.dynamic_simulation` with its controls first fixed at
+the declared control targets, and the input becomes the controller
+through `drto.dynamic_optimization`, its options passed through as given.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
@@ -90,8 +88,8 @@ the staircase they physically are.
 
 A hand-written closed loop is a page of code whose every line touches an
 internal detail: which container holds a control's first move after
-parameterization, which Params are the feedback hooks, how to shift a
-solution that carries a tail, how to keep the process model consistent
+parameterization, which Params are the feedback hooks, how to shift the
+previous solution, how to keep the process model consistent
 with the controller's, how to seed reproducible noise, how to collect the
 results in a plottable form. Each user re-derives those details, and a
 loop that gets one wrong runs and quietly studies the wrong thing. The
@@ -102,13 +100,13 @@ single call on the declared model.
 
 ## Acceptance criteria
 
-- `drto.ideal_nmpc(m, steps, ...)` requires a declared, discretized,
-  untransformed model and errors descriptively otherwise. It clones the
-  process before transforming, puts the clone in simulation mode with the
-  controls first fixed at the declared control targets, and transforms
-  the input into the controller, `drto.infinite_horizon` then
-  `drto.dynamic_optimization`, the latter's options passed through as
-  given.
+- `drto.ideal_nmpc(m, steps, ...)` requires a declared, discretized
+  model before `drto.dynamic_optimization`, with `drto.infinite_horizon`
+  applied or not, and errors descriptively otherwise. It clones the
+  process, puts the clone in simulation mode with the controls first
+  fixed at the declared control targets, and transforms the input into
+  the controller with `drto.dynamic_optimization`, its options passed
+  through as given.
 - `initial_condition` writes the given state values into the
   initial-condition Params before the first step; omitted, the Params'
   current values are the first actual state.
