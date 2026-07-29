@@ -20,9 +20,6 @@ history = drto.ideal_nmpc(
     steps=50,                          # loop length, in samples
     initial_condition={"z": 0.2},      # written into the hooks; omitted,
                                        # the hooks' current values
-    infinite_horizon=True,             # attach the terminal segment:
-                                       # True for defaults, a dict for
-                                       # its options, omit for none
     dynamic_optimization={},           # options through to the transform
     disturbances={"w": 0.05},          # per declared disturbance: a
                                        # number is a std dev of zero-mean
@@ -42,11 +39,10 @@ The input is the declared, discretized model, before any transform. The
 loop builds both sides from it: a clone becomes the process, transformed
 by `drto.dynamic_simulation` with its controls first fixed at the
 declared control targets, and the model itself becomes the controller,
-`drto.infinite_horizon` applied first when the `infinite_horizon` option
-is given (`True` for the defaults, a dict for its options), then
-`drto.dynamic_optimization`. The `infinite_horizon` and
-`dynamic_optimization` options pass through to the transforms as given,
-so their options stay reachable without changes here.
+`drto.infinite_horizon` then `drto.dynamic_optimization`. The tail's
+tuning Params, beta, gamma, and mu, retune on the transformed model as
+always; the `dynamic_optimization` options pass through to the transform
+as given.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
@@ -110,9 +106,9 @@ single call on the declared model.
   untransformed model and errors descriptively otherwise. It clones the
   process before transforming, puts the clone in simulation mode with the
   controls first fixed at the declared control targets, and transforms
-  the input into the controller, `drto.infinite_horizon` first when the
-  option is given, then `drto.dynamic_optimization`; both options pass
-  through to their transforms as given.
+  the input into the controller, `drto.infinite_horizon` then
+  `drto.dynamic_optimization`, the latter's options passed through as
+  given.
 - `initial_condition` writes the given state values into the
   initial-condition Params before the first step; omitted, the Params'
   current values are the first actual state.
