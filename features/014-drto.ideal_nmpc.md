@@ -24,10 +24,18 @@ drto.plot_controls(history)
 
 The input is the declared, discretized model, before any transform. The
 loop builds both sides from it: a clone becomes the process, transformed
-by `drto.dynamic_simulation`, and the model itself becomes the
-controller, `drto.infinite_horizon` applied first when the
-`infinite_horizon` option is given (`True` for the defaults, a dict for
-its options), then `drto.dynamic_optimization`.
+by `drto.dynamic_simulation` with its controls first fixed at the
+declared control targets, and the model itself becomes the controller,
+`drto.infinite_horizon` applied first when the `infinite_horizon` option
+is given (`True` for the defaults, a dict for its options), then
+`drto.dynamic_optimization`. The `infinite_horizon` and
+`dynamic_optimization` options pass through to the transforms as given,
+so their options stay reachable without changes here.
+
+The first actual state is the initial condition: `initial_condition`, a
+mapping of declared state names to values, is written into the
+initial-condition Params before the first step; omitted, the Params'
+current values are used.
 
 Ideal means the solve is treated as instantaneous: the measurement
 arrives, the problem is solved, and the move is implemented at the same
@@ -68,19 +76,30 @@ the staircase they physically are.
 
 ## Benefit hypothesis
 
-The closed loop is what the framework exists to run, and it is where the
-pieces compose: the cold start seeds the first solve, the warm start
-carries each solution to the next, the tail supplies the horizon end, and
-the simulation mode is the process. One function runs the loop and returns
-the actual behavior, which is the object of study, on any declared model.
+A hand-written closed loop is a page of code whose every line touches an
+internal detail: which container holds a control's first move after
+parameterization, which Params are the feedback hooks, how to shift a
+solution that carries a tail, how to keep the process model consistent
+with the controller's, how to seed reproducible noise, how to collect the
+results in a plottable form. Each user re-derives those details, and a
+loop that gets one wrong runs and quietly studies the wrong thing. The
+packaged loop reads all of them from the registry, is tested against the
+acceptance criteria below, stays correct as the surface evolves, and
+returns a history that plots in one line, so a closed-loop study is a
+single call on the declared model.
 
 ## Acceptance criteria
 
 - `drto.ideal_nmpc(m, steps, ...)` requires a declared, discretized,
   untransformed model and errors descriptively otherwise. It clones the
-  process before transforming, puts the clone in simulation mode, and
-  transforms the input into the controller, `drto.infinite_horizon`
-  first when the option is given, then `drto.dynamic_optimization`.
+  process before transforming, puts the clone in simulation mode with the
+  controls first fixed at the declared control targets, and transforms
+  the input into the controller, `drto.infinite_horizon` first when the
+  option is given, then `drto.dynamic_optimization`; both options pass
+  through to their transforms as given.
+- `initial_condition` writes the given state values into the
+  initial-condition Params before the first step; omitted, the Params'
+  current values are the first actual state.
 - Each step solves the controller at the current initial condition,
   implements the first moves on the process clone, fixes its
   disturbances at the step's realization, simulates, and feeds the state
