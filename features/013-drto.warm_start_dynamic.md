@@ -21,8 +21,8 @@ Values only, in place, on the model the loop holds: a dynamic optimization
 or dynamic simulation, with or without a terminal segment, or the declared
 discretized model. The registry reads the live components at every stage.
 
-One rule: everything moves one sampling interval forward in real time.
-Every time-indexed variable, states, controls and their move variables,
+Everything moves one sampling interval forward in real time. Every
+time-indexed variable, states, controls and their move variables,
 algebraic variables, derivatives, and `Block(time)` members alike, takes
 the previous solution's value at `t + h` wherever the previous solution
 covers that time, and the declared steady-state targets wherever it does
@@ -39,25 +39,23 @@ rest of it, its points sitting in real time through
 `t = tN + atanh(tau)/gamma`: the new value at `tau` is the old solution at
 `tanh(atanh(tau) + gamma h)`, and the mesh rule `tanh(gamma h) = tau_11`
 places the old tail's first collocation point exactly one sample past the
-horizon end. A consequence, not a case: with a segment attached the
-previous solution covers the entire shifted problem, so the target
-fallback never fires and no pairing is needed.
+horizon end. With a segment attached, the previous solution covers the
+entire shifted problem, so the target fallback never fires.
 
-The initial-condition Params are the loop's job, not the shift's: the
-shifted state at the first point is the model's one-sample prediction, and
-the loop overwrites the Params with the measurement.
+The shift leaves the initial-condition Params alone: the shifted state at
+the first point is the model's one-sample prediction, and the loop
+overwrites the Params with the measurement.
 
-The counterpart to `drto.cold_start_dynamic` (feature 011): 011 seeds the
-first solve from the declarations, this seeds every solve after it from
-the previous solution.
+`drto.cold_start_dynamic` (feature 011) seeds the first solve from the
+declarations; this seeds every solve after it from the previous solution.
 
 ## Benefit hypothesis
 
 The receding-horizon warm start is what makes each iteration converge in a
 few steps instead of from scratch: the shifted solution is already nearly
 optimal for the new problem. Shifting by copy and interpolant evaluation
-is cheap and solve-free, and the infinite tail means the previous solution
-already contains the horizon end that a finite formulation has to invent.
+is cheap and solve-free, and with the infinite tail the previous solution
+already contains the horizon end.
 
 ## Acceptance criteria
 
