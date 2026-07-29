@@ -31,16 +31,12 @@ values they hold on those points. A target needed but not declared is a
 descriptive error naming the component. No solve is run.
 
 Reading the previous solution: on the horizon the grid repeats interval to
-interval, so the shift is an exact copy, `v[t] <- v[t + h]`. Off the grid,
-the value comes from the element's collocation interpolant, the Lagrange
-evaluation `control_value` already does for controls, applied to every
-variable. A terminal segment is part of the previous solution like the
-rest of it, its points sitting in real time through
-`t = tN + atanh(tau)/gamma`: the new value at `tau` is the old solution at
-`tanh(atanh(tau) + gamma h)`, and the mesh rule `tanh(gamma h) = tau_11`
-places the old tail's first collocation point exactly one sample past the
-horizon end. With a segment attached, the previous solution covers the
-entire shifted problem, so the target fallback never fires.
+interval, so the shift is an exact copy, `v[t] <- v[t + h]`. Everywhere
+else the value comes from evaluating the previous solution at the shifted
+time through the element's collocation interpolant, the Lagrange
+evaluation `control_value` already does for controls. A segment
+variable's time reads through its map, `t = tN + atanh(tau)/gamma`, on
+both sides of the shift.
 
 The shift leaves the initial-condition Params alone: the shifted state at
 the first point is the model's one-sample prediction, and the loop
@@ -70,9 +66,8 @@ already contains the horizon end.
   missing needed pairing raises a descriptive error naming the component.
   No solve is run.
 - Values read as exact copies on the repeating grid and through the
-  element's collocation interpolant off it; a terminal segment reads
-  through its time map, the old tail's first collocation point sitting
-  one sample past the horizon end by the mesh rule.
+  element's collocation interpolant off it, a segment variable's time
+  through its map.
 - With a segment attached, the previous solution covers the entire
   shifted problem and no steady-state pairing is required.
 - A solution resting at the targets shifts to itself.
