@@ -1,6 +1,6 @@
 # drto.warm_start_dynamic
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
@@ -40,7 +40,7 @@ is what makes each solve fast, and it costs only copies and interpolation.
 ## Acceptance criteria
 
 - `drto.warm_start_dynamic(m)` sets values only: nothing added, nothing
-  removed, fixed variables left fixed.
+  removed, and fixed variables left alone, value and flag.
 - Every variable takes the previous solution's value one sampling time
   later: copied where the grids line up, interpolated where they do not,
   tail included.
