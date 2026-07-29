@@ -4,42 +4,64 @@
 
 ## Description
 
-As a user of DRTO, I want a function that turns a horizon problem solved at a
-predicted state into the corrected control for the actual state, so that I get
-the advanced-step NMPC correction without re-solving online.
+As a user of DRTO, I want the advanced-step correction: solve the horizon
+at a predicted state between samples, then correct the solution to the
+measured state the moment it arrives, without re-solving.
 
 ```python
 import drto
 
-# ... m solved by drto.dynamic_optimization at the PREDICTED next state ...
+# ... m solved by drto.dynamic_optimization at the predicted state,
+# with pounce ...
 
-m.z_hat.set_value(z_measured)          # the actual measurement arrives
-u0 = drto.advanced_step_controller(m)  # pounce estimate() of the controls,
-                                       # corrected to z_hat, no re-solve
-dudz = drto.advanced_step_controller(m, gradient=True)  # sensitivities instead
+m.z_hat.set_value(z_measured)              # the measurement arrives
+est = drto.advanced_step_controller(m)     # pounce estimate(), corrected
+u0 = est[m.u[0]]                           # the move to implement
+
+dudz = drto.advanced_step_controller(m, gradient=True)  # sensitivities
 ```
+
+`drto.dynamic_optimization` declares the initial-condition Params, the
+state feedback hooks, as pounce sensitivity parameters whenever
+pyomo-pounce is importable. The declaration is inert metadata: every
+other solver ignores it and solves the model unchanged; a pounce solve
+keeps the converged factorization, so the correction afterwards is a
+backsolve, not a solve.
+
+`drto.advanced_step_controller(m)` reads the hooks' current values as the
+perturbation, the difference between the measured state the loop wrote
+and the predicted state the model was solved at, and returns
+`pyomo_pounce.estimate()`: the corrected solution as a map from each
+variable to its estimated value, clamped to bounds. The model is not
+touched; the solution at the predicted state stays in place as the next
+solve's warm start. With `gradient=True` it returns
+`pyomo_pounce.gradient()` for the declared controls with respect to the
+hooks instead. Keyword arguments it does not recognize pass through to
+the pounce call, so options pounce grows need no change here.
+
+The feature requires pounce: without a pounce solve there is no
+factorization, and the call fails with pounce's own instruction to solve
+with pounce first.
 
 ## Benefit hypothesis
 
-Advanced-step NMPC's whole value is replacing the online solve with a fast
-sensitivity update: solve at a predicted state between samples, then correct
-instantly when the real measurement arrives. Exposing that correction as one
-function built on pounce's sensitivity is what makes the advanced-step framework
-practical, and it is DRTO's headline differentiator.
+Advanced-step NMPC replaces the online solve with a sensitivity update:
+the expensive solve runs between samples at a prediction, and the
+correction at the measurement is instant. One function turns the solved
+model and the updated hooks into the corrected controls, and it is the
+piece the asnmpc loop (feature 015) is built from.
 
 ## Acceptance criteria
 
-- `drto.advanced_step_controller(m, ...)` returns the advanced-step control for a
-  model already solved by `drto.dynamic_optimization` at a predicted state, using
-  the initial-condition parameter (the state feedback hook) as the sensitivity
-  parameter.
-- By default it returns pyomo-pounce's `estimate()` of the declared controls: the
-  fast sensitivity-based update of the optimal controls at the actual (measured)
-  state, without re-solving.
-- A flag returns pyomo-pounce's `gradient()` instead: the sensitivity of the
-  declared controls with respect to the state parameter.
-- It reads the declared controls and the initial-condition parameter from
-  `drto.info`, and errors clearly if the model has not been solved or has no
-  declared initial condition.
-- It does not re-solve the model. The correction is a sensitivity update of the
-  existing solution.
+- `drto.dynamic_optimization` declares the initial-condition Params as
+  pounce sensitivity parameters when pyomo-pounce is importable. A model
+  solved with any other solver is unchanged by the declaration.
+- `drto.advanced_step_controller(m)` returns the `estimate()` map at the
+  hooks' current values, without modifying the model. With
+  `gradient=True` it returns the `gradient()` of the declared controls
+  with respect to the hooks.
+- Unrecognized keyword arguments pass through to the pounce call.
+- Without a pounce solve, the call raises the no-session error
+  instructing to solve with pounce.
+- On a solved model, re-solving at the perturbed hooks agrees with the
+  estimate to first order.
