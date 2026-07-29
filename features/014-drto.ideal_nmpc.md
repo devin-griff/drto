@@ -122,7 +122,9 @@ single call on the declared model.
 - `solve` is applied to every controller and process solve, defaulting to
   pounce; a failed solve raises an error naming the step.
 - The history holds times, actual states, implemented moves, and
-  realizations under their declared names, and `drto.plot_states` and
-  `drto.plot_controls` accept it, the moves drawn as a staircase.
+  realizations under their declared names. `drto.plot_states` and
+  `drto.plot_controls` gain a second input kind: handed a history instead
+  of a model, they draw its actual trajectories, the moves as a
+  staircase, with the setpoint lines from the recorded targets.
 - On hicks with zero disturbances, the actual states settle to the
   declared targets.
