@@ -28,7 +28,7 @@ alongside the CHANGELOG section rename.
 | [012 drto.advanced_step_controller](012-drto.advanced_step_controller.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [013 drto.warm_start_dynamic](013-drto.warm_start_dynamic.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [014 drto.ideal_nmpc](014-drto.ideal_nmpc.md) | ![ready](https://img.shields.io/badge/ready-blue) |
-| [015 drto.asnmpc](015-drto.asnmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [015 drto.asnmpc](015-drto.asnmpc.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
