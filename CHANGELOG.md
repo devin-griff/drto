@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format is based on
   targets with the pin slacks at zero, and, with pyomo-pounce installed,
   the algebraic variables solved pointwise from every equation except the
   declared dynamics, one block solve with the states and controls held.
+  With an active `scaling_factor` suffix the per-point solves run on a
+  scaled clone and the values propagate back in the model's own units.
   Values only, at any stage, no equilibrium solve; a declared state or
   control without its pairing is a descriptive error, and without
   pyomo-pounce the per-point solves are skipped and the report says so.

@@ -97,6 +97,38 @@ def test_report_reads():
     assert "on a line" in text and "point solves" in text
 
 
+def test_scaling_suffix_scales_the_point_solves():
+    # with an active scaling_factor suffix the solves run on a scaled
+    # clone and propagate back: same result, in the model's own units
+    def built(suffix):
+        m = block_model()
+        m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+        drto.steady_state_control(m.u, m.u_ss)
+        for vd in m.q.values():
+            vd.fix(3.0)
+        m.z_hat.set_value(0.1)
+        if suffix:
+            m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+            for blk in m.props.values():
+                m.scaling_factor[blk.y] = 1e-6
+                m.scaling_factor[blk.gain] = 1e-6
+        return m
+
+    plain, scaled = built(False), built(True)
+    drto.cold_start_dynamic(plain)
+    report = drto.cold_start_dynamic(scaled)
+    assert "scaled clone" in report.point_solves
+    pairs = zip(
+        plain.component_data_objects(pyo.Var),
+        scaled.component_data_objects(pyo.Var),
+        strict=True,
+    )
+    for vd, svd in pairs:
+        assert (vd.value is None) == (svd.value is None), svd.name
+        if vd.value is not None:
+            assert svd.value == pytest.approx(vd.value, abs=1e-7), svd.name
+
+
 def test_residue_algebra_solves_in_the_point_solves():
     # a packed Var's undeclared member: its closure determines it and
     # the discretization rows its derivative

@@ -8,9 +8,11 @@ declared initial condition to its declared steady-state target, its
 DerivativeVar members hold the line's slope, the controls (and a
 parameterized control's moves) hold their declared targets, and, with
 pyomo-pounce installed, the algebraic variables solve pointwise from
-every equation except the declared dynamics. A terminal segment rests at
-the targets: copies and segment controls at the targets, tau derivatives
-and pin slacks at zero.
+every equation except the declared dynamics; with an active
+``scaling_factor`` suffix those solves run on a scaled clone and the
+values propagate back. A terminal segment rests at the targets: copies
+and segment controls at the targets, tau derivatives and pin slacks at
+zero.
 
 Values only, at any stage: the declared discretized model, or after
 ``drto.infinite_horizon``, ``drto.dynamic_optimization``, or
@@ -213,24 +215,43 @@ def cold_start_dynamic(m):
     # block once the states and controls are held. An undeclared member
     # of a packed Var comes from its closures, and its derivative from
     # the discretization rows; a variable only a set-aside balance would
-    # close keeps its value and is reported underconstrained.
+    # close keeps its value and is reported underconstrained. With an
+    # active scaling_factor suffix the solves run on a scaled clone and
+    # the values propagate back; the model stays in its own units.
     if not pounce_available:
         return report
+    scaled = any(
+        s.local_name == "scaling_factor"
+        for s in m.component_objects(pyo.Suffix, active=True)
+    )
+    if scaled:
+        xfrm = pyo.TransformationFactory("core.scale_model")
+        solve_m = xfrm.create_using(m, rename=False)
+        solve_reg = info(solve_m)
+    else:
+        solve_m, solve_reg = m, reg
     held = []
-    for comp in states + controls:
-        held.extend(vd for vd in comp.values() if not vd.fixed)
+    for kind in ("state", "control"):
+        for comp in solve_reg.components(kind):
+            held.extend(vd for vd in comp.values() if not vd.fixed)
     rows = []
     for kind in ("dynamics", "initial_condition"):
-        for con in reg.components(kind):
+        for con in solve_reg.components(kind):
             if con.active:
                 rows.append(con)
                 con.deactivate()
     try:
         report.pipeline = pyomo_pounce.initialize(
-            m, decisions=held, fill=None, project=False
+            solve_m, decisions=held, fill=None, project=False
         )
-        report.point_solves = "run (pyomo-pounce block solve)"
+        report.point_solves = (
+            "run (pyomo-pounce block solve, scaled clone)"
+            if scaled
+            else "run (pyomo-pounce block solve)"
+        )
     finally:
         for con in rows:
             con.activate()
+    if scaled:
+        xfrm.propagate_solution(solve_m, m)
     return report
