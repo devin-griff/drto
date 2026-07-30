@@ -36,8 +36,8 @@ and everything else comes out of the per-point solves. The initialization:
 - **Derivative variables**: a declared state's DerivativeVar members hold
   the line's slope, `(z_ss - z0) / T`, one constant per member, zero for a
   state on its target. Any other DerivativeVar member (a packed Var's
-  undeclared members) comes out of the per-point solves through its own
-  balance row.
+  undeclared members) comes out of the per-point solves through the
+  discretization rows.
 - **Controls**: held constant at their declared steady-state targets. A
   parameterized control's move variables hold the same target; a fixed
   control (a simulation's) keeps the value it holds.
