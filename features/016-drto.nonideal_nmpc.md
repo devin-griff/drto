@@ -21,7 +21,8 @@ history = drto.nonideal_nmpc(
     initial_condition={"z": 0.2},      # written into the hooks; omitted,
                                        # the hooks' current values
     dynamic_optimization={},           # options through to the transform
-    delay=None,                        # None clocks each solve; a number
+    delay=None,                        # None takes each solve's time as
+                                       # the solver reports it; a number
                                        # or per-step sequence prescribes
                                        # the delay instead
     disturbances={"w": 0.05},          # per declared disturbance: a
@@ -42,8 +43,9 @@ The setup, the options, the disturbance handling, and the plotting are
 those of `drto.ideal_nmpc` (feature 014), with `delay` added.
 
 The loop differs from the ideal one in when a move takes effect. The
-solve at the step's measurement takes `delta` seconds, clocked, or read
-from `delay`; the new move takes effect that far into the sample. Every
+solve at the step's measurement takes `delta` seconds, the solve time the
+solver reports, or the value `delay` prescribes; the new move takes
+effect that far into the sample. Every
 simulation step therefore carries two control actions, and runs as two
 finite elements of different lengths: the process advances `delta` under
 the previous move, then `h - delta` under the new one. The process
@@ -73,8 +75,9 @@ three-way comparison direct.
 
 - `drto.nonideal_nmpc(m, steps, ...)` takes what `drto.ideal_nmpc` takes
   plus `delay`, and builds the controller and the process the same way.
-- Each step solves at the measurement, clocked when `delay` is None and
-  prescribed by a number or per-step sequence otherwise; the sample
+- Each step solves at the measurement, the delay the solver-reported
+  solve time when `delay` is None and a number or per-step sequence
+  otherwise; the sample
   simulates as two elements of exact lengths, `delta` under the previous
   move and `h - delta` under the new one, the duration a parameter of
   the process simulation.
