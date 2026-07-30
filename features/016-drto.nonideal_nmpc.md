@@ -44,12 +44,12 @@ those of `drto.ideal_nmpc` (feature 014), with `delay` added.
 The loop differs from the ideal one in when a move takes effect. The
 solve at the step's measurement takes `delta` seconds, clocked, or read
 from `delay`; the new move takes effect that far into the sample. Every
-simulation step therefore carries two control actions: the previous move
-holds from the measurement until `delta`, and the new move runs from
-`delta` to the end of the sample. On the first step, the previous move is
-the declared control targets, the inputs the process sat at before the
-loop. The switch lands on the process grid point nearest `delta`, and a
-finer process discretization sharpens it.
+simulation step therefore carries two control actions, and runs as two
+finite elements of different lengths: the process advances `delta` under
+the previous move, then `h - delta` under the new one. The process
+simulation's duration is a parameter, so both lengths are exact on its
+fixed grid. On the first step, the previous move is the declared control
+targets, the inputs the process sat at before the loop.
 
 A solve that outruns the sample, `delta >= h`, keeps the previous move
 for the whole sample, and its move takes effect at the next sample
@@ -74,9 +74,10 @@ three-way comparison direct.
 - `drto.nonideal_nmpc(m, steps, ...)` takes what `drto.ideal_nmpc` takes
   plus `delay`, and builds the controller and the process the same way.
 - Each step solves at the measurement, clocked when `delay` is None and
-  prescribed by a number or per-step sequence otherwise; the simulation
-  runs the previous move until the delay and the new move after it, the
-  switch on the process grid point nearest the delay.
+  prescribed by a number or per-step sequence otherwise; the sample
+  simulates as two elements of exact lengths, `delta` under the previous
+  move and `h - delta` under the new one, the duration a parameter of
+  the process simulation.
 - The first step's previous move is the declared control targets. A delay
   at or past the sample end keeps the previous move for the whole sample
   and the move takes effect at the next boundary, recorded as clamped.
