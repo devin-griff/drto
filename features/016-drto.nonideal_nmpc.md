@@ -50,8 +50,11 @@ simulation step therefore carries two control actions, and runs as two
 finite elements of different lengths: the process advances `delta` under
 the previous move, then `h - delta` under the new one. The process
 simulation's duration is a parameter, so both lengths are exact on its
-fixed grid. On the first step, the previous move is the declared control
-targets, the inputs the process sat at before the loop.
+fixed grid. A piece of zero length is not simulated: a zero delay runs
+the sample in one piece under the new move, and a delay at the sample
+length one piece under the previous move. On the first step, the previous
+move is the declared control targets, the inputs the process sat at
+before the loop.
 
 A solve that outruns the sample, `delta >= h`, keeps the previous move
 for the whole sample, and its move takes effect at the next sample
@@ -80,7 +83,7 @@ three-way comparison direct.
   otherwise; the sample
   simulates as two elements of exact lengths, `delta` under the previous
   move and `h - delta` under the new one, the duration a parameter of
-  the process simulation.
+  the process simulation and a zero-length piece not simulated.
 - The first step's previous move is the declared control targets. A delay
   at or past the sample end keeps the previous move for the whole sample
   and the move takes effect at the next boundary, recorded as clamped.
