@@ -41,19 +41,23 @@ and everything else comes out of the per-point solves. The initialization:
 - **Controls**: held constant at their declared steady-state targets. A
   parameterized control's move variables hold the same target; a fixed
   control (a simulation's) keeps the value it holds.
-- **Algebraic variables**: solved, not guessed. At each grid point the
-  states and controls hold the values above and the model's remaining
-  equations, everything except the declared dynamics, solve for the rest:
-  one small square solve per point, the block pipeline feature 010 uses.
+- **Algebraic variables**: solved, not guessed, when pyomo-pounce is
+  installed. At each grid point the states and controls hold the values
+  above and the model's remaining equations, everything except the
+  declared dynamics, solve for the rest: one small square solve per
+  point, the block pipeline feature 010 uses. Without pyomo-pounce the
+  per-point solves are skipped, the algebraic variables keep their
+  values, and the report says so; everything else needs no solver.
 - **The terminal segment**, when one is attached: the tail rests at the
   targets. State copies and segment controls hold the targets, the tau
   derivatives and the pin slacks are zero, and the segment's algebraic
   copies come from the same per-point solves at the segment's points.
 
-The guess then satisfies every equation at every grid point except the
-declared dynamics: the discretization rows hold exactly, since a line is
-differentiated exactly, the initial condition holds at the first point, and
-the algebra is consistent pointwise. The declared dynamics carry the
+With the per-point solves run, the guess satisfies every equation at
+every grid point except the declared dynamics: the discretization rows
+hold exactly, since a line is differentiated exactly, the initial
+condition holds at the first point, and the algebra is consistent
+pointwise. The declared dynamics carry the
 mismatch between the line and the true transient, which is the optimizer's
 job to resolve.
 
@@ -89,10 +93,13 @@ fixed point, the soft pin already satisfied.
   targets; their DerivativeVar members hold the line's slope; controls,
   and a parameterized control's moves, hold their declared targets; a
   fixed control keeps its value.
-- At every grid point, every equation except the declared dynamics is
-  satisfied to the pipeline's tolerance; on an infinite-horizon model the
-  same holds at the segment's points, with the tail at the targets and
-  the pin slacks at zero.
+- With pyomo-pounce installed, every equation except the declared
+  dynamics is satisfied at every grid point to the pipeline's tolerance;
+  on an infinite-horizon model the same holds at the segment's points,
+  with the tail at the targets and the pin slacks at zero. Without it,
+  the states, derivatives, and controls initialize the same way, the
+  algebraic variables keep their values, and the report records the
+  skipped solves.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
