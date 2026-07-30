@@ -279,6 +279,32 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
             if con.active:
                 rows.append(con)
                 con.deactivate()
+    # the terminal segment mirrors the finite horizon: its state and
+    # control copies are held at the values set above, and set aside are
+    # its copies of the declared dynamics plus the rows those values
+    # satisfy by construction (the link, the continuity, the pin), which
+    # would otherwise re-solve held copies. The pin slacks then sit in
+    # no active row and stay at zero; the residue rows stay, they close
+    # the undeclared members' copies
+    seg = solve_m.component("drto_ih")
+    if seg is not None:
+        for kind in ("state", "control"):
+            for comp in solve_reg.components(kind):
+                copy = seg.component(comp.local_name)
+                if copy is not None:
+                    held.extend(vd for vd in copy.values() if not vd.fixed)
+        set_aside = [
+            seg.component(con.local_name)
+            for con in solve_reg.components("dynamics")
+        ] + [
+            seg.component(comp.local_name + suffix)
+            for comp in solve_reg.components("state")
+            for suffix in ("_link", "_tau_cont_eq", "_pin_eq")
+        ]
+        for con in set_aside:
+            if con is not None and con.active:
+                rows.append(con)
+                con.deactivate()
     try:
         report.pipeline = pyomo_pounce.initialize(
             solve_m, decisions=held, fill=None, project=False

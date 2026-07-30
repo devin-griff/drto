@@ -81,7 +81,12 @@ def test_transformed_shapes_initialize():
             assert "targets" in report.segment
             b = m.drto_ih
             assert all(pyo.value(vd) == pytest.approx(0.5) for vd in b.z.values())
-            assert all(pyo.value(vd) == 0 for vd in b.z_dtau.values())
+            # the tau discretization rows re-solve the derivatives to
+            # the pipeline's tolerance, like the finite side's
+            assert all(
+                pyo.value(vd) == pytest.approx(0, abs=1e-6)
+                for vd in b.z_dtau.values()
+            )
 
 
 @needs_ipopt
@@ -178,6 +183,30 @@ def test_scaling_suffix_scales_the_point_solves():
         assert (vd.value is None) == (svd.value is None), svd.name
         if vd.value is not None:
             assert svd.value == pytest.approx(vd.value, abs=1e-7), svd.name
+
+
+def test_segment_algebra_solves_at_the_tail():
+    # the tail's algebraic copies come from the same per-point solves:
+    # with the tail at the targets, everything but the dynamics copies
+    # holds at the segment's points
+    m = block_model()
+    m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+    drto.steady_state_control(m.u, m.u_ss)
+    for vd in m.q.values():
+        vd.fix(3.0)
+    m.z_hat.set_value(0.1)
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    drto.cold_start_dynamic(m)
+    dynamics_copies = {m.drto_ih.component("ode")}
+    checked = 0
+    for con in m.drto_ih.component_objects(pyo.Constraint):
+        if con in dynamics_copies:
+            continue
+        for cd in con.values():
+            if cd.active and cd.equality:
+                assert abs(pyo.value(cd.body) - pyo.value(cd.lower)) < 1e-6, cd.name
+                checked += 1
+    assert checked > 0
 
 
 def test_residue_algebra_solves_in_the_point_solves():
