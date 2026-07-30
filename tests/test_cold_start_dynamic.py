@@ -5,7 +5,7 @@ import pyomo.environ as pyo
 import pytest
 
 import drto
-from test_infinite_horizon import block_model, ready_model
+from test_infinite_horizon import block_model, packed_model, ready_model
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
@@ -95,3 +95,23 @@ def test_report_reads():
     m = seeded()
     text = str(drto.cold_start_dynamic(m))
     assert "on a line" in text and "point solves" in text
+
+
+def test_residue_algebra_solves_in_the_point_solves():
+    # a packed Var's undeclared member: its closure determines it and
+    # the discretization rows its derivative
+    m = packed_model()
+    m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+    drto.steady_state_control(m.u, m.u_ss)
+    m.z_hat.set_value(0.1)
+    drto.cold_start_dynamic(m)
+    for t in m.t:
+        assert pyo.value(m.x[t, "W"]) == pytest.approx(55.0)
+    # the discretization rows determine the residue derivative at the
+    # collocation points; the first point has no such row and stays put
+    for t in sorted(m.t)[1:]:
+        assert pyo.value(m.dx[t, "W"]) == pytest.approx(0, abs=1e-6)
+    for con in m.component_data_objects(pyo.Constraint, active=True):
+        if con.parent_component() is m.bal:
+            continue
+        assert abs(pyo.value(con.body) - pyo.value(con.lower)) < 1e-6, con.name

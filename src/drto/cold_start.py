@@ -209,8 +209,11 @@ def cold_start_dynamic(m):
         report.segment = f"{n_seg} copies at the targets, slacks at zero"
 
     # the per-point solves: everything except the declared dynamics and
-    # the initial condition determines the algebraic variables, each grid
-    # point its own block once the states and controls are held
+    # the initial condition determines the rest, each grid point its own
+    # block once the states and controls are held. An undeclared member
+    # of a packed Var comes from its closures, and its derivative from
+    # the discretization rows; a variable only a set-aside balance would
+    # close keeps its value and is reported underconstrained.
     if not pounce_available:
         return report
     held = []
