@@ -1,6 +1,6 @@
 # drto.ideal_nmpc
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
