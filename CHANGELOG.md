@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The format is based on
   Values only, at any stage, no equilibrium solve; a declared state or
   control without its pairing is a descriptive error, and without
   pyomo-pounce the per-point solves are skipped and the report says so.
-  The IDAES CSTR notebook (`examples/idaes_cstr_initialize.ipynb`) shows
+  The IDAES CSTR notebook (`examples/cstr_cold_start.ipynb`) shows
   the model before and after, the per-point solves working the outlet
   stream, the reaction cascade, and the packed holdup's water member.
 
