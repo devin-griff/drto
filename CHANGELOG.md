@@ -19,8 +19,9 @@ All notable changes to this project are documented here. The format is based on
   Values only, at any stage, no equilibrium solve; a declared state or
   control without its pairing is a descriptive error, and without
   pyomo-pounce the per-point solves are skipped and the report says so.
-  The cart-pole notebook (`examples/cart_pole_initialize.ipynb`) shows
-  the model before and after.
+  The IDAES CSTR notebook (`examples/idaes_cstr_initialize.ipynb`) shows
+  the model before and after, the per-point solves working the outlet
+  stream, the reaction cascade, and the packed holdup's water member.
 
 ## [0.4.0] - 2026-07-26
 
