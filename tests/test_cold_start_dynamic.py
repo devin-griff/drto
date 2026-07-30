@@ -1,10 +1,13 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
 """Feature 011: drto.cold_start_dynamic."""
+import math
+
 import pyomo.environ as pyo
 import pytest
 
 import drto
+import drto.cold_start
 from test_infinite_horizon import block_model, packed_model, ready_model
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
@@ -95,6 +98,54 @@ def test_report_reads():
     m = seeded()
     text = str(drto.cold_start_dynamic(m))
     assert "on a line" in text and "point solves" in text
+
+
+def test_exponential_profile_runs_on_the_decay():
+    m = seeded()
+    tau = 2.0
+    report = drto.cold_start_dynamic(m, profile="exponential", time_constant=tau)
+    assert "exponential decay" in str(report)
+    t0, tN = sorted(m.t)[0], sorted(m.t)[-1]
+    T = tN - t0
+    d = T / tau
+    denom = 1 - math.exp(-d)
+    for t in sorted(m.t):
+        want = 0.1 + 0.4 * (1 - math.exp(-d * (t - t0) / T)) / denom
+        assert pyo.value(m.z[t]) == pytest.approx(want)
+    assert pyo.value(m.z[tN]) == pytest.approx(0.5)  # lands on the target
+
+
+def test_exponential_derivatives_hold_the_pointwise_slope(monkeypatch):
+    # without pounce the analytic seeds stay: the decay's slope at each t
+    monkeypatch.setattr(drto.cold_start, "pounce_available", False)
+    m = seeded()
+    tau = 2.0
+    drto.cold_start_dynamic(m, profile="exponential", time_constant=tau)
+    t0, tN = sorted(m.t)[0], sorted(m.t)[-1]
+    T = tN - t0
+    d = T / tau
+    denom = 1 - math.exp(-d)
+    for t in sorted(m.t):
+        want = 0.4 * d * math.exp(-d * (t - t0) / T) / (denom * T)
+        assert pyo.value(m.dzdt[t]) == pytest.approx(want)
+
+
+def test_default_time_constant_is_a_third_of_the_horizon():
+    m1, m2 = seeded(), seeded()
+    T = sorted(m1.t)[-1] - sorted(m1.t)[0]
+    drto.cold_start_dynamic(m1, profile="exponential")
+    drto.cold_start_dynamic(m2, profile="exponential", time_constant=T / 3)
+    for t in sorted(m1.t):
+        assert pyo.value(m1.z[t]) == pytest.approx(pyo.value(m2.z[t]))
+
+
+def test_profile_errors():
+    with pytest.raises(ValueError, match="unknown profile"):
+        drto.cold_start_dynamic(seeded(), profile="cubic")
+    with pytest.raises(ValueError, match="exponential profile's"):
+        drto.cold_start_dynamic(seeded(), time_constant=2.0)
+    with pytest.raises(ValueError, match="positive"):
+        drto.cold_start_dynamic(seeded(), profile="exponential", time_constant=0.0)
 
 
 def test_scaling_suffix_scales_the_point_solves():

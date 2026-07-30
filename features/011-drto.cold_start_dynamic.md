@@ -16,6 +16,7 @@ import drto
 # steady-state targets filled ...
 
 drto.cold_start_dynamic(m)
+drto.cold_start_dynamic(m, profile="exponential", time_constant=3.0)
 ```
 
 Values only, at any stage: the declared discretized model, or after
@@ -30,14 +31,18 @@ missing pairing is a descriptive error naming the component. No
 equilibrium solve is run; the targets give only the states and controls,
 and everything else comes out of the per-point solves. The initialization:
 
-- **States**: a straight line from the declared initial condition to the
-  declared steady-state target, one value per grid point; a state starting
-  on its target gets a flat line.
+- **States**: run from the declared initial condition to the declared
+  steady-state target, one value per grid point. The default profile is
+  the straight line. `profile="exponential"` runs each state on a
+  normalized exponential decay that lands exactly on the target at the
+  horizon's end; `time_constant` sets the decay's time constant in the
+  horizon's own units and defaults to a third of the horizon. A state
+  starting on its target gets a flat line either way.
 - **Derivative variables**: a declared state's DerivativeVar members hold
-  the line's slope, `(z_ss - z0) / T`, one constant per member, zero for a
-  state on its target. Any other DerivativeVar member (a packed Var's
-  undeclared members) comes out of the per-point solves through the
-  discretization rows.
+  the profile's slope: the line's constant `(z_ss - z0) / T`, or the
+  decay's pointwise slope, zero for a state on its target. Any other
+  DerivativeVar member (a packed Var's undeclared members) comes out of
+  the per-point solves through the discretization rows.
 - **Controls**: held constant at their declared steady-state targets. A
   parameterized control's move variables hold the same target; a fixed
   control (a simulation's) keeps the value it holds.
@@ -58,12 +63,12 @@ and everything else comes out of the per-point solves. The initialization:
   copies come from the same per-point solves at the segment's points.
 
 With the per-point solves run, the guess satisfies every equation at
-every grid point except the declared dynamics: the discretization rows
-hold exactly, since a line is differentiated exactly, the initial
-condition holds at the first point, and the algebra is consistent
-pointwise. The declared dynamics carry the
-mismatch between the line and the true transient, which is the optimizer's
-job to resolve.
+every grid point except the declared dynamics: the initial condition
+holds at the first point, the algebra is consistent pointwise, and the
+discretization rows hold, exactly for the line and through the
+per-point solves for the decay. The declared dynamics carry the
+mismatch between the profile and the true transient, which is the
+optimizer's job to resolve.
 
 `drto.initialize_steady_state` remains the solve-based seed: it computes
 the equilibrium and broadcasts it flat. `cold_start_dynamic` reads the
@@ -97,6 +102,13 @@ fixed point, the soft pin already satisfied.
   targets; their DerivativeVar members hold the line's slope; controls,
   and a parameterized control's moves, hold their declared targets; a
   fixed control keeps its value.
+- `profile="exponential"` runs the states on the normalized decay,
+  landing exactly on the targets at the horizon's end, with the
+  DerivativeVar members at the decay's pointwise slope. `time_constant`
+  is read in the horizon's own units and defaults to a third of the
+  horizon; an unknown profile, a non-positive time constant, or a time
+  constant passed with the linear profile is a descriptive error. The
+  report names the profile.
 - With pyomo-pounce installed, every equation except the declared
   dynamics is satisfied at every grid point to the pipeline's tolerance;
   on an infinite-horizon model the same holds at the segment's points,

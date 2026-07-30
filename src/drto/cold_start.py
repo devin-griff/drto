@@ -3,9 +3,11 @@
 """Cold start: ``drto.cold_start_dynamic`` (feature 011).
 
 Initializes a dynamic model whose initial condition sits away from the
-steady state: each declared state runs on a straight line from its
-declared initial condition to its declared steady-state target, its
-DerivativeVar members hold the line's slope, the controls (and a
+steady state: each declared state runs from its declared initial
+condition to its declared steady-state target, on a straight line or,
+with ``profile="exponential"``, on a normalized exponential decay that
+lands exactly on the target at the horizon's end. Its
+DerivativeVar members hold the profile's slope, the controls (and a
 parameterized control's moves) hold their declared targets, and, with
 pyomo-pounce installed, the algebraic variables solve pointwise from
 every equation except the declared dynamics; with an active
@@ -22,6 +24,7 @@ and no equilibrium solve is run. Without pyomo-pounce the per-point
 solves are skipped, the algebraic variables keep their values, and the
 report says so.
 """
+import math
 from dataclasses import dataclass, field
 
 import pyomo.environ as pyo
@@ -47,6 +50,7 @@ class ColdStartReport:
     n_grid_points: int = 0
     n_derivatives: int = 0
     n_controls: int = 0
+    shape: str = "a line"
     segment: str = "(none attached)"
     point_solves: str = "skipped (pyomo-pounce not installed)"
     pipeline: object = None
@@ -55,9 +59,9 @@ class ColdStartReport:
     def __str__(self):
         lines = [
             "drto cold_start_dynamic (interpolate to the targets)",
-            f"  states        : {self.n_states} on a line across "
+            f"  states        : {self.n_states} on {self.shape} across "
             f"{self.n_grid_points} grid points",
-            f"  derivatives   : {self.n_derivatives} at the line's slope",
+            f"  derivatives   : {self.n_derivatives} at the profile's slope",
             f"  controls      : {self.n_controls} at their targets",
             f"  segment       : {self.segment}",
             f"  point solves  : {self.point_solves}",
@@ -80,14 +84,36 @@ def _target(pairings, comp, kind, fn):
     )
 
 
-def cold_start_dynamic(m):
+def cold_start_dynamic(m, profile="linear", time_constant=None):
     """Initialize ``m`` from its declared initial condition to its declared
     steady-state targets; see the module docstring.
+
+    ``profile`` is ``"linear"`` (the default, a straight line) or
+    ``"exponential"`` (a normalized decay landing exactly on the target
+    at the horizon's end). ``time_constant`` is the decay's time
+    constant in the horizon's own units, a third of the horizon when not
+    given; it belongs to the exponential profile only.
 
     Returns a :class:`ColdStartReport`; values only, nothing added or
     removed, and the fixed flags are untouched.
     """
     fn = "cold_start_dynamic"
+    if profile not in ("linear", "exponential"):
+        raise ValueError(
+            f"drto: {fn}: unknown profile '{profile}'; the profiles are "
+            f"'linear' and 'exponential'."
+        )
+    if time_constant is not None:
+        if profile != "exponential":
+            raise ValueError(
+                f"drto: {fn}: time_constant is the exponential profile's "
+                f"knob; pass profile='exponential' with it."
+            )
+        if time_constant <= 0:
+            raise ValueError(
+                f"drto: {fn}: time_constant must be positive, got "
+                f"{time_constant}."
+            )
     reg = info(m)
     missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
     if missing:
@@ -127,8 +153,14 @@ def cold_start_dynamic(m):
             z0[id(side)] = pyo.value(other)
 
     report = ColdStartReport(n_grid_points=len(grid))
+    if profile == "exponential":
+        tau = horizon / 3.0 if time_constant is None else time_constant
+        d = horizon / tau
+        denom = 1.0 - math.exp(-d)
+        report.shape = f"an exponential decay (time constant {tau:g})"
 
-    # states on the line, their declared members' derivatives at its slope
+    # states on the profile, their declared members' derivatives at its
+    # pointwise slope
     slope_of = {}  # id(state member data at any t) -> slope, for derivatives
     for z in states:
         pos, subs = _time_index(z, time)
@@ -141,11 +173,18 @@ def cold_start_dynamic(m):
             member0 = z[_join_index(o, t0, pos)]
             tgt = pyo.value(tgt_param[o] if o else tgt_param)
             start = z0.get(id(member0), tgt)
-            slope = (tgt - start) / horizon
+            span = tgt - start
             for t in grid:
+                s = (t - t0) / horizon
+                if profile == "exponential":
+                    val = start + span * (1.0 - math.exp(-d * s)) / denom
+                    slope = span * d * math.exp(-d * s) / (denom * horizon)
+                else:
+                    val = start + span * s
+                    slope = span / horizon
                 vd = z[_join_index(o, t, pos)]
                 if not vd.fixed:
-                    vd.set_value(start + slope * (t - t0))
+                    vd.set_value(val)
                 slope_of[id(vd)] = slope
         report.n_states += 1
 

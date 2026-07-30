@@ -18,6 +18,10 @@ All notable changes to this project are documented here. The format is based on
   declared dynamics, one block solve with the states and controls held.
   With an active `scaling_factor` suffix the per-point solves run on a
   scaled clone and the values propagate back in the model's own units.
+  `profile="exponential"` runs the states on a normalized exponential
+  decay instead of the line, landing exactly on the targets at the
+  horizon's end, with `time_constant` in the horizon's own units
+  defaulting to a third of the horizon.
   Values only, at any stage, no equilibrium solve; a declared state or
   control without its pairing is a descriptive error, and without
   pyomo-pounce the per-point solves are skipped and the report says so.
