@@ -43,9 +43,12 @@ The setup, the options, the disturbance handling, and the plotting are
 those of `drto.ideal_nmpc` (feature 014), with `delay` added.
 
 The loop differs from the ideal one in when a move takes effect. The
-solve at the step's measurement takes `delta` seconds, the solve time the
-solver reports, or the value `delay` prescribes; the new move takes
-effect that far into the sample. Every
+solve at the step's measurement takes `delta`: the solve time the solver
+reports, in seconds, converted into the declared time set's units, or the
+value `delay` prescribes, already in those units. A model whose time
+carries no units cannot place reported seconds on its time axis, so
+`delay=None` there is a descriptive error asking for a prescribed delay.
+The new move takes effect `delta` into the sample. Every
 simulation step therefore carries two control actions, and runs as two
 finite elements of different lengths: the process advances `delta` under
 the previous move, then `h - delta` under the new one. The process
@@ -79,8 +82,10 @@ three-way comparison direct.
 - `drto.nonideal_nmpc(m, steps, ...)` takes what `drto.ideal_nmpc` takes
   plus `delay`, and builds the controller and the process the same way.
 - Each step solves at the measurement, the delay the solver-reported
-  solve time when `delay` is None and a number or per-step sequence
-  otherwise; the sample
+  solve time converted into the declared time set's units when `delay` is
+  None and a number or per-step sequence in those units otherwise; on a
+  model whose time carries no units, `delay=None` is a descriptive error.
+  The sample
   simulates as two elements of exact lengths, `delta` under the previous
   move and `h - delta` under the new one, the duration a parameter of
   the process simulation and a zero-length piece not simulated.
