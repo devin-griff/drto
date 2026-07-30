@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
+  dynamic model from its declared initial condition to its declared
+  steady-state targets: each state on a straight line with its
+  DerivativeVar members at the line's slope, controls and a parameterized
+  control's moves at their targets, a terminal segment at rest on the
+  targets with the pin slacks at zero, and, with pyomo-pounce installed,
+  the algebraic variables solved pointwise from every equation except the
+  declared dynamics, one block solve with the states and controls held.
+  Values only, at any stage, no equilibrium solve; a declared state or
+  control without its pairing is a descriptive error, and without
+  pyomo-pounce the per-point solves are skipped and the report says so.
+  The cart-pole notebook (`examples/cart_pole_initialize.ipynb`) shows
+  the model before and after.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
