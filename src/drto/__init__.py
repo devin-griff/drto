@@ -30,6 +30,7 @@ from drto.declarations import (
 )
 from drto.info import Info, info
 from drto.initialize_steady_state import SteadyStateInitReport, initialize_steady_state
+from drto.advanced_step import advanced_step_controller
 from drto.cold_start import ColdStartReport, cold_start_dynamic
 from drto.objective import build_objective
 from drto.plotting import plot_controls, plot_stage_cost, plot_states
@@ -52,6 +53,7 @@ __all__ = [
     "Info",
     "info",
     "build_objective",
+    "advanced_step_controller",
     "cold_start_dynamic",
     "ColdStartReport",
     "plot_states",

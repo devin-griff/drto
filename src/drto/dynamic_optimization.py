@@ -20,6 +20,7 @@ be registered by then.
 from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
+from drto.declarations import _is_var_member, _side_matching
 from drto.info import info
 from drto.objective import build_objective
 
@@ -56,6 +57,41 @@ def _spread(val, n_free, name, fn):
             )
         return list(val)
     return [val] * n_free
+
+
+def _feedback_hooks(reg, fn):
+    """The initial-condition Params, one ParamData per pinned member.
+
+    Each declared initial-condition row pins a state member to a bare
+    mutable Param, the feedback hook; ``drto.initial_condition`` enforces
+    that shape at declaration time, so the non-variable side here is
+    always the hook itself.
+    """
+    hooks, seen = [], set()
+    for con in reg.components("initial_condition"):
+        for cd in _members(con):
+            _, other = _side_matching(cd, _is_var_member, fn, "a state member")
+            if id(other) not in seen:
+                seen.add(id(other))
+                hooks.append(other)
+    return hooks
+
+
+def _declare_sens_hooks(reg, fn):
+    """Declare the feedback hooks as pounce sensitivity parameters.
+
+    Runs only when pyomo-pounce is importable; the declaration is inert
+    metadata that every other solver ignores, while a pounce solve keeps
+    the converged factorization for the advanced-step correction
+    (feature 012). Returns the number declared, or None without pounce.
+    """
+    try:
+        import pyomo_pounce
+    except ImportError:
+        return None
+    hooks = _feedback_hooks(reg, fn)
+    pyomo_pounce.declare_sens_param(*hooks)
+    return len(hooks)
 
 
 def _fix_disturbances(reg, requested, fn):
@@ -205,6 +241,7 @@ class DynamicOptimizationTransformation(Transformation):
         # values
         noise = _fix_disturbances(reg, {}, "dynamic_optimization")
         build_objective(model)
+        n_hooks = _declare_sens_hooks(reg, "dynamic_optimization")
 
         reg.record_transformation(
             "drto.dynamic_optimization",
@@ -213,6 +250,11 @@ class DynamicOptimizationTransformation(Transformation):
                 weighted if weighted is not None else "(one stage cost declared)"
             ),
             **({"disturbances": ", ".join(noise)} if noise else {}),
+            **(
+                {"sensitivity": f"{n_hooks} feedback hooks declared"}
+                if n_hooks is not None
+                else {}
+            ),
             **outcome,
         )
         return model

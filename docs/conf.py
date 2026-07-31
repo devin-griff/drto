@@ -24,6 +24,7 @@ _NOTEBOOKS = [
     "double_column",
     "idaes_cstr",
     "cstr_cold_start",
+    "cstr_advanced_step",
 ]
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"

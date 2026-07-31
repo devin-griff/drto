@@ -49,6 +49,10 @@ unmodified IDAES models.
 - [Cold start on the IDAES CSTR](notebooks/cstr_cold_start.ipynb) —
   `drto.cold_start_dynamic` working the full algebraic cascade, linear
   and exponential profiles through the same solve, with the solver logs.
+- [Advanced step on the IDAES CSTR](notebooks/cstr_advanced_step.ipynb)
+  — solve at a prediction, correct at the measurement without
+  re-solving: the implemented moves within half a percent of the warm
+  re-solve, twenty times faster.
 
 ```{toctree}
 :maxdepth: 1
@@ -67,4 +71,5 @@ notebooks/binary_column
 notebooks/double_column
 notebooks/idaes_cstr
 notebooks/cstr_cold_start
+notebooks/cstr_advanced_step
 ```

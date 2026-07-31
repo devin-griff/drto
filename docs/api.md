@@ -61,6 +61,12 @@ The estimation-side surface:
    :members:
 ```
 
+## The advanced step
+
+```{eval-rst}
+.. autofunction:: drto.advanced_step_controller
+```
+
 ## Plotting
 
 ```{eval-rst}
