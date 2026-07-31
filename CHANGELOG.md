@@ -31,6 +31,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The IDAES saponification CSTR moved into the canonical models
+  (`examples/models/idaes_cstr.py`), scaling included: the flowsheet
+  builders, the declaration surface, the units-driven `tag_scaling`, and
+  `scaled_solve`. The `idaes_cstr` and `cstr_cold_start` notebooks import
+  the model instead of defining it inline, with identical results.
+
 - The documentation is rebuilt around the workflows. The README and the
   docs front page open with a runnable quickstart (declare, transform,
   cold start, solve, plot, with real output); the user guide is
