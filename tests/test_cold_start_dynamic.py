@@ -84,8 +84,7 @@ def test_transformed_shapes_initialize():
             # the tau discretization rows re-solve the derivatives to
             # the pipeline's tolerance, like the finite side's
             assert all(
-                pyo.value(vd) == pytest.approx(0, abs=1e-6)
-                for vd in b.z_dtau.values()
+                pyo.value(vd) == pytest.approx(0, abs=1e-6) for vd in b.z_dtau.values()
             )
 
 

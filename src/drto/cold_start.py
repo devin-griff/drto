@@ -111,8 +111,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
             )
         if time_constant <= 0:
             raise ValueError(
-                f"drto: {fn}: time_constant must be positive, got "
-                f"{time_constant}."
+                f"drto: {fn}: time_constant must be positive, got " f"{time_constant}."
             )
     reg = info(m)
     missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
