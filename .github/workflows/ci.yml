@@ -30,6 +30,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]"
+      # Bridge until the next pyomo-pounce release: the advanced-step
+      # correction (feature 012) needs the estimate-baseline fix merged
+      # upstream in jkitchin/pounce#421. Remove alongside the pounce
+      # floor bump when the release lands.
+      - run: python -m pip install "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -52,6 +57,11 @@ jobs:
         with:
           python-version: "3.10"
       - run: python -m pip install -e ".[dev]"
+      # Bridge until the next pyomo-pounce release: the advanced-step
+      # correction (feature 012) needs the estimate-baseline fix merged
+      # upstream in jkitchin/pounce#421. Remove alongside the pounce
+      # floor bump when the release lands.
+      - run: python -m pip install "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
       - run: python -m pip install "pyomo==6.8.1"
       - run: python -m pytest -q
 
