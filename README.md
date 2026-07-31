@@ -27,6 +27,89 @@ needed for full functionality (the steady-state initializer, sensitivity
 updates, the advanced-step frameworks); any NLP solver runs the open-loop
 modes.
 
+## Quickstart
+
+drto works on the Pyomo model you already have: declare what plays which
+role, and the transformations rewrite the model from there. A first-order
+system, declared, driven to its setpoint through an infinite-horizon
+controller:
+
+```python
+import pyomo.environ as pyo
+from pyomo.dae import ContinuousSet, DerivativeVar
+import drto
+
+m = pyo.ConcreteModel()
+m.t = ContinuousSet(initialize=range(11))            # 10 samples, 1 s apart
+m.z_ss = pyo.Param(initialize=0.5, mutable=True)     # steady-state targets
+m.u_ss = pyo.Param(initialize=0.5, mutable=True)
+m.z_hat = pyo.Param(initialize=0.1, mutable=True)    # state feedback hook
+
+m.z = pyo.Var(m.t, initialize=0.1)
+m.dzdt = DerivativeVar(m.z, wrt=m.t)
+m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.5)
+m.cost = pyo.Var(m.t)
+
+@m.Constraint(m.t)
+def ode(m, t):
+    return m.dzdt[t] == -m.z[t] + m.u[t]
+
+@m.Constraint(sorted(m.t)[:-1])
+def stage(m, t):
+    return m.cost[t] == (m.z[t] - m.z_ss)**2 + 0.1*(m.u[t] - m.u_ss)**2
+
+@m.Constraint()
+def ic(m):
+    return m.z[0] == m.z_hat
+
+drto.horizon(m.t)
+drto.state(m.z)
+drto.dynamics(m.ode)
+drto.control(m.u, profile="piecewise_constant")
+drto.tracking_stage_cost(m.stage)
+drto.initial_condition(m.ic)
+drto.steady_state(m.z, m.z_ss)
+drto.steady_state_control(m.u, m.u_ss)
+```
+
+`drto.info(m)` renders the model in its own terms:
+
+```
+<drto registry>
+declarations:
+  horizon: t (ContinuousSet, 11 points)
+  states: z (free)
+  dynamics: dzdt[t]  ==  - z[t] + u[t]  for t in t
+  controls: u (piecewise_constant, free)
+  tracking stage cost: cost[t]  ==  (z[t] - z_ss)**2 + 0.1*(u[t] - u_ss)**2  for t in sorted(t)[:-1]
+  initial conditions: z[0]  ==  z_hat
+  steady-state targets: z_ss (of z)
+  steady-state control targets: u_ss (of u)
+transformations: (none)
+```
+
+Discretize, attach the terminal segment, initialize, build the controller,
+and solve:
+
+```python
+pyo.TransformationFactory("dae.collocation").apply_to(
+    m, wrt=m.t, nfe=10, ncp=3, scheme="LAGRANGE-RADAU")
+pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+drto.cold_start_dynamic(m)          # states on a line to the targets,
+                                    # algebra solved pointwise, tail at rest
+pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+pyo.SolverFactory("ipopt").solve(m)  # -> optimal
+
+drto.plot_states(m)
+drto.plot_controls(m)
+```
+
+The same declarations drive every other mode: `drto.dynamic_simulation`
+integrates the model forward under fixed controls, and
+`drto.steady_state_simulation` / `drto.steady_state_optimization` collapse
+the horizon and work at the equilibrium. See the
+[documentation](https://docs.drto.io) for the full workflows.
+
 ## Spec-driven development
 
 drto is built spec-first: every feature is specified under

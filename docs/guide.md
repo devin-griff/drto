@@ -1,199 +1,229 @@
 # User guide
 
-The narrative guide grows as the core lands: the six modes, the declaration
-surface, and the initialization routines. Until then, the
-[README](https://github.com/devin-griff/drto#readme) is the overview and
-`DESIGN.md` is the authoritative design record.
+drto has one idea: your Pyomo model already contains everything a dynamic
+optimization needs, so instead of rebuilding it in a modeling layer, you
+declare which components play which role and let transformations rewrite
+the model. This page walks the three workflows those declarations drive —
+an infinite-horizon controller, a forward simulation, and the steady-state
+branch — then the two how-tos that come up on real models: scaling and
+IDAES flowsheets.
 
-## The registry: `drto.info`
+## The registry
 
-Every drto model carries one registry: the record of what has been declared
-and which transformations have been applied. `drto.info(m)` returns it,
-creating it on first access. It lives in Pyomo's namespaced private data, so
-it never appears in the model's component tree, and it survives `clone()`
-(and every transformation's `create_using` form) with its stored component
-references remapped to the clone.
+Every declaration records itself in the model's registry, and every
+transformation reads the registry rather than re-scanning the model.
+`drto.info(m)` returns it; displaying it renders the model in its own
+terms — components grouped by role, indexed constraints in compact
+symbolic form (one equation per family, not the per-index expansion
+`pprint` produces), units where the model carries them, and the ordered
+log of applied transformations:
 
-Displaying it renders a drto-aware view of the model: declarations grouped by
-role, indexed constraints as one symbolic equation per family (for example
-`dzdt[k] == - z[k] + u[k]  for k in t`, not the per-index expansion `pprint`
-produces), and the ordered log of applied transformations with their
-outcomes.
+```
+<drto registry>
+declarations:
+  horizon: t (ContinuousSet, 11 points)
+  states: z (free)
+  dynamics: dzdt[t]  ==  - z[t] + u[t]  for t in t
+  controls: u (piecewise_constant, free)
+  ...
+transformations: (none)
+```
 
-The declarations (feature 002) write to the registry and the transformations
-read it, so it is the one place drto looks for the model's declared pieces.
+The registry is stored outside the component tree and survives `clone()`
+(and therefore every `create_using`) with its references remapped, so a
+transformed clone knows its own declarations.
 
 ## The declarations
 
-The control-side declarations (feature 002) declare the pieces of an
-optimization or simulation problem: `horizon`,
-`state`, `dynamics`, `control` (with its
-pyomo-cvp `profile`), the stage and terminal costs, `initial_condition`
-(a state at the first time point equal to a mutable Param, the feedback hook),
-`terminal_constraint`, and the steady-state targets:
-`steady_state(m.z, m.z_ss)` pairs a declared state with its setpoint Param,
-and `steady_state_control(m.u, m.u_ss)` pairs a declared control the same
-way. Each declaration
-validates its convention and records the component in the registry, where the
-transformations find it.
+The control-side surface, in the order a model usually declares them:
 
-Every function serves two calling styles. Tagging: on a model you already
-built, an attached component registers immediately, interleaved or in one
-block. Wrapping: a fresh component, `m.z = state(pyo.Var(m.t))`, is returned
-for the assignment and registers when Pyomo attaches it. The constraint-role
-declarations also work as decorators, `@drto.dynamics(m, m.t)` taking what
-`@m.Constraint` would. The styles mix per component; in every style a
-declaration's prerequisites must be declared by the time it registers, which
-writing the model top-down satisfies.
+- `drto.horizon(t)` — the time `ContinuousSet`, declared before
+  discretization so the registry keeps the sample grid.
+- `drto.state(z, ...)` — the differential states. A state may be a whole
+  time-indexed Var or a member subset of a packed one (see the IDAES
+  how-to below).
+- `drto.dynamics(ode, ...)` — the constraint families that are the
+  differential equations. Everything not declared here is algebra.
+- `drto.control(u, ..., profile=...)` — the manipulated inputs;
+  `profile` names the pyomo-cvp parameterization
+  (e.g. `"piecewise_constant"`) applied when a transform parameterizes
+  the controls.
+- `drto.disturbance(w, ...)` — declared zero-mean inputs a simulation or
+  the terminal segment can hold at given values.
+- `drto.tracking_stage_cost(stage)` / `drto.economic_stage_cost(econ)` /
+  `drto.tracking_terminal_cost(term)` — cost rows, written as equality
+  constraints defining cost variables in the model's own units.
+- `drto.initial_condition(ic, ...)` — rows pinning states at the first
+  point to mutable Params, the feedback hooks a receding-horizon loop
+  updates.
+- `drto.steady_state(z, z_ss)` / `drto.steady_state_control(u, u_ss)` —
+  pair each state and control with the mutable Param holding its target.
+  The transforms and initializers read these as the setpoint.
+- `drto.terminal_constraint(con)` — an explicit endpoint condition, when
+  one is wanted.
 
-Declarations that scale with the states and controls
-take varargs when tagging and accumulate; the wrap form takes exactly one
-component; the one-of-each declarations error on a second,
-different object. Conventions are read from either side of the written
-equality, so `lhs == rhs` and `rhs == lhs` are equivalent.
+The estimation-side surface (`drto.measurement`,
+`drto.estimated_parameter`, `drto.estimation_stage_cost`,
+`drto.estimation_terminal_cost`, `drto.arrival_cost`) mirrors this for
+the planned moving-horizon estimation features.
 
-The estimation side (feature 018) declares the moving-horizon-estimation
-pieces through the same surface. `estimated_parameter` tags Vars for unknown
-model parameters, constant over the window (so it needs no horizon, and also
-serves steady-state data reconciliation). `disturbance` tags the process-noise
-Vars the estimator adjusts, and `measurement` tags the mutable Params holding
-the window's measured values, the estimation feedback hook. The estimation
-costs are scalar-side equalities like the tracking costs: `estimation_stage_cost`
-over the samples for the measurement residual plus the process-noise penalty,
-`estimation_terminal_cost` for the present-time residual, and `arrival_cost`
-for the soft prior on the initial state, the soft dual of `initial_condition`.
-Same tagging, wrapping, and decorator forms, same registry. These are the
-declaration surface only; the estimation mode transforms that consume them come
-with the moving-horizon-estimation follow-on.
+Declarations are checked as they are made, and a bad one raises a
+descriptive error at declaration time, not at solve time.
 
-## Objective assembly: `drto.build_objective`
+## Workflow: an infinite-horizon controller
 
-One routine owns every mode's objective. The bare call assembles the live
-registered cost terms, each group by its weights: declared stage costs sum
-their per-point cost var over the active members (the stage cost does not
-exist at the final time, where the terminal cost applies), a terminal cost
-adds its scalar var, and transforms may register additional weighted cost
-groups. Liveness is component presence, so a mode drops a term by dropping or
-deactivating its constraint. The marked case, `zero=True`, installs a
-constant-zero objective and is what the simulation transforms pass. Any
-existing active objective is deactivated first, and the routine is also
-registered as `TransformationFactory('drto.build_objective')`.
+The controller workflow runs declare → discretize → terminal segment →
+initialize → assemble → solve:
 
-## The infinite horizon: `drto.infinite_horizon`
+```python
+# 1. declare (as above), then discretize the horizon
+pyo.TransformationFactory("dae.collocation").apply_to(
+    m, wrt=m.t, nfe=10, ncp=3, scheme="LAGRANGE-RADAU")
 
-Appends the terminal segment of Dinh et al. (2025): the tail of the horizon
-to infinity, compressed onto [0, 1] by `tau = tanh(gamma*(t - tN))`. The
-segment carries copies of the declared states and controls (states may carry index sets besides time; undeclared algebraic variables and equations ride along automatically), the dilated
-dynamics at interior Gauss-Legendre points, and the tracking stage cost
-replicated as the tail integrand. The tail enters the objective as explicit Gauss-weighted terms,
-the paper's `(beta/dt)*phi_f`, registered as a cost group that
-`drto.build_objective` picks up wherever it runs: applying this transform
-before the mode transform is the whole composition. `beta` and `gamma` are
-mutable Params, symbolic in the dynamics and the weights, so both retune
-between solves; `gamma` defaults to the mesh rule and `beta` must exceed 1.
+# 2. append the infinite-horizon terminal segment
+pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
 
-The segment endpoint is pinned to the steady state by default (the paper's
-eq. 36). The endpoint `z(tau=1)` is the discretization's Legendre
-extrapolation of the last element, the paper's evaluated endpoint. The
-`terminal` option selects `'soft'` (the default: `z(tau=1) + eps_up - eps_lo
-== z_s` with an L1 penalty `mu*(eps_up + eps_lo)`, `mu` a mutable Param
-defaulting to 1000, in the objective) or `'none'` (no pin, the singular tail
-weights driving the trajectory to settle on their own). A pin reads the
-declared `drto.steady_state` targets, so `terminal='soft'` needs one per
-state; `terminal='none'` needs none. The pin is on the state
-value, not a derivative: Gauss-Legendre puts no node at `tau=1`, so the
-derivative there is undefined while the extrapolated state value is well
-defined. Because the soft pin adds its penalty to the objective, run
-`drto.build_objective` after `drto.infinite_horizon` (drto enforces that
-order).
+# 3. initialize: states on a profile to the targets, algebra solved
+drto.cold_start_dynamic(m)
 
-## Applying the profiles: `drto.parameterize`
+# 4. parameterize the controls and assemble the objective
+pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
 
-`control(profile=...)` records a profile; `drto.parameterize` applies
-every pending one by delegating to pyomo-cvp, then repairs the registry so
-the control records point at the live replacement components. The mode
-transforms run it as one of their steps; standalone workflows call it after
-`drto.infinite_horizon` and before `drto.build_objective`.
+# 5. solve and read back
+pyo.SolverFactory("ipopt").solve(m)
+drto.plot_states(m)
+drto.plot_controls(m)
+```
 
-## Dynamic optimization: `drto.dynamic_optimization`
+**The terminal segment** (`drto.infinite_horizon`) maps the tail
+`t in [tN, inf)` onto `tau in (0, 1]` through `tau = tanh(gamma*(t - tN))`
+and appends it as a block: copies of the states, controls, and algebra,
+the dilated dynamics, the stage cost integrated with explicit quadrature
+weights, and a soft pin holding the endpoint at the declared targets.
+Options: `nfe`/`ncp` size the segment mesh, `gamma` overrides the mesh
+rule `tanh(gamma*dt) = tau_11`, `beta > 1` sets the tail's overestimation
+weight, `terminal="soft"|"none"` selects the endpoint pin, `mu` its
+penalty weight, and `disturbances` holds declared disturbances at given
+constants across the tail. `beta` and `gamma` are mutable Params on the
+segment, so they retune with `set_value` and no re-apply.
 
-The headline mode, NMPC and D-RTO. It assembles the horizon optimization from
-the declarations, so applying the profiles and building the objective collapse
-into one call on the discretized model. It requires `horizon`, `state`,
-`dynamics`, `control`, `initial_condition`, and at least one stage cost, and
-errors naming what is missing. The declared controls stay free and are
-parameterized by their declared profiles, the horizon is kept (this is the
-dynamic mode, not a reduction), and `build_objective` runs as the final step.
-With both a tracking and an economic stage cost declared, `tracking_weight`
-scales the tracking side. It defaults to 1, and the economic cost is in
-currency units and is never scaled.
+**Cold start** (`drto.cold_start_dynamic`) initializes a model whose
+initial condition sits away from the steady state, with no prior solution
+and no equilibrium solve: each state runs from its declared initial
+condition to its declared target, derivatives hold the profile's slope,
+controls hold their targets, the tail rests on the targets, and, with
+pyomo-pounce installed, the algebraic variables are solved pointwise from
+every equation except the declared dynamics. The default profile is a
+straight line; `profile="exponential"` runs a normalized decay that lands
+exactly on the target at the horizon's end, with `time_constant` in the
+horizon's own units (default a third of the horizon). The guess then
+satisfies every equation except the dynamics themselves, which carry the
+mismatch the optimizer resolves. On the IDAES CSTR example the
+exponential start roughly halves the first solve's iteration count.
 
-Because the objective is assembled here, anything that registers cost terms
-runs first: `drto.infinite_horizon` applies before this transform, or the tail
-never reaches the objective.
+`drto.initialize_steady_state(m, controls={...})` is the solve-based
+alternative: reduce a throwaway clone to its steady state, solve the
+equilibrium with the pyomo-pounce pipeline, and broadcast it flat across
+the horizon. Use it when the initial condition is at (or near) a steady
+state; use cold start when it is not.
 
-A model may carry the estimation declarations too, since one model serves
-every mode. The transform neutralizes them so the control problem carries only
-what it uses, and the registry mirrors the model: a component that leaves has
-its record purged, one that stays keeps its record. The estimation costs and
-the measurement Params are deleted. A disturbance is fixed at zero, the process
-noise off in the controller's own model; it is fixed, not eliminated, so it
-stays in the model and works however the noise enters the equations, and the
-solver folds a fixed Var in as a constant. An estimated parameter is fixed at
-the value it holds and keeps its record, since it stays a live coefficient in
-the equations the controller solves. The three other control-side modes run
-the same routines, so they cannot drift apart.
+**Assembly**: `drto.dynamic_optimization` applies the declared control
+profiles (through `drto.parameterize` and pyomo-cvp) and builds the
+objective from every live cost term — the finite-horizon stage cost, the
+tail's quadrature group, and the pin penalties — via
+`drto.build_objective`. Deactivating a cost row removes its term; there
+are no coupling options.
 
-## Economic RTO: `drto.steady_state_optimization`
+## Workflow: a forward simulation
 
-The steady-state half of the optimization column. It reduces the model to a
-single point with the declared controls free and optimizes the economic
-objective over them, giving the optimal steady operating point. It requires
-`state`, `control`, and an economic stage cost; `horizon` and `dynamics` are
-optional, so it runs on a dynamic model (composing the reduction) or on one
-written directly as steady-state.
+`drto.dynamic_simulation` turns the same declared model into an
+integration: the declared control profiles are applied, the controls are
+fixed at given profiles (or the values they hold), declared disturbances
+are fixed at given constants or sequences, the objective is zero, and the
+square system integrates forward with any NLP solver. The registry
+records what was fixed and the report names it. This is the plant in the
+planned closed-loop features: the same declarations, simulated one step
+at a time.
 
-Unlike the simulation modes it keeps its cost equations, since it needs them.
-A declared tracking stage cost is kept too rather than dropped: it regularizes
-the economic optimum toward a known operating point, the RTO-layer equivalent
-of move suppression. With both cost kinds declared, `tracking_weight` scales
-the tracking side, defaulting to 1, and the economic cost is never scaled.
+## Workflow: the steady-state branch
 
-The estimation declarations are neutralized before the reduction, and the
-disturbances are fixed at zero. That matters more here than in a simulation: a
-disturbance left free would be a decision variable the optimizer exploits to
-lower the economic cost, so the operating point would be optimized against
-fictitious noise.
+The steady reduction and the dynamic transforms are sibling branches of
+the same declarations — the reduction applies to the *declared* model,
+before any dynamic transform:
 
-Writing the solution back into the declared steady-state targets is an
-algorithmic step outside the transform, which shapes the model and does
-nothing after a solve. The pairings are left intact, since they are the record
-of which target Param goes with which state.
+- `drto.dynamic_to_steady_state` collapses the horizon to a single
+  point: accumulations pinned at zero, time-indexed Blocks collapsed to
+  their steady member, References re-pointed, Ports intact.
+- `drto.steady_state_simulation` is the reduction plus held controls: a
+  square equilibrium at given inputs (its `create_using` form leaves the
+  dynamic model untouched). The CSTR example computes its setpoint this
+  way.
+- `drto.steady_state_optimization` is the reduction plus the declared
+  economic cost: the RTO problem.
 
-## Dynamic simulation: `drto.dynamic_simulation`
+## How-to: scaling
 
-The dual of the mode above: it frees nothing and integrates the declared model
-forward over the horizon. It requires the same declarations, including
-`initial_condition`, because a forward integration is not square without the
-initial state pinned.
+Badly scaled models (an energy holdup at 1e8 J next to mole fractions)
+are the rule in process systems. The drto contract is one-sided: **tag
+the model once, and every internal solve honors it**. Attach the standard
+Pyomo suffix with a factor per badly scaled variable and row:
 
-The declared profiles are applied first, so the simulated input takes the shape
-the model declared and the user picks that shape at declaration time through
-`control(profile=...)`. The parameterized controls are then fixed. The
-`controls` option sets what they are fixed at, either a constant held across
-the horizon or one value per free point the profile leaves, and a control not
-named there is fixed at the value it already holds. A control holding no value
-errors rather than being fixed at nothing.
+```python
+m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+m.scaling_factor[cv.energy_holdup] = 1e-7
+m.scaling_factor[cv.enthalpy_balances] = 1e-7
+```
 
-The disturbances are fixed the same way, at their realized noise. A
-`disturbances` option maps a declared disturbance to a constant or a
-per-free-point sequence, the plant's noise realization, so the mode is the
-plant step of a closed-loop run; a disturbance not named is fixed at zero.
-Because it is fixed rather than eliminated, it stays in the model, the forward
-integration stays square, and any noise form works.
+`cold_start_dynamic` and `initialize_steady_state` then run their
+internal solves on a scaled clone and write every value back in the
+model's own units — the model, its declarations, and its Params never
+leave physical units, and nothing changes in the call. Your own solver
+calls compose the same way with Pyomo's `core.scale_model`:
+`create_using` a scaled clone, solve it, `propagate_solution` back. The
+CSTR example tags units-driven factors (every J-valued variable gets
+1e-7, every W-valued 1e-6) in a ten-line helper and runs every solve
+through it.
 
-A simulation carries no cost and no terminal set, so the declared stage costs,
-the terminal cost, and the terminal constraint leave the model as they do in
-the steady-state simulation, and `build_objective` installs the constant-zero
-objective. The estimation costs and measurements are neutralized by the same
-routine the optimization mode uses.
+## How-to: IDAES flowsheets
+
+drto's transforms are built to leave a flowsheet as IDAES wrote it. Three
+idioms cover most models:
+
+**States as member subsets.** An IDAES material holdup is one packed Var
+over components, but only some members are true states — the water
+holdup of the saponification CSTR is fixed by the property package's
+closure. Declare exactly the true states as slices:
+
+```python
+drto.state(cv.material_holdup[:, "Liq", "NaOH"],
+           cv.material_holdup[:, "Liq", "EthylAcetate"],
+           cv.energy_holdup)
+```
+
+Each slice wraps as an attached Reference; the undeclared members stay
+algebraic, their balances close them pointwise, and the declared surface
+matches the true state dimension.
+
+**Controls on Ports.** A feed flow lives on the inlet Port as a
+time-indexed Reference; declare it directly:
+
+```python
+fin = m.fs.cstr.inlet.flow_vol
+drto.control(cv.heat, fin, profile="piecewise_constant")
+```
+
+**Time-indexed Blocks.** Property and reaction blocks (`Block(t)`
+families) ride through every transform: the steady reduction collapses
+them to the surviving member, and the terminal segment replicates their
+variables and equations onto the tail. No flattening, no rewriting of
+the flowsheet.
+
+The [IDAES CSTR examples](examples.md) run all three on an unmodified
+`idaes.models.unit_models.CSTR`.
+
+## Reports
+
+Every initializer returns a printable report of what it did — what was
+set, what was solved, what was skipped and why — and every drto error
+names the component and the declaration to fix. When something behaves
+unexpectedly, look at `drto.info(m)` first, then the report.
