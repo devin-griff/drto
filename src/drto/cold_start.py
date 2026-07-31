@@ -281,11 +281,12 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
                 con.deactivate()
     # the terminal segment mirrors the finite horizon: its state and
     # control copies are held at the values set above, and set aside are
-    # its copies of the declared dynamics plus the rows those values
-    # satisfy by construction (the link, the continuity, the pin), which
-    # would otherwise re-solve held copies. The pin slacks then sit in
-    # no active row and stay at zero; the residue rows stay, they close
-    # the undeclared members' copies
+    # its copies of the declared dynamics (the residue rows included)
+    # plus the rows those values satisfy by construction (the link, the
+    # continuity, the pin), which would otherwise re-solve held copies.
+    # The pin slacks then sit in no active row and stay at zero, and a
+    # variable only the dynamics would close keeps its value, as on the
+    # finite side
     seg = solve_m.component("drto_ih")
     if seg is not None:
         for kind in ("state", "control"):
@@ -294,8 +295,9 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
                 if copy is not None:
                     held.extend(vd for vd in copy.values() if not vd.fixed)
         set_aside = [
-            seg.component(con.local_name)
+            seg.component(con.local_name + suffix)
             for con in solve_reg.components("dynamics")
+            for suffix in ("", "_residue")
         ] + [
             seg.component(comp.local_name + suffix)
             for comp in solve_reg.components("state")
