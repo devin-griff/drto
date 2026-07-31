@@ -51,4 +51,23 @@ alongside the CHANGELOG section rename.
   done, which includes the feature's documentation (a `docs/` page and, where
   it applies, an example notebook).
 
+## Definition of done
+
+A feature is done when its acceptance criteria are met and:
+
+- Every acceptance criterion has at least one test demonstrated to fail
+  when the behavior is broken or removed, not just to pass when it works.
+- Every fallback the spec promises ("without X", "when Y is absent") has
+  its own test; optional-dependency paths are the ones no development
+  environment hits naturally.
+- When the acceptance criteria name a real model, the example runs and
+  its numbers are read, not just its exit code: the report, the solver
+  log's iteration count, no warnings, stated in the PR.
+- A feature that creates components another part of the package must
+  later find records the pairing in the registry; no consumer
+  reconstructs another module's component names (gh #27).
+- The documentation reflects the feature where a user would look for it:
+  the guide's workflow it belongs to, the notebook gallery when an
+  example lands, the changelog.
+
 `001-drto.info.md` is the first example.
