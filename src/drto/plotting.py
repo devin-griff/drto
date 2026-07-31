@@ -52,12 +52,18 @@ _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
 
 def _tail(m):
-    """Return (segment block, tN, gamma) or None if no terminal segment."""
+    """Return (segment block, tN, gamma, copies) or None if no segment.
+
+    ``copies`` maps ``id(declared component)`` to its segment copy, from
+    the pairing the transform records on the registry (gh #27).
+    """
     b = m.component("drto_ih")
     if b is None:
         return None
-    time = drto.info(m).components("horizon")[0]
-    return b, time.last(), pyo.value(b.gamma)
+    reg = drto.info(m)
+    time = reg.components("horizon")[0]
+    copies = {id(r["of"]): r["copy"] for r in reg._segment_records()}
+    return b, time.last(), pyo.value(b.gamma), copies
 
 
 def _time_pos(comp, time):
@@ -209,8 +215,8 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
             ax.axhline(pyo.value(tval), color="C0", linestyle=":")
             drew_target = True
         if tail is not None:
-            b, tN, gamma = tail
-            seg = b.component(comp.local_name)
+            b, tN, gamma, copies = tail
+            seg = copies.get(id(comp))
             if seg is not None:
                 # a member panel iterates the tau grid; a time-only panel
                 # iterates the copy's own index set (a parameterized segment

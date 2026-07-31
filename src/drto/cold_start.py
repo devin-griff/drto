@@ -211,15 +211,18 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
             vd.set_value(pyo.value(tgt_param[o] if o else tgt_param))
         report.n_controls += 1
 
-    # a terminal segment rests at the targets
-    b = m.component("drto_ih")
-    if b is not None:
+    # a terminal segment rests at the targets; the transform recorded
+    # which tail component belongs to which declaration (gh #27)
+    seg_state = {id(r["of"]): r for r in reg._segment_records("state")}
+    seg_control = {id(r["of"]): r for r in reg._segment_records("control")}
+    if seg_state or seg_control:
         n_seg = 0
         for z in states:
+            rec = seg_state.get(id(z))
+            if rec is None:
+                continue
             tgt_param = z_target[id(z)]
-            copy = b.component(z.local_name)
-            deriv = b.component(z.local_name + "_dtau")
-            for comp, val in ((copy, None), (deriv, 0.0)):
+            for comp, val in ((rec["copy"], None), (rec["derivative"], 0.0)):
                 if comp is None:
                     continue
                 for idx, vd in comp.items():
@@ -232,17 +235,16 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
                         else pyo.value(tgt_param[o] if o else tgt_param)
                     )
                 n_seg += 1
-            for suffix in ("_pin_up", "_pin_lo"):
-                slack = b.component(z.local_name + suffix)
+            for slack in (rec["pin_up"], rec["pin_lo"]):
                 if slack is not None:
                     for vd in slack.values():
                         vd.set_value(0.0)
         for u in controls:
-            copy = b.component(u.local_name)
-            if copy is None:
+            rec = seg_control.get(id(u))
+            if rec is None or rec["copy"] is None:
                 continue
             tgt = pyo.value(u_target[id(u)])
-            for vd in copy.values():
+            for vd in rec["copy"].values():
                 if not vd.fixed:
                     vd.set_value(tgt)
             n_seg += 1
@@ -285,27 +287,20 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
     # continuity, the pin), which would otherwise re-solve held copies.
     # The pin slacks then sit in no active row and stay at zero, and a
     # variable only the dynamics would close keeps its value, as on the
-    # finite side
-    seg = solve_m.component("drto_ih")
-    if seg is not None:
-        for kind in ("state", "control"):
-            for comp in solve_reg.components(kind):
-                copy = seg.component(comp.local_name)
-                if copy is not None:
-                    held.extend(vd for vd in copy.values() if not vd.fixed)
-        set_aside = [
-            seg.component(con.local_name + suffix)
-            for con in solve_reg.components("dynamics")
-            for suffix in ("", "_residue")
-        ] + [
-            seg.component(comp.local_name + suffix)
-            for comp in solve_reg.components("state")
-            for suffix in ("_link", "_tau_cont_eq", "_pin_eq")
-        ]
-        for con in set_aside:
-            if con is not None and con.active:
-                rows.append(con)
-                con.deactivate()
+    # finite side. The pairing comes from the transform's records, which
+    # a clone carries with its references remapped (gh #27)
+    set_aside = []
+    for rec in solve_reg._segment_records():
+        if rec["kind"] in ("state", "control") and rec["copy"] is not None:
+            held.extend(vd for vd in rec["copy"].values() if not vd.fixed)
+        if rec["kind"] == "dynamics":
+            set_aside += [rec["copy"], rec["residue"]]
+        elif rec["kind"] == "state":
+            set_aside += [rec["link"], rec["continuity"], rec["pin"]]
+    for con in set_aside:
+        if con is not None and con.active:
+            rows.append(con)
+            con.deactivate()
     try:
         report.pipeline = pyomo_pounce.initialize(
             solve_m, decisions=held, fill=None, project=False

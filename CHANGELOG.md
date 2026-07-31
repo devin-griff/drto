@@ -40,6 +40,12 @@ All notable changes to this project are documented here. The format is based on
   from their committed outputs behind a curated gallery; the API
   reference is grouped by use; and a design page links the feature
   specs, stating plainly what is shipped versus specified.
+- The infinite-horizon transformation records, internally on the
+  registry, which terminal-segment component belongs to which
+  declaration, and `cold_start_dynamic` and the plotting read that
+  pairing instead of reconstructing component names (gh #27). The
+  registry view renders nothing new, component names are unchanged, and
+  a clone carries the pairing with its references remapped.
 - `initialize_steady_state` honors an active `scaling_factor` suffix: the
   pipeline runs scaled and the solved values land in the model's own
   units, with no change to the call (gh #24). Previously the suffix was

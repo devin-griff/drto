@@ -139,6 +139,19 @@ class Info:
     def __init__(self):
         self._declarations = {}
         self._transformations = []
+        self._segment = []
+
+    # ------------------------------------------------------------------
+    # the terminal segment's pairing (gh #27): which segment component
+    # belongs to which declaration. Internal bookkeeping written by
+    # drto.infinite_horizon and read by the consumers; it never renders,
+    # and a clone remaps the stored references like everything else here
+    # ------------------------------------------------------------------
+    def _record_segment(self, kind, of, **parts):
+        self._segment.append({"kind": kind, "of": of, **parts})
+
+    def _segment_records(self, kind=None):
+        return [r for r in self._segment if kind is None or r["kind"] == kind]
 
     # ------------------------------------------------------------------
     # recording

@@ -175,6 +175,52 @@ def test_segment_structure():
     assert 0 not in b.u and 1 not in b.u
 
 
+def test_segment_pairing_recorded_on_the_registry():
+    # the transform writes down which tail component belongs to which
+    # declaration: actual objects, resolved once at build (gh #27)
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    reg = drto.info(m)
+    (zrec,) = reg._segment_records("state")
+    assert zrec["of"] is m.z
+    assert zrec["copy"] is b.z
+    assert zrec["derivative"] is b.z_dtau
+    assert zrec["disc"] is b.z_dtau_disc_eq
+    assert zrec["continuity"] is b.z_tau_cont_eq
+    assert zrec["link"] is b.z_link
+    assert zrec["pin"] is b.z_pin_eq
+    assert zrec["pin_up"] is b.z_pin_up
+    assert zrec["pin_lo"] is b.z_pin_lo
+    (urec,) = reg._segment_records("control")
+    assert urec["of"] is m.u and urec["copy"] is b.u
+    (drec,) = reg._segment_records("dynamics")
+    assert drec["of"] is m.ode and drec["copy"] is b.ode
+    assert drec["residue"] is None  # a flat state has no residue rows
+
+    # a clone carries the pairing with its references remapped
+    m2 = m.clone()
+    (zrec2,) = drto.info(m2)._segment_records("state")
+    assert zrec2["copy"] is m2.drto_ih.z and zrec2["copy"] is not b.z
+
+    # terminal='none' records no pin pieces
+    m3 = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m3, terminal="none")
+    (zrec3,) = drto.info(m3)._segment_records("state")
+    assert zrec3["pin"] is None and zrec3["pin_up"] is None
+
+
+def test_segment_pairing_never_renders():
+    # the registry view shows the declarations and the transformation
+    # log; the pairing is invisible bookkeeping
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    reg = drto.info(m)
+    with_records = repr(reg)
+    reg._segment.clear()
+    assert repr(reg) == with_records
+
+
 def test_gamma_follows_the_mesh_rule_and_option_overrides():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m)
@@ -236,6 +282,22 @@ def test_tail_terms_reach_the_objective():
     for term, _ in group["terms"]:
         for v in identify_variables(term.expr):
             assert v in in_obj
+
+
+def test_tail_weights_integrate_through_the_jacobian():
+    # each tail weight is beta*h*w / (gamma*dt*(1 - tau^2)). The Gauss
+    # weights sum to one over the tau span, so weight*(1 - tau^2) summed
+    # over every point recovers beta/(gamma*dt) exactly; dropping the
+    # Jacobian factor breaks the sum
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m, terminal="none")
+    b = m.drto_ih
+    fe = m.t.get_finite_elements()
+    dt = fe[1] - fe[0]
+    (group,) = drto.info(m).declarations("cost_group")
+    assert all(pyo.value(w) > 0 for _, w in group["terms"])
+    total = sum(pyo.value(w) * (1 - term.index() ** 2) for term, w in group["terms"])
+    assert total == pytest.approx(pyo.value(b.beta) / (pyo.value(b.gamma) * dt))
 
 
 def test_beta_and_gamma_retune_without_reapply():

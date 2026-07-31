@@ -825,6 +825,7 @@ class InfiniteHorizonTransformation(Transformation):
             return _emaps[key]
 
         # --- dilated dynamics at interior collocation points (eq. 25) ---
+        dyn_copies = {}
         for con in dynamics:
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
@@ -841,7 +842,8 @@ class InfiniteHorizonTransformation(Transformation):
                     rhs, _emap(t_rep, s)
                 )
 
-            b.add_component(con.local_name, Constraint(*others, b.tau, rule=dyn_rule))
+            dyn_copies[con] = Constraint(*others, b.tau, rule=dyn_rule)
+            b.add_component(con.local_name, dyn_copies[con])
 
         # --- member-internal equations, replicated at the interior
         # collocation points exactly like flat algebraic equations ------
@@ -878,6 +880,7 @@ class InfiniteHorizonTransformation(Transformation):
 
         # --- residue rows of the declared dynamics, replicated as written
         # at the interior collocation points like algebraic equations -----
+        residues = {}
         for con, residue in dyn_residue.items():
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
@@ -890,11 +893,11 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, tr = _entries[o]
                 return replace_expressions(expr, _emap(tr, sp))
 
-            b.add_component(
-                con.local_name + "_residue", Constraint(*others, b.tau, rule=res_rule)
-            )
+            residues[con] = Constraint(*others, b.tau, rule=res_rule)
+            b.add_component(con.local_name + "_residue", residues[con])
 
         # --- link the segment to the end of the horizon ------------------
+        links = {}
         for z in states:
             pos, others = _layout(z)
 
@@ -902,14 +905,12 @@ class InfiniteHorizonTransformation(Transformation):
                 o = tuple(v for v in o if v is not None)  # scalar rules get None
                 return _seg_at(_z, o, 0) == _member(_z, o, t_end)
 
-            b.add_component(
-                z.local_name + "_link",
-                (
-                    Constraint(*others, rule=link_rule)
-                    if others
-                    else Constraint(rule=link_rule)
-                ),
+            links[z] = (
+                Constraint(*others, rule=link_rule)
+                if others
+                else Constraint(rule=link_rule)
             )
+            b.add_component(z.local_name + "_link", links[z])
 
         # --- discretize the segment: Gauss-Legendre only, no collocation
         # equation may sit at the singular endpoint tau = 1 ---
@@ -1010,6 +1011,9 @@ class InfiniteHorizonTransformation(Transformation):
             TransformationFactory("cvp.parameterize").apply_to(
                 b, var=[seg[u] for u in controls], contset=b.tau, profile=config.profile
             )
+            for u in controls:
+                # cvp swapped each copy under its own name; follow the swap
+                seg[u] = b.component(seg[u].local_name)
 
         # --- the tail cost: explicit Gauss weights, (beta/dt) * phi_f with
         # the quadrature state eliminated. beta and gamma stay symbolic in
@@ -1031,6 +1035,7 @@ class InfiniteHorizonTransformation(Transformation):
         # derivative there is undefined, so the pin is on the state value. It
         # references only states (cvp never replaces those), so it is order-free
         # relative to the control parameterization above ---
+        pins = {}
         if config.terminal != "none":
             # 'soft': the L1-relaxed endpoint of eq 36, split-nonneg slacks
             tau_end = b.tau.last()
@@ -1063,14 +1068,13 @@ class InfiniteHorizonTransformation(Transformation):
                     el = _lo[tuple(o)] if o else _lo
                     return _seg_at(_z, o, tau_end) + eu - el == _tgt(_z, o)
 
-                b.add_component(
-                    z.local_name + "_pin_eq",
-                    (
-                        Constraint(*others, rule=soft_rule)
-                        if others
-                        else Constraint(rule=soft_rule)
-                    ),
+                pin_eq = (
+                    Constraint(*others, rule=soft_rule)
+                    if others
+                    else Constraint(rule=soft_rule)
                 )
+                b.add_component(z.local_name + "_pin_eq", pin_eq)
+                pins[z] = (pin_eq, up, lo)
                 for o in _combos(z):
                     pin_terms.append((up[tuple(o)] if o else up, b.mu))
                     pin_terms.append((lo[tuple(o)] if o else lo, b.mu))
@@ -1085,6 +1089,31 @@ class InfiniteHorizonTransformation(Transformation):
             if comp.active:
                 comp.deactivate()
                 terminal = comp.name
+
+        # --- record the segment pairing on the registry: which tail
+        # component belongs to which declaration. Internal bookkeeping,
+        # never rendered; the consumers read this instead of rebuilding
+        # component names (gh #27) ---
+        for z in states:
+            pin_eq, up, lo = pins.get(z) or (None, None, None)
+            reg._record_segment(
+                "state",
+                z,
+                copy=seg[z],
+                derivative=derivs[z],
+                disc=b.component(derivs[z].local_name + "_disc_eq"),
+                continuity=b.component(seg[z].local_name + "_tau_cont_eq"),
+                link=links[z],
+                pin=pin_eq,
+                pin_up=up,
+                pin_lo=lo,
+            )
+        for u in controls:
+            reg._record_segment("control", u, copy=seg[u])
+        for con in dynamics:
+            reg._record_segment(
+                "dynamics", con, copy=dyn_copies[con], residue=residues.get(con)
+            )
 
         reg.record_transformation(
             "drto.infinite_horizon",
