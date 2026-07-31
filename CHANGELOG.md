@@ -21,7 +21,10 @@ All notable changes to this project are documented here. The format is based on
   keyword arguments pass through to pounce. Requires a pounce solve;
   without one the call raises pounce's instruction to solve with pounce
   first. Needs pyomo-pounce with the solve-point estimate baseline (the
-  upstream fix this feature contributed).
+  upstream fix this feature contributed). The Hicks-Ray notebook
+  (`examples/hicks_advanced_step.ipynb`) reads the correction against a
+  full re-solve: 54x faster with every state and move within 1e-2 for a
+  two-percent state perturbation.
 
 - Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
   dynamic model from its declared initial condition to its declared

@@ -27,6 +27,9 @@ unmodified IDAES models.
   reduction and the equilibrium at held controls.
 - [Initializing from the steady state](notebooks/hicks_initialize.ipynb)
   — `drto.initialize_steady_state`, solve-based and broadcast flat.
+- [The advanced-step correction](notebooks/hicks_advanced_step.ipynb) —
+  solve at a prediction, correct at the measurement without re-solving,
+  and read the accuracy and the timing against a full re-solve.
 
 **More systems**
 
@@ -61,6 +64,7 @@ notebooks/hicks_dynamic_optimization
 notebooks/hicks_dynamic_simulation
 notebooks/hicks_steady_state
 notebooks/hicks_initialize
+notebooks/hicks_advanced_step
 notebooks/quad_tank
 notebooks/cart_pole
 notebooks/binary_column

@@ -18,6 +18,7 @@ _NOTEBOOKS = [
     "hicks_dynamic_simulation",
     "hicks_steady_state",
     "hicks_initialize",
+    "hicks_advanced_step",
     "quad_tank",
     "cart_pole",
     "binary_column",
