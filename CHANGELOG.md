@@ -29,6 +29,14 @@ All notable changes to this project are documented here. The format is based on
   the model before and after, the per-point solves working the outlet
   stream, the reaction cascade, and the packed holdup's water member.
 
+### Changed
+
+- `initialize_steady_state` honors an active `scaling_factor` suffix: the
+  pipeline runs scaled and the solved values land in the model's own
+  units, with no change to the call (gh #24). Previously the suffix was
+  ignored, its entries riding the reduced clone into the subsystem solves
+  with NL-writer warnings; the scaled path removes both.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added

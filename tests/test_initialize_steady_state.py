@@ -123,3 +123,60 @@ def test_values_survive_the_dynamic_transforms():
     drto.initialize_steady_state(m, controls={m.u: 0.3})
     pyo.TransformationFactory("drto.parameterize").apply_to(m)
     assert all(pyo.value(m.u[t]) == pytest.approx(0.3) for t in m.u)
+
+
+def test_scaling_suffix_scales_the_steady_pipeline():
+    # an active scaling_factor suffix: the pipeline runs scaled and the
+    # values land in the model's own units, matching the unscaled run
+    m = steady_authored_model()
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    m.scaling_factor[m.z] = 1e-6
+    m.scaling_factor[m.balance] = 1e-6
+    report = drto.initialize_steady_state(m)
+    assert report.ok
+    assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
+    assert not m.u.fixed
+
+
+def test_the_pipeline_receives_the_scaled_clone(monkeypatch):
+    # the proof the suffix is honored: the pipeline solves a clone whose
+    # values are scaled, and the model comes back in its own units
+    seen = {}
+    real = pyomo_pounce.initialize
+
+    def spy(model, **kw):
+        seen["model"] = model
+        seen["u"] = model.find_component("u").value
+        return real(model, **kw)
+
+    monkeypatch.setattr(pyomo_pounce, "initialize", spy)
+    m = steady_authored_model()
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    m.scaling_factor[m.u] = 10.0
+    drto.initialize_steady_state(m)
+    assert seen["model"] is not m  # a clone solved, not the model
+    assert seen["u"] == pytest.approx(2.5)  # 0.25 in the scaled space
+    assert pyo.value(m.u) == pytest.approx(0.25)  # its own units kept
+    assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
+
+
+def test_scaling_suffix_scales_the_dynamic_pipeline():
+    def built(suffix):
+        m = discretized_model()
+        if suffix:
+            m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+            for vd in m.z.values():
+                m.scaling_factor[vd] = 1e-6
+        return m
+
+    plain, scaled = built(False), built(True)
+    drto.initialize_steady_state(plain, controls={plain.u: 0.3})
+    drto.initialize_steady_state(scaled, controls={scaled.u: 0.3})
+    for vd, svd in zip(
+        plain.component_data_objects(pyo.Var),
+        scaled.component_data_objects(pyo.Var),
+        strict=True,
+    ):
+        assert (vd.value is None) == (svd.value is None), svd.name
+        if vd.value is not None:
+            assert svd.value == pytest.approx(vd.value, abs=1e-7), svd.name
