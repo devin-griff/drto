@@ -269,7 +269,8 @@ def test_units_never_raise_on_odd_components():
     reg = drto.info(m)
     reg.record_declaration("horizon", m.t)
     reg.record_declaration("state", m.z)
-    repr(reg)  # a registry with no constraints and no units renders fine
+    r = repr(reg)  # a registry with no constraints and no units renders fine
+    assert "z" in r
 
 
 # ── feature 011 fixes: rendering noise and the fallback substitution ─────────
