@@ -156,6 +156,15 @@ move.
   Applying this transform before the mode transform is the composition.
 - It works through both `apply_to` (in place) and `create_using` (a
   transformed clone).
+- The transformation records, internally on the registry object, which
+  segment component belongs to which declaration: each declared state's
+  copy, tau derivative, discretization and continuity rows, link, and
+  endpoint pin (equation and slacks); each declared control's copy; and
+  each declared dynamics family's copy and residue rows. The registry
+  view renders nothing new for it, and the pairing follows a clone with
+  its references remapped. drto's own consumers (cold start, plotting)
+  read the recorded pairing instead of reconstructing component names
+  (gh #27).
 - Acceptance tests mirror the reference notebook: the short-horizon-plus-
   segment solution reproduces a long-horizon baseline, the explicit-weight
   tail equals the quadrature-state tail to machine precision, and the
