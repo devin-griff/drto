@@ -43,6 +43,10 @@ carry today.
   of the equality system), with the declared controls as the decisions.
   drto contributes what that suite cannot know: which variables are
   decisions, the steady reduction, and the horizon broadcast.
+- An active `scaling_factor` suffix is honored: the pipeline runs scaled
+  and the solved values land in the model's own units, the same contract
+  as feature 011's per-point solves. The result matches the unscaled
+  run, and nothing changes in the call (gh #24).
 - The steady path runs the pipeline on the model in place: the solved
   values land in `Var.value`.
 - The dynamic path requires a discretized horizon and no drto
