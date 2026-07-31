@@ -30,3 +30,6 @@ docs/_build/
 .vscode/
 .idea/
 .DS_Store
+
+# docs build copies of the example notebooks
+docs/notebooks/

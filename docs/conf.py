@@ -1,7 +1,41 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
 """Sphinx configuration for the drto documentation."""
+import shutil
 from importlib.metadata import PackageNotFoundError, version as _version
+from pathlib import Path
+
+# The example notebooks render into the docs from their committed outputs
+# (execution stays off below). They live under examples/ at the repo root,
+# and Sphinx only reads its own source tree, so the curated set is copied
+# into docs/notebooks/ (gitignored) at build time. Keep this list in sync
+# with the toctree in examples.md.
+_NOTEBOOKS = [
+    "first_order",
+    "hicks",
+    "hicks_inf",
+    "hicks_dynamic_optimization",
+    "hicks_dynamic_simulation",
+    "hicks_steady_state",
+    "hicks_initialize",
+    "quad_tank",
+    "cart_pole",
+    "binary_column",
+    "double_column",
+    "idaes_cstr",
+    "cstr_cold_start",
+]
+_here = Path(__file__).parent
+_nb_dst = _here / "notebooks"
+(_nb_dst / "models").mkdir(parents=True, exist_ok=True)
+for _name in _NOTEBOOKS:
+    shutil.copy2(_here.parent / "examples" / f"{_name}.ipynb", _nb_dst)
+# the notebooks link their model modules; ship them as downloads
+for _py in (_here.parent / "examples" / "models").glob("*.py"):
+    if _py.stem != "asu":  # work in progress, not in any shipped notebook
+        shutil.copy2(_py, _nb_dst / "models")
+
+exclude_patterns = ["_build"]
 
 project = "drto"
 author = "Devin Griffith"
@@ -22,10 +56,9 @@ extensions = [
     "sphinx_copybutton",
 ]
 
-# Notebook execution is off: the docs tree carries no notebooks, and the docs
-# build installs neither the solvers nor the examples extra that the notebooks
-# under examples/ need. Flip to "cache" when a notebook lands in this tree and
-# the build can solve it.
+# Notebook execution is off: the notebooks are committed executed, so the
+# docs render their real outputs, and the docs build installs neither the
+# solvers nor IDAES.
 nb_execution_mode = "off"
 myst_enable_extensions = ["colon_fence", "deflist", "dollarmath"]
 

@@ -31,6 +31,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The documentation is rebuilt around the workflows. The README and the
+  docs front page open with a runnable quickstart (declare, transform,
+  cold start, solve, plot, with real output); the user guide is
+  restructured as the three workflows (the infinite-horizon controller,
+  the forward simulation, the steady-state branch) plus scaling and
+  IDAES how-tos; the thirteen example notebooks render into the docs
+  from their committed outputs behind a curated gallery; the API
+  reference is grouped by use; and a design page links the feature
+  specs, stating plainly what is shipped versus specified.
 - `initialize_steady_state` honors an active `scaling_factor` suffix: the
   pipeline runs scaled and the solved values land in the model's own
   units, with no change to the call (gh #24). Previously the suffix was
