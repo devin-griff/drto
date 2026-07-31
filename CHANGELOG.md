@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `initialize_steady_state` honors an active `scaling_factor` suffix: the
+  pipeline runs scaled and the solved values land in the model's own
+  units, with no change to the call (gh #24). Previously the suffix was
+  ignored, its entries riding the reduced clone into the subsystem solves
+  with NL-writer warnings; the scaled path removes both.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added

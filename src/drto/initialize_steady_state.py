@@ -16,6 +16,10 @@ forward on their own (cvp seeds its move variables from the members it
 replaces; the terminal segment copies the horizon-end values), which is why
 the dynamic path runs first.
 
+An active ``scaling_factor`` suffix is honored: the pipeline runs scaled
+and the solved values land in the model's own units, with no change to
+the call.
+
 pyomo-pounce is optional to drto: it is imported here at call time and a
 missing install raises with the ``pip install drto[pounce]`` instruction.
 Values only: no components are added or removed, and the pipeline restores
@@ -23,7 +27,7 @@ the variable fixed flags it touches.
 """
 from dataclasses import dataclass
 
-from pyomo.core import TransformationFactory, Var
+from pyomo.core import Suffix, TransformationFactory, Var
 from pyomo.dae import DerivativeVar
 
 from drto.infinite_horizon import _split_index, _time_index
@@ -116,6 +120,11 @@ def initialize_steady_state(m, controls=None):
 
     work = m.clone()
     TransformationFactory("drto.dynamic_to_steady_state").apply_to(work)
+    # the reduction removed components; their suffix entries go with
+    # them, or the scaled clone cannot be built and the NL writer warns
+    for sfx in work.component_objects(Suffix, active=True):
+        for key in [k for k in sfx if not _attached(k, work)]:
+            del sfx[key]
     report = _run_pipeline(work, info(work), controls, pyomo_pounce)
 
     # broadcast: every time-indexed Var takes its collapsed counterpart's
@@ -159,6 +168,18 @@ def initialize_steady_state(m, controls=None):
     )
 
 
+def _attached(comp, root):
+    """Whether ``comp`` still hangs off ``root``."""
+    if comp.parent_component() is None:
+        return False
+    b = comp.parent_block()
+    while b is not None:
+        if b is root:
+            return True
+        b = b.parent_block()
+    return False
+
+
 def _run_pipeline(model, reg, controls, pyomo_pounce):
     """Resolve the control values, run the pipeline, enforce squareness."""
     declared = {c.name: c for c in reg.components("control")}
@@ -183,7 +204,20 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
                     f"controls={{{name}: value}} or initialize it."
                 )
 
-    report = pyomo_pounce.initialize(model, decisions=list(declared.values()))
+    # an active scaling_factor suffix: the pipeline runs on a scaled
+    # clone and the values propagate back; the model stays in its own
+    # units, the same contract as cold_start_dynamic's per-point solves
+    scaled = any(
+        s.local_name == "scaling_factor"
+        for s in model.component_objects(Suffix, active=True)
+    )
+    if scaled:
+        xfrm = TransformationFactory("core.scale_model")
+        target = xfrm.create_using(model, rename=False)
+        decisions = list(info(target).components("control"))
+    else:
+        target, decisions = model, list(declared.values())
+    report = pyomo_pounce.initialize(target, decisions=decisions)
     block = report.block
     if block is not None and not block.square:
         detail = []
@@ -204,4 +238,6 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
             + ". For deliberately partial initialization call "
             "pyomo_pounce.initialize directly."
         )
+    if scaled:
+        xfrm.propagate_solution(target, model)
     return report
