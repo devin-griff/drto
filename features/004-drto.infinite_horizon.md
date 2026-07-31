@@ -156,6 +156,13 @@ move.
   Applying this transform before the mode transform is the composition.
 - It works through both `apply_to` (in place) and `create_using` (a
   transformed clone).
+- The segment's algebraic copies (the flat algebra, the Block members,
+  the packed residue members) are indexed over the interior collocation
+  points only: every point that exists is a point some replicated
+  equation determines. The state copies keep the full tau set for their
+  continuity and discretization rows, as the tail cost's quadrature
+  already does. No dead members exist for a reader to find stale
+  (gh #32).
 - The transformation records, internally on the registry object, which
   segment component belongs to which declaration: each declared state's
   copy, tau derivative, discretization and continuity rows, link, and
