@@ -134,6 +134,17 @@ tail's quadrature group, and the pin penalties — via
 `drto.build_objective`. Deactivating a cost row removes its term; there
 are no coupling options.
 
+**The advanced-step correction** (`drto.advanced_step_controller`)
+turns the solved horizon into a between-samples controller: solve at a
+predicted state with pounce (the assembly declared the feedback hooks as
+sensitivity parameters, inert metadata for every other solver), write
+the measured state into the hooks when it arrives, and ask for the
+corrected solution — a backsolve on the kept factorization, not a
+re-solve. The returned map holds every variable's corrected value; the
+model itself is untouched, so the prediction stays in place as the next
+solve's warm start. `gradient=True` returns the controls' sensitivities
+to the hooks instead.
+
 ## Workflow: a forward simulation
 
 `drto.dynamic_simulation` turns the same declared model into an

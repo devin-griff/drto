@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The advanced-step correction (feature 012).
+  `drto.advanced_step_controller(m)` corrects a pounce-solved horizon to
+  the measured state without re-solving: `drto.dynamic_optimization`
+  declares the feedback hooks (the initial-condition Params) as pounce
+  sensitivity parameters whenever pyomo-pounce is importable, a pounce
+  solve keeps the converged factorization, and the correction is a
+  backsolve at the hooks' current values, returned as a map from each
+  variable to its corrected value with the model untouched. The
+  declaration is inert for every other solver. `gradient=True` returns
+  the controls' sensitivities to the hooks instead, and unrecognized
+  keyword arguments pass through to pounce. Requires a pounce solve;
+  without one the call raises pounce's instruction to solve with pounce
+  first. Needs pyomo-pounce with the solve-point estimate baseline (the
+  upstream fix this feature contributed).
+
 - Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
   dynamic model from its declared initial condition to its declared
   steady-state targets: each state on a straight line with its
