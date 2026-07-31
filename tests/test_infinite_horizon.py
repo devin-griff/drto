@@ -238,6 +238,22 @@ def test_tail_terms_reach_the_objective():
             assert v in in_obj
 
 
+def test_tail_weights_integrate_through_the_jacobian():
+    # each tail weight is beta*h*w / (gamma*dt*(1 - tau^2)). The Gauss
+    # weights sum to one over the tau span, so weight*(1 - tau^2) summed
+    # over every point recovers beta/(gamma*dt) exactly; dropping the
+    # Jacobian factor breaks the sum
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m, terminal="none")
+    b = m.drto_ih
+    fe = m.t.get_finite_elements()
+    dt = fe[1] - fe[0]
+    (group,) = drto.info(m).declarations("cost_group")
+    assert all(pyo.value(w) > 0 for _, w in group["terms"])
+    total = sum(pyo.value(w) * (1 - term.index() ** 2) for term, w in group["terms"])
+    assert total == pytest.approx(pyo.value(b.beta) / (pyo.value(b.gamma) * dt))
+
+
 def test_beta_and_gamma_retune_without_reapply():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m, terminal="none")  # tail is the only term

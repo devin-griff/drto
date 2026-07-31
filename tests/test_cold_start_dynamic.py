@@ -98,6 +98,42 @@ def test_cold_started_optimization_solves():
     assert res.solver.termination_condition == pyo.TerminationCondition.optimal
 
 
+def test_every_set_aside_row_comes_back_active():
+    # the per-point solves set the dynamics, the initial condition, and
+    # the segment's structural rows aside; every one comes back active
+    m = seeded()
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    before = {cd.name for cd in m.component_data_objects(pyo.Constraint, active=True)}
+    drto.cold_start_dynamic(m)
+    after = {cd.name for cd in m.component_data_objects(pyo.Constraint, active=True)}
+    assert before == after
+
+
+def test_without_pounce_the_values_set_and_the_algebra_keeps(monkeypatch):
+    # the degradation path: states, derivatives, and controls initialize
+    # the same way, the algebraic variables keep their values, nothing
+    # is deactivated, and the report records the skip
+    monkeypatch.setattr(drto.cold_start, "pounce_available", False)
+    m = block_model()
+    m.u_ss = pyo.Param(initialize=0.3, mutable=True)
+    drto.steady_state_control(m.u, m.u_ss)
+    for vd in m.q.values():
+        vd.fix(3.0)
+    m.z_hat.set_value(0.1)
+    for blk in m.props.values():
+        blk.y.set_value(-7.0)  # sentinel: the skip must not touch it
+    report = drto.cold_start_dynamic(m)
+    assert "skipped" in report.point_solves
+    t0, tN = sorted(m.t)[0], sorted(m.t)[-1]
+    slope = (0.5 - 0.1) / (tN - t0)
+    for t in sorted(m.t):
+        assert pyo.value(m.z[t]) == pytest.approx(0.1 + slope * (t - t0))
+        assert pyo.value(m.dz[t]) == pytest.approx(slope)
+    assert all(pyo.value(vd) == pytest.approx(0.3) for vd in m.u.values())
+    assert all(blk.y.value == -7.0 for blk in m.props.values())
+    assert all(cd.active for cd in m.component_data_objects(pyo.Constraint))
+
+
 def test_report_reads():
     m = seeded()
     text = str(drto.cold_start_dynamic(m))
