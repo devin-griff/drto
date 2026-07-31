@@ -27,9 +27,6 @@ unmodified IDAES models.
   reduction and the equilibrium at held controls.
 - [Initializing from the steady state](notebooks/hicks_initialize.ipynb)
   — `drto.initialize_steady_state`, solve-based and broadcast flat.
-- [The advanced-step correction](notebooks/hicks_advanced_step.ipynb) —
-  solve at a prediction, correct at the measurement without re-solving,
-  and read the accuracy and the timing against a full re-solve.
 
 **More systems**
 
@@ -52,6 +49,10 @@ unmodified IDAES models.
 - [Cold start on the IDAES CSTR](notebooks/cstr_cold_start.ipynb) —
   `drto.cold_start_dynamic` working the full algebraic cascade, linear
   and exponential profiles through the same solve, with the solver logs.
+- [Advanced step on the IDAES CSTR](notebooks/cstr_advanced_step.ipynb)
+  — solve at a prediction, correct at the measurement without
+  re-solving: the implemented moves within half a percent of the warm
+  re-solve, twenty times faster.
 
 ```{toctree}
 :maxdepth: 1
@@ -64,11 +65,11 @@ notebooks/hicks_dynamic_optimization
 notebooks/hicks_dynamic_simulation
 notebooks/hicks_steady_state
 notebooks/hicks_initialize
-notebooks/hicks_advanced_step
 notebooks/quad_tank
 notebooks/cart_pole
 notebooks/binary_column
 notebooks/double_column
 notebooks/idaes_cstr
 notebooks/cstr_cold_start
+notebooks/cstr_advanced_step
 ```

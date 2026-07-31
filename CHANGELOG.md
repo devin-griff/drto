@@ -21,10 +21,11 @@ All notable changes to this project are documented here. The format is based on
   keyword arguments pass through to pounce. Requires a pounce solve;
   without one the call raises pounce's instruction to solve with pounce
   first. Needs pyomo-pounce with the solve-point estimate baseline (the
-  upstream fix this feature contributed). The Hicks-Ray notebook
-  (`examples/hicks_advanced_step.ipynb`) reads the correction against a
-  full re-solve: 54x faster with every state and move within 1e-2 for a
-  two-percent state perturbation.
+  upstream fix this feature contributed). The IDAES CSTR notebook
+  (`examples/cstr_advanced_step.ipynb`) runs the flowsheet controller
+  through a direct pounce solve, the scaling suffix reaching the solver
+  as user scaling, and reads the correction against a warm re-solve:
+  twenty times faster with the implemented moves within half a percent.
 
 - Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
   dynamic model from its declared initial condition to its declared

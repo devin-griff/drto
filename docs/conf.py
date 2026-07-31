@@ -18,13 +18,13 @@ _NOTEBOOKS = [
     "hicks_dynamic_simulation",
     "hicks_steady_state",
     "hicks_initialize",
-    "hicks_advanced_step",
     "quad_tank",
     "cart_pole",
     "binary_column",
     "double_column",
     "idaes_cstr",
     "cstr_cold_start",
+    "cstr_advanced_step",
 ]
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"
