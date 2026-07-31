@@ -465,6 +465,10 @@ def test_algebraic_variables_are_discovered_and_replicated():
     fe = b.tau.get_finite_elements()
     assert len(b.w_def) == 15
     assert not any(s in b.w_def for s in fe)
+    # and the copy itself holds no boundary members: every point that
+    # exists is one an equation determines (gh #32)
+    assert len(b.w) == 15
+    assert not any(s in b.w for s in fe)
     (ih_rec,) = [r for r in drto.info(m).transformations if r["name"] == IH]
     assert "1 component " in ih_rec["outcome"]["algebraic"] + " "
 
@@ -482,7 +486,9 @@ def test_algebraic_model_reaches_the_fixed_point():
     assert r.solver.termination_condition == pyo.TerminationCondition.optimal
     b = m.drto_ih
     assert pyo.value(b.z[1]) == pytest.approx(0.5, abs=1e-4)
-    assert pyo.value(b.w[1]) == pytest.approx(0.5, abs=1e-4)
+    # the algebra holds no endpoint copy (gh #32: interior points only);
+    # the last interior point carries the settled value
+    assert pyo.value(b.w[sorted(b.tau_i)[-1]]) == pytest.approx(0.5, abs=1e-4)
 
 
 def test_legendre_discretized_horizon_applies():

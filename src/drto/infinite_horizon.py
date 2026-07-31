@@ -686,7 +686,7 @@ class InfiniteHorizonTransformation(Transformation):
         b.beta = Param(initialize=config.beta, mutable=True)
 
         seg = {}
-        for comp in list(states) + list(controls) + list(algebraic) + list(disturbed):
+        for comp in list(states) + list(controls):
             _, others = _layout(comp)
             u = _units_of(comp)
             v = Var(*others, b.tau, units=u) if others else Var(b.tau, units=u)
@@ -699,12 +699,6 @@ class InfiniteHorizonTransformation(Transformation):
             derivs[z] = dv
 
         bseg = {}
-        for (B, lname), bsubs in block_alg.items():
-            src0 = getattr(B[t_end], lname)
-            u = _units_of(src0)
-            v = Var(*bsubs, b.tau, units=u) if bsubs else Var(b.tau, units=u)
-            b.add_component(f"{B.local_name}_{lname}", v)
-            bseg[(B, lname)] = v
 
         def _bcombos(bsubs):
             if not bsubs:
@@ -726,16 +720,6 @@ class InfiniteHorizonTransformation(Transformation):
         # residue members of partially declared containers copy per member,
         # over a set of the referenced combos, not the container wholesale
         pseg = {}
-        for pcomp, combos in flat_partial.items():
-            u = _units_of(pcomp)
-            pset = sorted(combos)
-            if pset == [()]:
-                v = Var(b.tau, units=u)
-            else:
-                cset = Set(initialize=pset, dimen=len(pset[0]))
-                v = Var(cset, b.tau, units=u)
-            b.add_component(f"{pcomp.local_name}_members", v)
-            pseg[pcomp] = v
 
         def _pseg_at(comp, o, s):
             v = pseg[comp]
@@ -824,78 +808,6 @@ class InfiniteHorizonTransformation(Transformation):
                 _emaps[key] = mmap
             return _emaps[key]
 
-        # --- dilated dynamics at interior collocation points (eq. 25) ---
-        dyn_copies = {}
-        for con in dynamics:
-            pos, subs = _time_index(con, time)
-            others = [s_ for n, s_ in enumerate(subs) if n != pos]
-
-            def dyn_rule(blk, *idx, _entries=dyn_reps[con]):
-                s = idx[-1]
-                o = tuple(idx[:-1])
-                if s in blk.tau.get_finite_elements() or o not in _entries:
-                    return Constraint.Skip
-                z, zo, rhs, t_rep = _entries[o]
-                dv = derivs[z]
-                deriv = dv[tuple(zo) + (s,)] if zo else dv[s]
-                return blk.gamma * (1 - s**2) * deriv == replace_expressions(
-                    rhs, _emap(t_rep, s)
-                )
-
-            dyn_copies[con] = Constraint(*others, b.tau, rule=dyn_rule)
-            b.add_component(con.local_name, dyn_copies[con])
-
-        # --- member-internal equations, replicated at the interior
-        # collocation points exactly like flat algebraic equations ------
-        for (B, cname), (csubs, entries) in bcons.items():
-
-            def bcon_rule(blk, *idx, _entries=entries):
-                sp = idx[-1]
-                o = tuple(idx[:-1])
-                if sp in blk.tau.get_finite_elements() or o not in _entries:
-                    return Constraint.Skip
-                expr, tr = _entries[o]
-                return replace_expressions(expr, _emap(tr, sp))
-
-            b.add_component(
-                f"{B.local_name}_{cname}", Constraint(*csubs, b.tau, rule=bcon_rule)
-            )
-
-        # --- algebraic equations, replicated as written at the interior
-        # collocation points, where the dilated dynamics reference their
-        # variables; no boundary or endpoint values ----------------------
-        for con in alg_cons:
-            pos, subs = _time_index(con, time)
-            others = [s_ for n, s_ in enumerate(subs) if n != pos]
-
-            def alg_rule(blk, *idx, _entries=alg_reps[con]):
-                s = idx[-1]
-                o = tuple(idx[:-1])
-                if s in blk.tau.get_finite_elements() or o not in _entries:
-                    return Constraint.Skip
-                expr, t_rep = _entries[o]
-                return replace_expressions(expr, _emap(t_rep, s))
-
-            b.add_component(con.local_name, Constraint(*others, b.tau, rule=alg_rule))
-
-        # --- residue rows of the declared dynamics, replicated as written
-        # at the interior collocation points like algebraic equations -----
-        residues = {}
-        for con, residue in dyn_residue.items():
-            pos, subs = _time_index(con, time)
-            others = [s_ for n, s_ in enumerate(subs) if n != pos]
-
-            def res_rule(blk, *idx, _entries=residue):
-                sp = idx[-1]
-                o = tuple(idx[:-1])
-                if sp in blk.tau.get_finite_elements() or o not in _entries:
-                    return Constraint.Skip
-                expr, tr = _entries[o]
-                return replace_expressions(expr, _emap(tr, sp))
-
-            residues[con] = Constraint(*others, b.tau, rule=res_rule)
-            b.add_component(con.local_name + "_residue", residues[con])
-
         # --- link the segment to the end of the horizon ------------------
         links = {}
         for z in states:
@@ -918,6 +830,109 @@ class InfiniteHorizonTransformation(Transformation):
             b, wrt=b.tau, nfe=config.nfe, ncp=config.ncp, scheme="LAGRANGE-LEGENDRE"
         )
 
+        # --- the algebraic copies live on the interior collocation
+        # points only: every point that exists is one a replicated
+        # equation determines (gh #32). Created here, after the
+        # discretization, when the interior points exist ---
+        _fe = set(b.tau.get_finite_elements())
+        b.tau_i = Set(initialize=[p for p in b.tau if p not in _fe], ordered=True)
+        for comp in list(algebraic) + list(disturbed):
+            _, others = _layout(comp)
+            v = (
+                Var(*others, b.tau_i, units=_units_of(comp))
+                if others
+                else Var(b.tau_i, units=_units_of(comp))
+            )
+            b.add_component(comp.local_name, v)
+            seg[comp] = v
+        for (B, lname), bsubs in block_alg.items():
+            u_b = _units_of(getattr(B[t_end], lname))
+            v = Var(*bsubs, b.tau_i, units=u_b) if bsubs else Var(b.tau_i, units=u_b)
+            b.add_component(f"{B.local_name}_{lname}", v)
+            bseg[(B, lname)] = v
+        for pcomp, combos in flat_partial.items():
+            u_p = _units_of(pcomp)
+            pset = sorted(combos)
+            if pset == [()]:
+                v = Var(b.tau_i, units=u_p)
+            else:
+                cset = Set(initialize=pset, dimen=len(pset[0]))
+                v = Var(cset, b.tau_i, units=u_p)
+            b.add_component(f"{pcomp.local_name}_members", v)
+            pseg[pcomp] = v
+
+        # --- dilated dynamics at interior collocation points (eq. 25) ---
+        dyn_copies = {}
+        for con in dynamics:
+            pos, subs = _time_index(con, time)
+            others = [s_ for n, s_ in enumerate(subs) if n != pos]
+
+            def dyn_rule(blk, *idx, _entries=dyn_reps[con]):
+                s = idx[-1]
+                o = tuple(idx[:-1])
+                if s in blk.tau.get_finite_elements() or o not in _entries:
+                    return Constraint.Skip
+                z, zo, rhs, t_rep = _entries[o]
+                dv = derivs[z]
+                deriv = dv[tuple(zo) + (s,)] if zo else dv[s]
+                return blk.gamma * (1 - s**2) * deriv == replace_expressions(
+                    rhs, _emap(t_rep, s)
+                )
+
+            dyn_copies[con] = Constraint(*others, b.tau_i, rule=dyn_rule)
+            b.add_component(con.local_name, dyn_copies[con])
+
+        # --- member-internal equations, replicated at the interior
+        # collocation points exactly like flat algebraic equations ------
+        for (B, cname), (csubs, entries) in bcons.items():
+
+            def bcon_rule(blk, *idx, _entries=entries):
+                sp = idx[-1]
+                o = tuple(idx[:-1])
+                if sp in blk.tau.get_finite_elements() or o not in _entries:
+                    return Constraint.Skip
+                expr, tr = _entries[o]
+                return replace_expressions(expr, _emap(tr, sp))
+
+            b.add_component(
+                f"{B.local_name}_{cname}", Constraint(*csubs, b.tau_i, rule=bcon_rule)
+            )
+
+        # --- algebraic equations, replicated as written at the interior
+        # collocation points, where the dilated dynamics reference their
+        # variables; no boundary or endpoint values ----------------------
+        for con in alg_cons:
+            pos, subs = _time_index(con, time)
+            others = [s_ for n, s_ in enumerate(subs) if n != pos]
+
+            def alg_rule(blk, *idx, _entries=alg_reps[con]):
+                s = idx[-1]
+                o = tuple(idx[:-1])
+                if s in blk.tau.get_finite_elements() or o not in _entries:
+                    return Constraint.Skip
+                expr, t_rep = _entries[o]
+                return replace_expressions(expr, _emap(t_rep, s))
+
+            b.add_component(con.local_name, Constraint(*others, b.tau_i, rule=alg_rule))
+
+        # --- residue rows of the declared dynamics, replicated as written
+        # at the interior collocation points like algebraic equations -----
+        residues = {}
+        for con, residue in dyn_residue.items():
+            pos, subs = _time_index(con, time)
+            others = [s_ for n, s_ in enumerate(subs) if n != pos]
+
+            def res_rule(blk, *idx, _entries=residue):
+                sp = idx[-1]
+                o = tuple(idx[:-1])
+                if sp in blk.tau.get_finite_elements() or o not in _entries:
+                    return Constraint.Skip
+                expr, tr = _entries[o]
+                return replace_expressions(expr, _emap(tr, sp))
+
+            residues[con] = Constraint(*others, b.tau_i, rule=res_rule)
+            b.add_component(con.local_name + "_residue", residues[con])
+
         # --- gamma: the mesh rule, or the explicit override ---
         tau11 = sorted(b.tau)[1]
         if config.gamma in (None, "rule"):
@@ -933,10 +948,13 @@ class InfiniteHorizonTransformation(Transformation):
         b.gamma.set_value(gamma_val)
 
         # --- per-member bounds and initial values from the horizon end ---
+        def _own_pts(container):
+            return sorted({ci[-1] if isinstance(ci, tuple) else ci for ci in container})
+
         for comp in seg:
             for o in _combos(comp):
                 src = _member(comp, o, t_end)
-                for s in sorted(b.tau):
+                for s in _own_pts(seg[comp]):
                     v = _seg_at(comp, o, s)
                     v.setlb(src.lb)
                     v.setub(src.ub)
@@ -949,7 +967,7 @@ class InfiniteHorizonTransformation(Transformation):
         for (B, lname), bsubs in block_alg.items():
             for o in _bcombos(bsubs):
                 src = _bmember(B, lname, o, t_end)
-                for sp in sorted(b.tau):
+                for sp in _own_pts(bseg[(B, lname)]):
                     v = _bseg_at((B, lname), o, sp)
                     v.setlb(src.lb)
                     v.setub(src.ub)
@@ -961,7 +979,7 @@ class InfiniteHorizonTransformation(Transformation):
             ppos, _psubs = _time_index(pcomp, time)
             for o in combos:
                 src = pcomp[_join_index(o, t_end, ppos)]
-                for sp in sorted(b.tau):
+                for sp in _own_pts(pseg[pcomp]):
                     v = _pseg_at(pcomp, o, sp)
                     v.setlb(src.lb)
                     v.setub(src.ub)
@@ -987,7 +1005,7 @@ class InfiniteHorizonTransformation(Transformation):
                     vo = float(val[ko])
                 else:
                     vo = val
-                for sp in sorted(b.tau):
+                for sp in _own_pts(seg[d]):
                     _seg_at(d, o, sp).fix(vo)
 
         # --- the tracking stage cost, replicated as named Expressions at the
@@ -1114,6 +1132,14 @@ class InfiniteHorizonTransformation(Transformation):
             reg._record_segment(
                 "dynamics", con, copy=dyn_copies[con], residue=residues.get(con)
             )
+        for comp in list(algebraic) + list(disturbed):
+            reg._record_segment("algebraic", comp, copy=seg[comp])
+        reg._record_segment("algebraic", cost_var, copy=seg_cost)
+        for (B, lname), v in bseg.items():
+            reg._record_segment("block_member", B, member=lname, copy=v)
+        for pcomp, v in pseg.items():
+            reg._record_segment("packed_member", pcomp, copy=v)
+        reg._record_segment("segment", b, gamma=b.gamma)
 
         reg.record_transformation(
             "drto.infinite_horizon",

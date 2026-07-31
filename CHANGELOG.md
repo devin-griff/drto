@@ -52,6 +52,19 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The terminal segment's algebraic copies (the flat algebra, the Block
+  members, the packed residue members) are indexed over the interior
+  collocation points only (gh #32): every point that exists is one a
+  replicated equation determines, so no dead boundary member exists to
+  hold a stale value for a reader to find. State copies keep the full
+  tau set for their continuity and discretization rows, as the tail
+  cost's quadrature always has. The transform also records these copies
+  and the segment itself (with gamma) in the registry pairing (gh #27),
+  which the warm start reads. On the IDAES CSTR, the warm-started
+  second solve drops from 21 iterations to 10, beating a fresh cold
+  start at the same state, once the shift stops reading stale boundary
+  values.
+
 - The IDAES saponification CSTR moved into the canonical models
   (`examples/models/idaes_cstr.py`), scaling included: the flowsheet
   builders, the declaration surface, the units-driven `tag_scaling`, and

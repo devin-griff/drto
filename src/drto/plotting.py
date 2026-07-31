@@ -62,7 +62,11 @@ def _tail(m):
         return None
     reg = drto.info(m)
     time = reg.components("horizon")[0]
-    copies = {id(r["of"]): r["copy"] for r in reg._segment_records()}
+    copies = {
+        id(r["of"]): r["copy"]
+        for r in reg._segment_records()
+        if r.get("copy") is not None
+    }
     return b, time.last(), pyo.value(b.gamma), copies
 
 
