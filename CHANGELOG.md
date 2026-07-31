@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Warm start (feature 013). `drto.warm_start_dynamic(m)` reuses the
+  previous solution moved one sampling time forward: every variable
+  takes the value the previous solution had one step later, copied
+  where the grids line up (on a uniform grid with the mesh rule, almost
+  everywhere, the tail's first point landing exactly one sample past
+  the horizon's end), interpolated in the uncovered sliver, the moves
+  shifting as the step functions they are, and the tail re-gridded
+  through `t = tN + atanh(tau)/gamma` with the chain rule on its
+  derivatives. Past the end of a tailless horizon, states and controls
+  take their declared targets and derivatives zero; with a tail the
+  previous solution covers the whole problem and the report's fill
+  count is zero. Values only; the loop sets the initial condition from
+  the measurement. The IDAES CSTR notebook
+  (`examples/cstr_warm_start.ipynb`) runs one loop iteration: the
+  warm-started solve beats a fresh exponential cold start at the same
+  state (10 iterations against 11, the original solve at 14).
+
 - The advanced-step correction (feature 012).
   `drto.advanced_step_controller(m)` corrects a pounce-solved horizon to
   the measured state without re-solving: `drto.dynamic_optimization`

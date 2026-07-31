@@ -145,6 +145,16 @@ model itself is untouched, so the prediction stays in place as the next
 solve's warm start. `gradient=True` returns the controls' sensitivities
 to the hooks instead.
 
+**Warm start** (`drto.warm_start_dynamic`) is the closed loop's
+initializer: every variable takes the value the previous solution had
+one sampling time later, copied where the grids line up (which on a
+uniform grid with the mesh rule is almost everywhere, the tail's first
+point landing exactly one sample past the horizon's end), interpolated
+in the small uncovered sliver, moves shifting as the step functions
+they are. Past the end of a tailless horizon, states and controls take
+their targets and derivatives zero. Values only, nothing solved, and
+the loop sets the initial condition from the measurement.
+
 ## Workflow: a forward simulation
 
 `drto.dynamic_simulation` turns the same declared model into an

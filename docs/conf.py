@@ -24,6 +24,7 @@ _NOTEBOOKS = [
     "double_column",
     "idaes_cstr",
     "cstr_cold_start",
+    "cstr_warm_start",
     "cstr_advanced_step",
 ]
 _here = Path(__file__).parent

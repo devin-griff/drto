@@ -59,6 +59,9 @@ The estimation-side surface:
 .. autofunction:: drto.cold_start_dynamic
 .. autoclass:: drto.ColdStartReport
    :members:
+.. autofunction:: drto.warm_start_dynamic
+.. autoclass:: drto.WarmStartReport
+   :members:
 ```
 
 ## The advanced step
