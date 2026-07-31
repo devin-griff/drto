@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
+  dynamic model from its declared initial condition to its declared
+  steady-state targets: each state on a straight line with its
+  DerivativeVar members at the line's slope, controls and a parameterized
+  control's moves at their targets, a terminal segment at rest on the
+  targets with the pin slacks at zero, and, with pyomo-pounce installed,
+  the algebraic variables solved pointwise from every equation except the
+  declared dynamics, one block solve with the states and controls held.
+  With an active `scaling_factor` suffix the per-point solves run on a
+  scaled clone and the values propagate back in the model's own units.
+  `profile="exponential"` runs the states on a normalized exponential
+  decay instead of the line, landing exactly on the targets at the
+  horizon's end, with `time_constant` in the horizon's own units
+  defaulting to a third of the horizon.
+  Values only, at any stage, no equilibrium solve; a declared state or
+  control without its pairing is a descriptive error, and without
+  pyomo-pounce the per-point solves are skipped and the report says so.
+  The IDAES CSTR notebook (`examples/cstr_cold_start.ipynb`) shows
+  the model before and after, the per-point solves working the outlet
+  stream, the reaction cascade, and the packed holdup's water member.
+
 ### Changed
 
 - `initialize_steady_state` honors an active `scaling_factor` suffix: the
