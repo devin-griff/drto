@@ -138,6 +138,28 @@ def test_scaling_suffix_scales_the_steady_pipeline():
     assert not m.u.fixed
 
 
+def test_the_pipeline_receives_the_scaled_clone(monkeypatch):
+    # the proof the suffix is honored: the pipeline solves a clone whose
+    # values are scaled, and the model comes back in its own units
+    seen = {}
+    real = pyomo_pounce.initialize
+
+    def spy(model, **kw):
+        seen["model"] = model
+        seen["u"] = model.find_component("u").value
+        return real(model, **kw)
+
+    monkeypatch.setattr(pyomo_pounce, "initialize", spy)
+    m = steady_authored_model()
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    m.scaling_factor[m.u] = 10.0
+    drto.initialize_steady_state(m)
+    assert seen["model"] is not m  # a clone solved, not the model
+    assert seen["u"] == pytest.approx(2.5)  # 0.25 in the scaled space
+    assert pyo.value(m.u) == pytest.approx(0.25)  # its own units kept
+    assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
+
+
 def test_scaling_suffix_scales_the_dynamic_pipeline():
     def built(suffix):
         m = discretized_model()
