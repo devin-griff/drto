@@ -660,8 +660,11 @@ def test_soft_pin_mu_retunes_without_reapply():
     for v in slacks:
         v.set_value(1.0)
     before = pyo.value(obj.expr)
-    b.mu.set_value(pyo.value(b.mu) + 100.0)  # +100 per unit of slack
-    assert pyo.value(obj.expr) - before == pytest.approx(100.0 * len(slacks))
+    # +100 per unit of slack and of slack squared: the penalty is
+    # mu*(eps + eps**2) per slack (gh #37), so at eps = 1 each slack
+    # contributes 2 per unit of mu
+    b.mu.set_value(pyo.value(b.mu) + 100.0)
+    assert pyo.value(obj.expr) - before == pytest.approx(200.0 * len(slacks))
 
 
 @needs_ipopt

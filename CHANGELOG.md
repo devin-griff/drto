@@ -73,6 +73,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The terminal segment's endpoint pin penalty gains a quadratic term
+  (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
+  the same `mu`. The linear part is the exact L1 pin as before, zero
+  slack staying optimal whenever the pin can hold; the quadratic part
+  makes the pin's multipliers unique and continuous, where the bare L1
+  kink left them an interval the solver picked arbitrary points of, so
+  consecutive solves of near-identical problems disagreed wildly on
+  them and warm starts that carry multipliers were a lottery. On the
+  IDAES CSTR the same warm-started hand-off went from anywhere between
+  6 and 333 iterations to 6, and the cold solve improved from 84 to 59
+  (degraded-environment measurements, to be re-verified).
+
 - The terminal segment's algebraic copies (the flat algebra, the Block
   members, the packed residue members) are indexed over the interior
   collocation points only (gh #32): every point that exists is one a

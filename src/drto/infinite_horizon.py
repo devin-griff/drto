@@ -20,8 +20,10 @@ The segment endpoint is pinned to the steady state by default (the paper's
 eq 36). The endpoint ``z(tau=1)`` is the Legendre extrapolation of the last
 element (Pyomo's continuity equation), the paper's evaluated endpoint z_e.
 ``terminal='soft'`` (the default) adds, per state, the relaxed endpoint
-equality ``z(tau=1) + eps_up - eps_lo == z_s`` with an L1 penalty
-``mu*(eps_up + eps_lo)`` in the objective; ``terminal='none'`` imposes no
+equality ``z(tau=1) + eps_up - eps_lo == z_s`` with the penalty
+``mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`` in the objective: the
+linear part is the exact L1 pin, and the quadratic part makes the pin's
+multipliers unique (gh #37); ``terminal='none'`` imposes no
 endpoint condition, leaving the singular tail cost as the only terminal
 enforcement (the endpoint settles as close to the setpoint as the horizon's
 freedoms allow). A pin requires a declared ``drto.steady_state`` target for
@@ -214,7 +216,8 @@ class InfiniteHorizonTransformation(Transformation):
             domain=In(("none", "soft")),
             description="Endpoint pin on the extrapolated segment endpoint "
             "z(tau=1). 'soft' (the default): eq 36, z(tau=1) + eps_up - eps_lo "
-            "== z_s with an L1 penalty mu*(eps_up + eps_lo) in the objective. "
+            "== z_s with the penalty mu*(eps_up + eps_lo + eps_up**2 + "
+            "eps_lo**2) in the objective. "
             "'none': no pin, the singular tail cost is the only terminal "
             "enforcement. A pin requires a drto.steady_state target for every "
             "state.",
@@ -225,8 +228,9 @@ class InfiniteHorizonTransformation(Transformation):
         ConfigValue(
             default=1000.0,
             domain=float,
-            description="L1 penalty weight for the soft endpoint pin "
-            "(terminal='soft'); ignored otherwise. A mutable Param on the "
+            description="Penalty weight for the soft endpoint pin "
+            "(terminal='soft'); ignored otherwise. Weights the linear and the "
+            "quadratic slack terms alike. A mutable Param on the "
             "segment, so it retunes with set_value and no re-apply. The paper "
             "requires mu above the endpoint multiplier norm for the penalty to "
             "be exact, driving the endpoint onto the setpoint.",
@@ -1096,8 +1100,18 @@ class InfiniteHorizonTransformation(Transformation):
                 b.add_component(z.local_name + "_pin_eq", pin_eq)
                 pins[z] = (pin_eq, up, lo)
                 for o in _combos(z):
-                    pin_terms.append((up[tuple(o)] if o else up, b.mu))
-                    pin_terms.append((lo[tuple(o)] if o else lo, b.mu))
+                    eu = up[tuple(o)] if o else up
+                    el = lo[tuple(o)] if o else lo
+                    # the linear part is the exact L1 pin; the quadratic
+                    # part gives the pin a strictly convex penalty at the
+                    # kink, so its multipliers are unique and consecutive
+                    # solves agree on them (gh #37). Zero slack stays
+                    # optimal whenever the pin can hold: the quadratic's
+                    # gradient vanishes there
+                    pin_terms.append((eu, b.mu))
+                    pin_terms.append((el, b.mu))
+                    pin_terms.append((eu**2, b.mu))
+                    pin_terms.append((el**2, b.mu))
             # a separate cost_group keeps liveness independent of the tail
             reg.record_declaration("cost_group", b, terms=tuple(pin_terms))
 
