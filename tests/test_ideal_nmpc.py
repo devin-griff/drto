@@ -179,6 +179,60 @@ def test_hicks_settles_to_the_declared_targets():
         assert errs[-1] < 0.3 * errs[0]
 
 
+@needs_pounce
+def test_member_subset_states_label_by_their_reference():
+    """A state declared as a slice of a packed Var (gh #20)."""
+
+    def packed_model(N=5):
+        m = pyo.ConcreteModel()
+        m.t = ContinuousSet(initialize=pyo.RangeSet(0, N, 1))
+        m.xA_ss = pyo.Param(initialize=0.5, mutable=True)
+        m.u_ss = pyo.Param(initialize=0.5, mutable=True)
+        m.xA_hat = pyo.Param(initialize=0.2, mutable=True)
+        m.x = pyo.Var(m.t, ["A", "B"], initialize=0.2)
+        m.dx = DerivativeVar(m.x, wrt=m.t)
+        m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+        m.cost = pyo.Var(m.t)
+
+        @m.Constraint(m.t)
+        def ode(mm, t):
+            return mm.dx[t, "A"] == mm.u[t] - mm.x[t, "A"]
+
+        @m.Constraint(m.t)
+        def alg(mm, t):
+            return mm.x[t, "B"] == 2 * mm.x[t, "A"]
+
+        @m.Constraint(sorted(m.t)[:-1])
+        def stage(mm, t):
+            return (
+                mm.cost[t]
+                == (mm.x[t, "A"] - mm.xA_ss) ** 2 + 0.1 * (mm.u[t] - mm.u_ss) ** 2
+            )
+
+        @m.Constraint()
+        def x_init(mm):
+            return mm.x[0, "A"] == mm.xA_hat
+
+        drto.horizon(m.t)
+        drto.state(m.x[:, "A"])
+        drto.dynamics(m.ode)
+        drto.control(m.u, profile="piecewise_constant")
+        drto.tracking_stage_cost(m.stage)
+        drto.initial_condition(m.x_init)
+        drto.steady_state(m.x[:, "A"], m.xA_ss)
+        drto.steady_state_control(m.u, m.u_ss)
+        pyo.TransformationFactory("dae.collocation").apply_to(
+            m, wrt=m.t, nfe=N, ncp=3, scheme="LAGRANGE-RADAU"
+        )
+        return m
+
+    h = drto.ideal_nmpc(packed_model(), steps=4, initial_condition={"x_A": 0.3})
+    assert list(h.states) == ["x_A"]
+    assert h.states["x_A"][0] == pytest.approx(0.3)
+    assert h.states["x_A"][-1] == pytest.approx(0.5, abs=1e-3)
+    assert h.state_targets["x_A"] == pytest.approx(0.5)
+
+
 # ── the solver plumbing ──────────────────────────────────────────────────────
 
 

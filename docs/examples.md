@@ -58,6 +58,10 @@ unmodified IDAES models.
   — solve at a prediction, correct at the measurement without
   re-solving: the implemented moves within half a percent of the warm
   re-solve, twenty times faster.
+- [Ideal NMPC on the IDAES CSTR](notebooks/cstr_ideal_nmpc.ipynb) —
+  the closed loop in one call: measure, solve, implement, simulate,
+  the cold start then warm-started re-solves on persistent scaled
+  clones, the hot start driven onto the setpoint in three samples.
 
 ```{toctree}
 :maxdepth: 1
@@ -78,4 +82,5 @@ notebooks/idaes_cstr
 notebooks/cstr_cold_start
 notebooks/cstr_warm_start
 notebooks/cstr_advanced_step
+notebooks/cstr_ideal_nmpc
 ```

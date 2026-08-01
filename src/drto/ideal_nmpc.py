@@ -225,12 +225,24 @@ def ideal_nmpc(
             f"first (apply a dae.* transformation)."
         )
 
+    # a declared state may be a Reference over a member subset of a
+    # packed Var (gh #20), so a pinned member matches its declared owner
+    # by data identity, the package convention
+    t0 = time.first()
+    owner = {}
+    for z in reg.components("state"):
+        pos, subs = _time_index(z, time)
+        for idx in z:
+            o, t = _split_index(idx, pos, len(subs))
+            if t == t0:
+                owner[id(z[idx])] = (z, o)
+
     # the initial condition lands in the hooks on the input, so the
     # process clone inherits it with everything else
     pins = _pinned(reg, fn)
     hooks_of = {}
     for vd, hook in pins:
-        hooks_of.setdefault(vd.parent_component().local_name, []).append(hook)
+        hooks_of.setdefault(owner[id(vd)][0].local_name, []).append(hook)
     for key, val in (initial_condition or {}).items():
         name = key if isinstance(key, str) else key.local_name
         hooks = hooks_of.get(name)
@@ -328,14 +340,13 @@ def ideal_nmpc(
     time_m = reg_m.components("horizon")[0]
     time_p = reg_p.components("horizon")[0]
 
-    # the pinned members' labels and targets, and the process members the
-    # simulation is read at, one sample in
+    # the pinned members' labels and targets come from the declared
+    # owner (the member-id map above); the read points, one sample in,
+    # from the process's own underlying containers
     ss = list(reg_m.declarations("steady_state"))
     labels, targets, read_phys = [], [], []
     for (c_vd, _h), (p_vd, _hp) in zip(c_pins, p_pins):
-        z = c_vd.parent_component()
-        pos, subs = _time_index(z, time_m)
-        o, _t = _split_index(c_vd.index(), pos, len(subs))
+        z, o = owner[id(c_vd)]
         labels.append(
             z.local_name if not o else f"{z.local_name}[{','.join(map(str, o))}]"
         )
@@ -343,8 +354,8 @@ def ideal_nmpc(
         targets.append(pyo.value(tgt[o] if o else tgt))
         zp = p_vd.parent_component()
         pos, subs = _time_index(zp, time_p)
-        o, _t = _split_index(p_vd.index(), pos, len(subs))
-        read_phys.append(zp[_join_index(o, t1, pos)])
+        po, _t = _split_index(p_vd.index(), pos, len(subs))
+        read_phys.append(zp[_join_index(po, t1, pos)])
 
     if scaled:
         c_hooks = [ctrl.find_component(h.name) for _vd, h in c_pins]

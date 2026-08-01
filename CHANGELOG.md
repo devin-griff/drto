@@ -25,7 +25,9 @@ All notable changes to this project are documented here. The format is based on
   history and draw the actual trajectories, moves as the staircase they
   physically are. On the infinite-horizon hicks model the closed loop
   approaches both declared targets monotonically; on the linear test
-  model it lands on the target in four samples.
+  model it lands on the target in four samples. The IDAES CSTR notebook
+  (`examples/cstr_ideal_nmpc.ipynb`) runs 10 samples of closed loop in
+  12 s, the hot start driven onto the setpoint in about three.
 
 - Warm start (feature 013). `drto.warm_start_dynamic(m)` reuses the
   previous solution moved one sampling time forward: every variable
