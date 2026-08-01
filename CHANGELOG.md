@@ -26,8 +26,9 @@ All notable changes to this project are documented here. The format is based on
   problem, its active set, and the restarted barrier level at once, so
   it costs more than it saves. The IDAES
   CSTR notebook (`examples/cstr_warm_start.ipynb`) runs one loop
-  iteration on a persistent scaled model: the cold solve takes 23
-  iterations, and the warm-started one, shifted values
+  iteration on a persistent scaled model: the cold solve takes 17
+  iterations (the endpoint pin's quadratic term conditioning it), and
+  the warm-started one, shifted values
   with the solver's warm-start options at the call site, takes 6.
 
 - The advanced-step correction (feature 012).
