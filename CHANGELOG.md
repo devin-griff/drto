@@ -20,14 +20,16 @@ All notable changes to this project are documented here. The format is based on
   take their declared targets and derivatives zero; with a tail the
   previous solution covers the whole problem and the report's fill
   count is zero. Values only; the loop sets the initial condition from
-  the measurement. The multipliers are part of the solution: with the
-  suffixes declared, equality duals and bound multipliers shift too,
-  every solve-1 bound multiplier seeding the `_in` suffixes densely
-  first, since an absent entry reads as zero to the solver. The IDAES
+  the measurement. The shift carries the primal solution only
+  (gh #36): the solver rebuilds multipliers from a good primal in one
+  linear solve, while a carried certificate must match the next
+  problem, its active set, and the restarted barrier level at once, so
+  it costs more than it saves. The IDAES
   CSTR notebook (`examples/cstr_warm_start.ipynb`) runs one loop
-  iteration on a persistent scaled model: the cold solve takes 23
-  iterations, and the warm-started one, shifted primals and multipliers
-  with the solver's warm-start options at the call site, takes 9.
+  iteration on a persistent scaled model: the cold solve takes 17
+  iterations (the endpoint pin's quadratic term conditioning it), and
+  the warm-started one, shifted values
+  with the solver's warm-start options at the call site, takes 6.
 
 - The advanced-step correction (feature 012).
   `drto.advanced_step_controller(m)` corrects a pounce-solved horizon to
