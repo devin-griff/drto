@@ -314,6 +314,43 @@ def test_cold_start_options_pass_through(monkeypatch):
     assert seen == []
 
 
+@needs_ipopt
+def test_the_plant_is_the_one_sample_simulation(monkeypatch):
+    seen = []
+
+    class Rec(_Recorder):
+        def solve(self, model, **kwds):
+            seen.append(model)
+            return super().solve(model, **kwds)
+
+    rec = Rec(pyo.SolverFactory("ipopt"))
+    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    m = hicks(N=5)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    drto.ideal_nmpc(m, steps=1, solver="ipopt")
+    plant = seen[1]
+    # the terminal segment serves the horizon problem, not the plant
+    assert plant.component("drto_ih") is None
+    # nothing active lies past one sampling time
+    from drto.infinite_horizon import _split_index, _time_index
+
+    reg = drto.info(plant)
+    time = reg.components("horizon")[0]
+    t1 = reg.declarations("horizon")[0]["samples"][1]
+    for ctype in (pyo.Constraint, pyo.Var):
+        for cd in plant.component_data_objects(ctype, active=True):
+            if ctype is pyo.Var and cd.fixed:
+                continue
+            pos, subs = _time_index(cd.parent_component(), time)
+            if pos is None:
+                continue
+            _o, t = _split_index(cd.index(), pos, len(subs))
+            assert t is None or t <= t1 + 1e-9, cd.name
+
+
 # ── scaling ──────────────────────────────────────────────────────────────────
 
 

@@ -11,7 +11,8 @@ All notable changes to this project are documented here. The format is based on
 - The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
   runs the closed loop the declarations describe from the declared,
   discretized model: a clone becomes the process through
-  `drto.dynamic_simulation`, the input becomes the controller through
+  `drto.dynamic_simulation`, cut to the one-sample simulation each
+  plant solve integrates, the input becomes the controller through
   `drto.dynamic_optimization`, and each step solves at the measured
   state, implements the first move, and simulates one sample under a
   per-step disturbance realization (sequences as given, or seeded
@@ -28,7 +29,7 @@ All notable changes to this project are documented here. The format is based on
   approaches both declared targets monotonically; on the linear test
   model it lands on the target in four samples. The IDAES CSTR notebook
   (`examples/cstr_ideal_nmpc.ipynb`) runs 10 samples of closed loop in
-  6 s, the hot start driven onto the setpoint in about three, and a
+  11 s, the hot start driven onto the setpoint in about three, and a
   second run under additive process noise, one drawn term per state
   equation from the model's `disturbance=True` build (IDAES's
   custom-term hooks writing dM/dt = f + w into the generated balances),

@@ -46,6 +46,10 @@ The loop builds both sides from it: a clone becomes the process,
 transformed by `drto.dynamic_simulation` with its controls first fixed at
 the declared control targets, and the input becomes the controller
 through `drto.dynamic_optimization`, its options passed through as given.
+The process is built as the one-sample simulation the loop actually
+solves: after its cold start, everything past the first sampling time
+leaves the clone, the terminal segment whole, so each step's plant solve
+is the one-sample integration regardless of the declared horizon.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
@@ -65,9 +69,9 @@ instant. The loop, each step:
 3. Implement: read each control's first move and write it into the
    process clone's fixed controls.
 4. Realize: fix the process clone's disturbances at this step's values.
-5. Simulate the process clone from the current actual state and read the
-   state one sample in; that is the new actual state, written into both
-   models' initial conditions.
+5. Simulate the one-sample process from the current actual state; its
+   end state is the new actual state, written into both models' initial
+   conditions.
 6. Record the time, the actual state, the implemented moves, and the
    realization.
 
@@ -124,7 +128,10 @@ single call on the declared model.
   process, puts the clone in simulation mode with the controls first
   fixed at the declared control targets, and transforms the input into
   the controller with `drto.dynamic_optimization`, its options passed
-  through as given.
+  through as given. The process is cut to the first sample after its
+  cold start: no active plant member or row lies past one sampling
+  time, and the terminal segment is gone, so each plant solve is the
+  one-sample integration.
 - `initial_condition` writes the given state values into the
   initial-condition Params before the first step; omitted, the Params'
   current values are the first actual state.

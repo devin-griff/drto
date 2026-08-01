@@ -136,6 +136,47 @@ def _prune_suffixes(model):
             del sfx[key]
 
 
+def _one_sample(process):
+    """Cut the process to its first sample: the plant the loop needs.
+
+    The clone arrives with the declared horizon, but the loop reads the
+    state one sample in, so the plant is built as the one-sample
+    simulation: the terminal segment leaves whole (it serves the horizon
+    problem, not the plant), and every time-indexed member past the
+    first sampling time leaves with it, time-indexed sub-Blocks (an
+    IDAES model's property and reaction blocks) included. Radau
+    collocation is sequential by element, so the first element stands
+    alone, square, given the initial condition and the fixed inputs.
+    The parameterized inputs keep their later members; they are fixed,
+    in no remaining equation, and never reach the solver.
+    """
+    from pyomo.core import Block, Constraint, Expression, Var
+
+    reg = info(process)
+    time = reg.components("horizon")[0]
+    samples = reg.declarations("horizon")[0]["samples"]
+    t1 = samples[1] + 1e-9
+
+    seg = process.component("drto_ih")
+    if seg is not None:
+        process.del_component(seg)
+        reg._segment.clear()
+
+    for ctype in (Block, Constraint, Expression, Var):
+        for comp in list(
+            process.component_objects(ctype, active=None, descend_into=True)
+        ):
+            if comp.is_reference() or not comp.is_indexed():
+                continue
+            pos, subs = _time_index(comp, time)
+            if pos is None:
+                continue
+            for idx in list(comp.keys()):
+                _o, t = _split_index(idx, pos, len(subs))
+                if t is not None and t > t1:
+                    del comp[idx]
+
+
 def ideal_nmpc(
     m,
     steps,
@@ -309,11 +350,15 @@ def ideal_nmpc(
     warm_opts.update(warm_start or {})
 
     # the controller and the process cold-start alike, so the plant's
-    # first simulation starts initialized too
+    # first simulation starts initialized too; the cold start runs on
+    # the full clone, then the plant is cut to the one-sample
+    # simulation the loop actually solves
     if cold_start is not False:
         opts = {} if cold_start is True else dict(cold_start)
         cold_start_dynamic(m, **opts)
         cold_start_dynamic(process, **opts)
+    _one_sample(process)
+    _prune_suffixes(process)
 
     # an active scaling_factor suffix: the loop runs both sides on scaled
     # clones, built once, and reads back in the model's own units
