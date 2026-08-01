@@ -299,7 +299,14 @@ def untemplatizable_model():
 
 
 def test_fallback_swaps_the_index_on_other_components_too():
-    r = repr(drto.info(untemplatizable_model()))
+    # the model is deliberately a temporary: the registry keeps it alive
+    # (gh #40); without the reference back, collection would detach every
+    # component the records do not hold and render [Unattached VarData]
+    import gc
+
+    reg = drto.info(untemplatizable_model())
+    gc.collect()
+    r = repr(reg)
     line = next(l for l in r.splitlines() if "dynamics" in l)
     assert "z[t]" in line and "dzdt[t]" in line
     assert "2.5" not in line  # the member's coordinate is gone
