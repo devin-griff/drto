@@ -50,14 +50,11 @@ is what makes each solve fast, and it costs only copies and interpolation.
 - With a tail there is no past the end: the previous solution covers the
   whole problem and no targets are needed.
 - A solution resting at the targets shifts to itself.
-- The multipliers are part of the previous solution: when the model
-  carries the suffixes (`dual`, `ipopt_zL/zU_out` with `ipopt_zL/zU_in`
-  declared), the shift moves them too, equality duals within each
-  constraint family through the recorded tail rows, bound multipliers
-  over the same trajectories as the primals. Every solve-1 bound
-  multiplier seeds the `_in` suffixes densely first, since an absent
-  entry reads as zero to the solver, then the shifted trajectories
-  overwrite theirs. Absent suffixes are skipped; the report names what
-  was shifted. Solver warm-start options belong to the solve call, not
-  to the shift.
+- The shift carries the primal solution only and leaves any declared
+  multiplier suffixes exactly as the previous solve left them: the
+  solver rebuilds multipliers from a good primal in one linear solve,
+  while a carried certificate must match the next problem, its active
+  set, and the restarted barrier level at once, and one sampling time
+  of staleness already costs more than it saves (gh #36). Solver
+  warm-start options belong to the solve call, not to the shift.
 - Returns a readable report of what was copied, interpolated, and filled.

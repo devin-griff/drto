@@ -41,14 +41,16 @@ All notable changes to this project are documented here. The format is based on
   take their declared targets and derivatives zero; with a tail the
   previous solution covers the whole problem and the report's fill
   count is zero. Values only; the loop sets the initial condition from
-  the measurement. The multipliers are part of the solution: with the
-  suffixes declared, equality duals and bound multipliers shift too,
-  every solve-1 bound multiplier seeding the `_in` suffixes densely
-  first, since an absent entry reads as zero to the solver. The IDAES
+  the measurement. The shift carries the primal solution only
+  (gh #36): the solver rebuilds multipliers from a good primal in one
+  linear solve, while a carried certificate must match the next
+  problem, its active set, and the restarted barrier level at once, so
+  it costs more than it saves. The IDAES
   CSTR notebook (`examples/cstr_warm_start.ipynb`) runs one loop
-  iteration on a persistent scaled model: the cold solve takes 23
-  iterations, and the warm-started one, shifted primals and multipliers
-  with the solver's warm-start options at the call site, takes 9.
+  iteration on a persistent scaled model: the cold solve takes 17
+  iterations (the endpoint pin's quadratic term conditioning it), and
+  the warm-started one, shifted values
+  with the solver's warm-start options at the call site, takes 6.
 
 - The advanced-step correction (feature 012).
   `drto.advanced_step_controller(m)` corrects a pounce-solved horizon to
@@ -93,6 +95,18 @@ All notable changes to this project are documented here. The format is based on
   stream, the reaction cascade, and the packed holdup's water member.
 
 ### Changed
+
+- The terminal segment's endpoint pin penalty gains a quadratic term
+  (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
+  the same `mu`. The linear part is the exact L1 pin as before, zero
+  slack staying optimal whenever the pin can hold; the quadratic part
+  makes the pin's multipliers unique and continuous, where the bare L1
+  kink left them an interval the solver picked arbitrary points of, so
+  consecutive solves of near-identical problems disagreed wildly on
+  them and warm starts that carry multipliers were a lottery. On the
+  IDAES CSTR the same warm-started hand-off went from anywhere between
+  6 and 333 iterations to 6, and the cold solve improved from 84 to 59
+  (degraded-environment measurements, to be re-verified).
 
 - The terminal segment's algebraic copies (the flat algebra, the Block
   members, the packed residue members) are indexed over the interior

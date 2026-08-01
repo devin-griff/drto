@@ -1,7 +1,11 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
 """Feature 013: drto.warm_start_dynamic."""
+import contextlib
+import io
 import math
+import sys
+from pathlib import Path
 
 import pyomo.environ as pyo
 import pytest
@@ -9,7 +13,13 @@ import pytest
 import drto
 from test_infinite_horizon import block_model, ready_model
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
+from models.hicks import hicks  # noqa: E402
+
 DT = 2.5  # the fixture's sample step
+
+ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
 def test_values_only_and_fixed_left_alone():
@@ -171,9 +181,12 @@ def test_a_reference_controls_underlying_members_shift(monkeypatch):
     assert r.n_filled == 0, r.filled_names
 
 
-def test_bound_multipliers_seed_densely_then_shift():
-    # an absent _in entry reads as a zero multiplier to the solver, so
-    # every solve-1 value carries; shifted trajectories overwrite theirs
+def test_declared_suffixes_are_left_untouched():
+    # the shift carries the primal solution only (gh #36): a carried
+    # certificate must match the next problem, its active set, and the
+    # restarted barrier level at once, and one sampling time of
+    # staleness costs more than it saves; declared suffixes keep
+    # exactly what the previous solve put there
     m = ready_model()
     pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
@@ -184,15 +197,16 @@ def test_bound_multipliers_seed_densely_then_shift():
     for t in grid:
         m.z[t].set_value(0.5)
         m.u[t].set_value(0.5)
-        m.ipopt_zL_out[m.u[t]] = 1.0 + 0.1 * t  # a trajectory to shift
-    m.ipopt_zL_out[b.z_pin_lo] = 42.0  # outside every shifted trajectory
+        m.ipopt_zL_out[m.u[t]] = 1.0 + 0.1 * t
+    m.ipopt_zL_out[b.z_pin_lo] = 42.0
+    con = next(iter(m.component_data_objects(pyo.Constraint, active=True)))
+    m.dual[con] = 7.0
+    before = {id(k): v for k, v in m.ipopt_zL_out.items()}
     r = drto.warm_start_dynamic(m)
-    assert "ipopt_zL" in r.multipliers
-    # the uncovered slack carried its multiplier instead of reading zero
-    assert m.ipopt_zL_in[b.z_pin_lo] == 42.0
-    # and a covered trajectory shifted: value one step later
-    t0 = grid[0]
-    assert m.ipopt_zL_in[m.u[t0]] == pytest.approx(1.0 + 0.1 * (t0 + DT))
+    assert not hasattr(r, "multipliers")
+    assert len(m.ipopt_zL_in) == 0  # nothing seeded
+    assert {id(k): v for k, v in m.ipopt_zL_out.items()} == before
+    assert m.dual[con] == 7.0
 
 
 def test_algebra_shifts_through_the_recorded_tail():
@@ -215,3 +229,40 @@ def test_algebra_shifts_through_the_recorded_tail():
         abs(pyo.value(m.props[t].y) - (2 * f(t + 1.0) + 0.3)) for t in sorted(m.t)
     )
     assert worst < 5e-3
+
+
+@needs_ipopt
+def test_shifted_primals_warm_start_in_single_digits():
+    # the loop hand-off (gh #36): solve, measure one sample in, shift,
+    # re-solve with the warm-start options; the shifted primals alone
+    # land the warm solve in single digits
+    m = hicks(5)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+    drto.cold_start_dynamic(m)
+    pyo.SolverFactory("ipopt").solve(m)
+    m.zc_hat.set_value(pyo.value(m.zc[1]))
+    m.zt_hat.set_value(pyo.value(m.zt[1]))
+    drto.warm_start_dynamic(m)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        res = pyo.SolverFactory("ipopt").solve(
+            m,
+            options={
+                "warm_start_init_point": "yes",
+                "mu_init": 1e-6,
+                "warm_start_bound_push": 1e-9,
+                "warm_start_mult_bound_push": 1e-9,
+            },
+            tee=True,
+        )
+    assert pyo.check_optimal_termination(res)
+    iters = next(
+        int(line.split(":")[-1])
+        for line in buf.getvalue().splitlines()
+        if "Number of Iterations" in line
+    )
+    assert iters <= 10

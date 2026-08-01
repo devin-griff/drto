@@ -82,8 +82,17 @@ move.
 - The terminal segment endpoint is pinned to the steady state by default.
   `terminal='soft'` (the
   default) adds the paper's eq. 36 relaxed endpoint constraint, per state
-  `z(tau=1) + eps_up - eps_lo == z_s` with an L1 penalty `mu*(eps_up +
-  eps_lo)` registered as a cost group; `terminal='none'` restores the prior
+  `z(tau=1) + eps_up - eps_lo == z_s` with the penalty `mu*(eps_up +
+  eps_lo + eps_up**2 + eps_lo**2)` registered as a cost group. The linear
+  part is the exact L1 pin: the quadratic's gradient vanishes at zero
+  slack, so zero slack stays optimal whenever the pin can hold and the
+  violation threshold is the L1 one. The quadratic part makes the pin
+  strictly convex at its kink, so the pin's multipliers are unique and
+  continuous instead of an interval the solver picks an arbitrary point
+  of; without it, consecutive solves of near-identical problems return
+  wildly different multipliers and anything carrying multipliers between
+  solves becomes unreliable, and even cold solves pay in conditioning
+  (gh #37). Both parts ride the same `mu`. `terminal='none'` restores the prior
   behavior, no pin, the singular tail cost its own terminal enforcement and
   the endpoint (the discretization's Legendre extrapolation, the paper's
   evaluated endpoint z_e) settling as close to the setpoint as the horizon's
@@ -176,3 +185,6 @@ move.
   segment solution reproduces a long-horizon baseline, the explicit-weight
   tail equals the quadrature-state tail to machine precision, and the
   endpoint settles at the setpoint equilibrium driven by the cost alone.
+  The pin penalty's form is pinned by the mu retune: at unit slacks the
+  objective moves by the linear and the quadratic part alike, two per
+  slack per unit of `mu`.
