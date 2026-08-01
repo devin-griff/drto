@@ -351,6 +351,23 @@ def test_the_plant_is_the_one_sample_simulation(monkeypatch):
             assert t is None or t <= t1 + 1e-9, cd.name
 
 
+@needs_ipopt
+def test_tee_streams_and_returns_every_solves_output(capsys):
+    h = drto.ideal_nmpc(loop_model(), steps=2, solver="ipopt", tee=True)
+    streamed = capsys.readouterr().out
+    assert "Number of Iterations" in streamed
+    assert [(s, w) for s, w, _t in h.logs] == [
+        (0, "controller"),
+        (0, "process"),
+        (1, "controller"),
+        (1, "process"),
+    ]
+    assert all("Number of Iterations" in text for _s, _w, text in h.logs)
+    quiet = drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt")
+    assert quiet.logs == []
+    assert "Number of Iterations" not in capsys.readouterr().out
+
+
 # ── scaling ──────────────────────────────────────────────────────────────────
 
 

@@ -30,6 +30,8 @@ The returned :class:`NmpcHistory` holds the actual trajectory under the
 declared names, and ``drto.plot_states`` / ``drto.plot_controls`` draw
 it directly.
 """
+import contextlib
+import io
 import random
 from dataclasses import dataclass, field
 
@@ -76,10 +78,12 @@ class NmpcHistory:
     at those instants; ``moves`` and ``realizations`` map each control
     and disturbance to its per-step values, one shorter than ``times``.
     The targets are the declared steady-state pairings' values, the
-    plots' setpoint lines.
+    plots' setpoint lines. Under ``tee=True``, ``logs`` holds every
+    solve's output in loop order as ``(step, side, text)``.
     """
 
     times: list = field(default_factory=list)
+    logs: list = field(default_factory=list)
     states: dict = field(default_factory=dict)
     moves: dict = field(default_factory=dict)
     realizations: dict = field(default_factory=dict)
@@ -187,6 +191,7 @@ def ideal_nmpc(
     cold_start=True,
     solver="pounce",
     warm_start=None,
+    tee=False,
 ):
     """Run the ideal NMPC loop for ``steps`` samples; see the module
     docstring.
@@ -226,6 +231,10 @@ def ideal_nmpc(
         ``warm_start_bound_push`` and ``warm_start_mult_bound_push``
         at ``1e-9``) under ``"pounce"`` or ``"ipopt"``; under another
         solver the mapping is used as given.
+    tee : bool
+        ``True`` streams every solve's output as the loop runs and
+        returns it on the history's ``logs``, one ``(step, side,
+        text)`` entry per solve in loop order. Quiet by default.
 
     Returns
     -------
@@ -434,7 +443,15 @@ def ideal_nmpc(
     rng = random.Random(seed)
 
     def _solve(model, what, step, options=None):
-        res = opt.solve(model, options=options or {})
+        if tee:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                res = opt.solve(model, options=options or {}, tee=True)
+            text = buf.getvalue()
+            print(text, end="")
+            history.logs.append((step, what, text))
+        else:
+            res = opt.solve(model, options=options or {})
         if not pyo.check_optimal_termination(res):
             raise RuntimeError(
                 f"drto: {fn}: the {what} solve failed at step {step} "

@@ -25,7 +25,8 @@ All notable changes to this project are documented here. The format is based on
   clones with the history read back in the model's own units.
   `drto.plot_states` and `drto.plot_controls` accept the returned
   history and draw the actual trajectories, moves as the staircase they
-  physically are. On the infinite-horizon hicks model the closed loop
+  physically are; `tee=True` streams every solve's output and returns
+  it on the history's `logs`. On the infinite-horizon hicks model the closed loop
   approaches both declared targets monotonically; on the linear test
   model it lands on the target in four samples. The IDAES CSTR notebook
   (`examples/cstr_ideal_nmpc.ipynb`) runs 10 samples of closed loop in

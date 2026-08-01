@@ -34,6 +34,9 @@ history = drto.ideal_nmpc(
     warm_start={"mu_init": 1e-6},      # options for the warm-started
                                        # solves, laid over the default
                                        # recipe
+    tee=False,                         # True streams every solve's
+                                       # output and returns it on the
+                                       # history
 )
 
 drto.plot_states(history)
@@ -92,6 +95,11 @@ one knob without restating the rest. Under another solver the loop warm
 starts on the shifted values alone, a given `warm_start` mapping passing
 to the solves as is. A solve that fails stops the loop with an error
 naming the step.
+
+`tee=True` streams every solve's output as the loop runs and returns
+it: the history's `logs` holds one entry per solve in loop order, the
+step, the side (controller or process), and the solver's text. The
+default is quiet, nothing streamed, nothing kept.
 
 An active `scaling_factor` suffix is honored the way the initializers
 honor it: the loop builds the controller's and the process's scaled
@@ -153,6 +161,9 @@ single call on the declared model.
   `warm_start` mapping laid over it; under another solver the loop warm
   starts on the shifted values alone, a given mapping passing through as
   is. A failed solve raises an error naming the step.
+- `tee=True` streams each solve's output and returns it: the history's
+  `logs` holds (step, side, text) for every controller and process
+  solve in loop order; the default keeps and prints nothing.
 - With an active `scaling_factor` suffix the loop builds each side's
   scaled clone once and runs every solve and warm start on it; the
   history lands in the model's own units, and a scaling-tagged hicks loop
