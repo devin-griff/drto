@@ -5,11 +5,10 @@
 ## Description
 
 As a user of DRTO, I want the advanced-step NMPC loop: the loop of
-`drto.ideal_nmpc`, with the implemented control coming from the
-advanced-step correction of the previous solution at the newly simulated
-state instead of from a fresh solve, so that the loop I study is the one
-where the solve happens between samples and the measurement is handled by
-the fast correction.
+`drto.ideal_nmpc`, with the horizon solve running between samples at the
+model's prediction of the next state and the measurement answered by the
+fast correction of that solution, so that the loop I study is the one
+where the expensive solve sits off the feedback path.
 
 ```python
 import drto
@@ -38,58 +37,71 @@ drto.plot_states(history)
 drto.plot_controls(history)
 ```
 
-The setup, the options, the disturbance handling, the history, and the
-plotting are those of `drto.ideal_nmpc` (feature 014), with the
-`advanced_step` options passing through to
-`drto.advanced_step_controller` as given. The controller solves must be
-pounce solves: the correction is the feature 012 backsolve, and there is
-no session without one.
+The loop is the asNMPC controller of Huang, Zavala, and Biegler,
+J. Process Control 19 (2009) 678-685. The setup, the options, the
+disturbance handling, the history, and the plotting are those of
+`drto.ideal_nmpc` (feature 014), with the `advanced_step` options
+passing through to `drto.advanced_step_controller` as given. The
+controller solves must be pounce solves: the correction is the feature
+012 backsolve, and there is no session without one.
 
-The loop differs from the ideal one in where the implemented control
-comes from. The first step implements the first move of the solution
-itself, there being no previous solution to correct. Every later step
-implements the correction of the previous solution at the state the
-simulation just produced:
+The loop builds one clone more than the ideal one: alongside the
+process, a predictor, built the same way but with its disturbances held
+at zero. The predictor is the controller's own model run forward, the
+plant as the model expects it to move.
 
-1. Simulate the process one sample under the implemented control and the
-   step's realization; the end state is the new actual state, written
-   into the initial-condition Params.
-2. Correct: `drto.advanced_step_controller` on the previous solution at
-   the hooks, before anything else touches the model; its first moves are
-   the next implemented control.
-3. Solve: warm start, then solve the dynamic optimization at the new
-   actual state. This solution is the one the next step's correction
-   works from.
-4. Record the time, the actual state, the implemented moves, and the
+The first step solves at the initial state and implements the solution's
+own first moves, there being no background solution to correct. Every
+step then:
+
+1. Predict: simulate the predictor one sample from the actual state
+   under the implemented moves; its end state is the predicted next
+   state, written into the initial-condition Params.
+2. Solve in background: warm start, then solve the dynamic optimization
+   at the predicted state.
+3. Simulate the process one sample from the actual state under the same
+   implemented moves and the step's realization; its end state is the
+   new actual state.
+4. Correct: write the new actual state into the initial-condition Params
+   and call `drto.advanced_step_controller` on the background solution;
+   its first moves are the next implemented control.
+5. Record the time, the actual state, the implemented moves, and the
    realization.
 
-The correction runs before the solve because the solve replaces the
-stored factorization: the estimate must be taken from the previous
-solution while it is still the one in the session.
+The correction's perturbation is the gap between the prediction and the
+measurement, one sample of disturbance and model error, not the state's
+motion over the sample; with no disturbance and a perfect model it is
+zero and the corrected moves are the background solution's own. The
+correction runs before the next background solve because the solve
+replaces the stored factorization: the estimate must be taken from the
+background solution while it is still the one in the session.
 
 ## Benefit hypothesis
 
 The advanced-step loop is the framework's reason to exist: the horizon
 solve moves off the measurement instant and the online step becomes a
-backsolve. Whether that trade holds on a given model, how far the
-correction drifts from the true re-solve, and what the closed loop loses
-for it are exactly the studies this function makes a one-liner, on the
-same history and plots as the ideal loop it is compared against.
+backsolve whose perturbation is one sample of disturbance and model
+error. Whether that trade holds on a given model, how far the correction
+drifts from the true re-solve, and what the closed loop loses for it are
+exactly the studies this function makes a one-liner, on the same history
+and plots as the ideal loop it is compared against.
 
 ## Acceptance criteria
 
 - `drto.asnmpc(m, steps, ...)` takes what `drto.ideal_nmpc` takes, plus
   `advanced_step` options passed through to
-  `drto.advanced_step_controller` as given, and builds the controller and
-  the process the same way.
+  `drto.advanced_step_controller` as given, and builds the controller
+  and the process the same way, plus the predictor: a second process
+  clone with its disturbances held at zero.
 - The first step implements the solution's own first moves. Every later
   step implements the first moves of the advanced-step correction of the
-  previous solution at the newly simulated state, taken before the next
-  solve runs.
-- Each step then warm starts and solves at the new actual state, and the
-  process simulates the next sample under the implemented control and the
-  step's realization.
+  background solution at the newly simulated actual state, the
+  background solution solved at the predictor's one-sample prediction
+  from the previous actual state under the implemented moves.
+- Each background solve warm starts at the predicted state, and the
+  correction runs before the next solve replaces the stored
+  factorization.
 - The history and the plotting are those of `drto.ideal_nmpc`.
-- On hicks with zero disturbances, the actual states settle to the
-  declared targets, and the implemented controls track the ideal loop's
-  to first order.
+- On hicks with zero disturbances, the prediction equals the simulated
+  state, the correction is by zero, the implemented controls match the
+  ideal loop's, and the actual states settle to the declared targets.
