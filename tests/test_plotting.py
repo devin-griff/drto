@@ -69,3 +69,40 @@ def test_stage_cost_panel():
     m = _valued(ready_model())
     (ax,) = drto.plot_stage_cost(m)
     assert ax.get_title() == "cost"
+
+
+# ── an NmpcHistory instead of a model (feature 014) ──────────────────────────
+
+
+def _history():
+    h = drto.NmpcHistory()
+    h.times = [0, 1, 2]
+    h.states = {"z": [0.2, 0.4, 0.5]}
+    h.state_targets = {"z": 0.5}
+    h.moves = {"u": [0.7, 0.6]}
+    h.control_targets = {"u": 0.5}
+    return h
+
+
+def test_history_states_draw_points_at_the_samples():
+    (ax,) = drto.plot_states(_history())
+    assert ax.get_title() == "z"
+    (line,) = ax.get_lines()[:1]
+    assert list(line.get_xdata()) == [0, 1, 2]
+    assert list(line.get_ydata()) == [0.2, 0.4, 0.5]
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert labels == ["actual", "setpoint"]
+
+
+def test_history_moves_draw_as_a_staircase():
+    (ax,) = drto.plot_controls(_history())
+    (line,) = ax.get_lines()[:1]
+    assert line.get_drawstyle() == "steps-post"
+    # the last move holds to the final recorded instant
+    assert list(line.get_xdata()) == [0, 1, 2]
+    assert list(line.get_ydata()) == [0.7, 0.6, 0.6]
+
+
+def test_history_selection_errors_on_unknown_labels():
+    with pytest.raises(ValueError, match="not a recorded state"):
+        drto.plot_states(_history(), states=["nope"])

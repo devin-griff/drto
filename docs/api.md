@@ -70,6 +70,14 @@ The estimation-side surface:
 .. autofunction:: drto.advanced_step_controller
 ```
 
+## The closed loop
+
+```{eval-rst}
+.. autofunction:: drto.ideal_nmpc
+.. autoclass:: drto.NmpcHistory
+   :members:
+```
+
 ## Plotting
 
 ```{eval-rst}

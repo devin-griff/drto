@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
+  runs the closed loop the declarations describe from the declared,
+  discretized model: a clone becomes the process through
+  `drto.dynamic_simulation`, the input becomes the controller through
+  `drto.dynamic_optimization`, and each step solves at the measured
+  state, implements the first move, and simulates one sample under a
+  per-step disturbance realization (sequences as given, or seeded
+  zero-mean draws). The first solve is cold-started and every later one
+  warm-started; under `pounce` or `ipopt` the loop declares the
+  multiplier suffixes so the shift carries them, and runs the
+  warm-started solves with the feature 013 settings. An active
+  `scaling_factor` suffix runs the whole loop on persistent scaled
+  clones with the history read back in the model's own units.
+  `drto.plot_states` and `drto.plot_controls` accept the returned
+  history and draw the actual trajectories, moves as the staircase they
+  physically are. On the infinite-horizon hicks model the closed loop
+  approaches both declared targets monotonically; on the linear test
+  model it lands on the target in four samples.
+
 - Warm start (feature 013). `drto.warm_start_dynamic(m)` reuses the
   previous solution moved one sampling time forward: every variable
   takes the value the previous solution had one step later, copied
