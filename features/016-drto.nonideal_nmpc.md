@@ -30,9 +30,11 @@ history = drto.nonideal_nmpc(
                                        # draws, a sequence the per-step
                                        # values; omitted is zero
     seed=0,                            # makes the draws reproducible
-    cold_start=True,                   # cold start the first solve
-    solve=None,                        # callable for every solve;
-                                       # None is a plain pounce solve
+    cold_start=True,                   # the first solve's cold start: a
+                                       # mapping passes through to
+                                       # drto.cold_start_dynamic, False
+                                       # skips it
+    solver="pounce",                   # the solver, by name
 )
 
 drto.plot_states(history)

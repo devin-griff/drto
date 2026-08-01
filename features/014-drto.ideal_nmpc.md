@@ -26,9 +26,11 @@ history = drto.ideal_nmpc(
                                        # draws, a sequence the per-step
                                        # values; omitted is zero
     seed=0,                            # makes the draws reproducible
-    cold_start=True,                   # cold start the first solve
-    solve=None,                        # callable for every solve;
-                                       # None is a plain pounce solve
+    cold_start=True,                   # the first solve's cold start: a
+                                       # mapping passes through to
+                                       # drto.cold_start_dynamic, False
+                                       # skips it
+    solver="pounce",                   # the solver, by name
 )
 
 drto.plot_states(history)
@@ -52,8 +54,8 @@ arrives, the problem is solved, and the move is implemented at the same
 instant. The loop, each step:
 
 1. Initialize: `drto.cold_start_dynamic` on the first step (on by
-   default, `cold_start=False` skips it), `drto.warm_start_dynamic` on
-   every later one.
+   default, a mapping passing through as its options, `cold_start=False`
+   skipping it), `drto.warm_start_dynamic` on every later one.
 2. Solve the dynamic optimization at the current initial condition.
 3. Implement: read each control's first move and write it into the
    process clone's fixed controls.
@@ -72,10 +74,22 @@ per step as given, or a number, the standard deviation of independent
 zero-mean draws each step, reproducible through `seed`. A disturbance
 with no entry is zero.
 
-`solve` is a callable applied to the controller and the process,
-defaulting to a plain pounce solve, so a model that needs its own solve
-wrapper (the scaled solve of the IDAES example) passes it in. A solve
-that fails stops the loop with an error naming the step.
+`solver` names the solver that runs every controller and process solve.
+Under `"pounce"` or `"ipopt"` the loop leverages the warm start fully:
+the multiplier suffixes (`dual`, `ipopt_zL_out`, `ipopt_zU_out`,
+`ipopt_zL_in`, `ipopt_zU_in`) are declared on the controller before the
+first solve, so `drto.warm_start_dynamic` shifts the multipliers along
+with the primals, and every warm-started solve runs with the feature 013
+settings: `warm_start_init_point=yes`, `mu_init=1e-6`, and the `1e-9`
+bound and multiplier pushes. Another solver runs the loop on the primal
+shift alone. A solve that fails stops the loop with an error naming the
+step.
+
+An active `scaling_factor` suffix is honored the way the initializers
+honor it: the loop builds the controller's and the process's scaled
+clones once, runs every solve and warm start on those clones for the
+whole loop, and reads the history back in the model's own units. The
+feedback hooks are Params and stay physical.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the
@@ -114,13 +128,22 @@ single call on the declared model.
   implements the first moves on the process clone, fixes its
   disturbances at the step's realization, simulates, and feeds the state
   one sample in back as both models' initial condition.
-- The first solve is cold-started by default and `cold_start=False` skips
+- The first solve is cold-started by default, a mapping passing through
+  to `drto.cold_start_dynamic` as given, and `cold_start=False` skipping
   it; every later solve is warm-started.
 - A disturbance entry that is a sequence is used as given; a number draws
   independent zero-mean realizations with that standard deviation,
   reproducibly under `seed`; a missing entry is zero.
-- `solve` is applied to every controller and process solve, defaulting to
-  pounce; a failed solve raises an error naming the step.
+- `solver` names the solver for every controller and process solve,
+  `"pounce"` the default. Under `"pounce"` or `"ipopt"` the loop declares
+  the multiplier suffixes on the controller before the first solve and
+  runs every warm-started solve with the feature 013 warm start settings;
+  under another solver the loop runs on the primal shift alone. A failed
+  solve raises an error naming the step.
+- With an active `scaling_factor` suffix the loop builds each side's
+  scaled clone once and runs every solve and warm start on it; the
+  history lands in the model's own units, and a scaling-tagged hicks loop
+  reproduces the unscaled loop's history.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and
   `drto.plot_controls` gain a second input kind: handed a history instead

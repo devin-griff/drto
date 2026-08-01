@@ -28,9 +28,12 @@ history = drto.asnmpc(
                                        # draws, a sequence the per-step
                                        # values; omitted is zero
     seed=0,                            # makes the draws reproducible
-    cold_start=True,                   # cold start the first solve
-    solve=None,                        # callable for the solves; None is
-                                       # a plain pounce solve
+    cold_start=True,                   # the first solve's cold start: a
+                                       # mapping passes through to
+                                       # drto.cold_start_dynamic, False
+                                       # skips it
+    solver="pounce",                   # the solver; the correction is a
+                                       # pounce backsolve, so pounce only
 )
 
 drto.plot_states(history)
@@ -41,9 +44,9 @@ The loop is the asNMPC controller of Huang, Zavala, and Biegler,
 J. Process Control 19 (2009) 678-685. The setup, the options, the
 disturbance handling, the history, and the plotting are those of
 `drto.ideal_nmpc` (feature 014), with the `advanced_step` options
-passing through to `drto.advanced_step_controller` as given. The
-controller solves must be pounce solves: the correction is the feature
-012 backsolve, and there is no session without one.
+passing through to `drto.advanced_step_controller` as given. `solver`
+stays at `"pounce"`: the correction is the feature 012 backsolve, and
+there is no session without a pounce solve.
 
 The loop builds one clone more than the ideal one: alongside the
 process, a predictor, built the same way but with its disturbances held
