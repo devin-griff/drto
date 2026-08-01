@@ -28,7 +28,11 @@ All notable changes to this project are documented here. The format is based on
   approaches both declared targets monotonically; on the linear test
   model it lands on the target in four samples. The IDAES CSTR notebook
   (`examples/cstr_ideal_nmpc.ipynb`) runs 10 samples of closed loop in
-  12 s, the hot start driven onto the setpoint in about three.
+  6 s, the hot start driven onto the setpoint in about three, and a
+  second run under additive process noise, one drawn term per state
+  equation from the model's `disturbance=True` build (IDAES's
+  custom-term hooks writing dM/dt = f + w into the generated balances),
+  holds every state in a band around its setpoint.
 
 - Warm start (feature 013). `drto.warm_start_dynamic(m)` reuses the
   previous solution moved one sampling time forward: every variable
