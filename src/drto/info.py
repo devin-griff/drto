@@ -124,6 +124,12 @@ def info(m):
     reg = store.get("info")
     if reg is None:
         reg = store["info"] = Info()
+    # the registry keeps its model alive (gh #40): the model holds the
+    # registry through private_data, and without the reference back a
+    # model built as a temporary can be collected while its registry is
+    # still in use, detaching every component the records do not hold.
+    # A clone's private_data deepcopy remaps this to the clone
+    reg._model = m
     return reg
 
 
@@ -140,6 +146,7 @@ class Info:
         self._declarations = {}
         self._transformations = []
         self._segment = []
+        self._model = None  # set by info(); keeps the model alive (gh #40)
 
     # ------------------------------------------------------------------
     # the terminal segment's pairing (gh #27): which segment component
