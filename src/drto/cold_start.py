@@ -321,7 +321,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
             con.activate()
     if scaled:
         # values only, copied by position: the clone is this model's
-        # deepcopy, so the var datas align one to one. Pyomo's
+        # deepcopy, so the var data objects align one to one. Pyomo's
         # propagate_solution is avoided deliberately: it iterates Var
         # containers including References, and indexing a Reference
         # rebuilds members on demand, which resurrects what a model cut
