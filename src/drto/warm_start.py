@@ -37,7 +37,6 @@ class WarmStartReport:
     n_interpolated: int = 0
     n_filled: int = 0
     tail: str = "(none attached)"
-    multipliers: str = "(no suffixes declared)"
     filled_names: list = None
 
     def __str__(self):
@@ -47,8 +46,7 @@ class WarmStartReport:
             f"  copied        : {self.n_copied} values on aligned points\n"
             f"  interpolated  : {self.n_interpolated} values between points\n"
             f"  filled        : {self.n_filled} values past the end\n"
-            f"  tail          : {self.tail}\n"
-            f"  multipliers   : {self.multipliers}"
+            f"  tail          : {self.tail}"
         )
 
 
@@ -439,176 +437,4 @@ def warm_start_dynamic(m):
                     dval = _interp(dpts, dys, tau2)
                     if dval is not None:
                         vd.set_value(_clamped(vd, dval * (1 - tau2**2) / (1 - tau**2)))
-    # --- multipliers: part of the previous solution, shifted the same
-    # way when the model carries the suffixes. Equality duals (m.dual)
-    # shift within each constraint family, the seam reading the recorded
-    # tail row copies; bound multipliers (ipopt_zL/zU_out) shift over the
-    # same trajectories as the primals into ipopt_zL/zU_in. Declare the
-    # suffixes before the first solve; absent suffixes are skipped
-    from pyomo.core import Constraint, Suffix
-
-    def _is_suffix(c):
-        return c is not None and c.ctype is Suffix
-
-    seg_block = None
-    if recs:
-        seg_block = next(r["of"] for r in recs if r["kind"] == "segment")
-
-    def _own(container, o):
-        return sorted(
-            (ci if not isinstance(ci, tuple) else ci[-1])
-            for ci in container
-            if (ci[:-1] if isinstance(ci, tuple) else ()) == o
-        )
-
-    def shift_var_suffix(get, put):
-        def one(comp):
-            pos, combos = _axis(comp, time)
-            for o in combos:
-                pts = _points(comp, pos, o) or grid
-                members = [
-                    (
-                        comp[_join_index(o, t, pos)]
-                        if pos is not None
-                        else (comp[tuple(o) + (t,)] if o else comp[t])
-                    )
-                    for t in pts
-                ]
-                old_v = [get(vd) for vd in members]
-                if all(v is None for v in old_v):
-                    return
-                for t, vd in zip(pts, members):
-                    if vd.fixed:
-                        continue
-                    tp = t + dt
-                    if tp <= pts[-1] + _EPS:
-                        val = _interp(pts, old_v, tp)
-                    elif (
-                        id(vd) in tail_of
-                        and getattr(tail_of[id(vd)][0], "ctype", None) is Var
-                    ):
-                        copy, oo = tail_of[id(vd)]
-                        cpts = _own(copy, oo)
-                        cys = [
-                            get(copy[tuple(oo) + (q,)] if oo else copy[q]) for q in cpts
-                        ]
-                        tau = math.tanh(gamma * (tp - tN))
-                        val = _interp([0.0] + cpts, [old_v[-1]] + cys, tau)
-                    else:
-                        val = old_v[-1]
-                    if val is not None:
-                        put(vd, val)
-
-        for comp in list(m.component_objects(Var, active=True)):
-            if id(comp) in ctrl_ids:
-                continue
-            pos, _su = _time_index(comp, time)
-            if pos is None:
-                continue
-            if recs and comp.parent_block() is seg_block:
-                continue
-            one(comp)
-        for u in controls:
-            one(u)
-        if recs:
-            for r in recs:
-                copy = r.get("copy")
-                if copy is None or getattr(copy, "ctype", None) is not Var:
-                    continue
-                for cidx, vd in list(copy.items()):
-                    if vd.fixed:
-                        continue
-                    tau = cidx[-1] if isinstance(cidx, tuple) else cidx
-                    o = cidx[:-1] if isinstance(cidx, tuple) else ()
-                    if tau >= 1 - _EPS:
-                        continue
-                    cpts = _own(copy, o)
-                    cys = [get(copy[tuple(o) + (q,)] if o else copy[q]) for q in cpts]
-                    if all(v is None for v in cys):
-                        continue
-                    t_abs = tN + math.atanh(tau) / gamma
-                    tau2 = math.tanh(gamma * (t_abs + dt - tN))
-                    val = _interp(cpts, cys, tau2)
-                    if val is not None:
-                        put(vd, val)
-
-    shifted = []
-    dual = m.component("dual")
-    if _is_suffix(dual):
-        row_tail = {}
-        tail_row_fams = set()
-        if recs:
-            for r in recs:
-                if r["kind"] in ("dynamics", "algebraic_row"):
-                    row_tail[id(r["of"])] = r["copy"]
-                if r["kind"] in ("dynamics", "algebraic_row", "block_row") and (
-                    r.get("copy") is not None
-                ):
-                    tail_row_fams.add(id(r["copy"]))
-                if r["kind"] == "dynamics" and r.get("residue") is not None:
-                    tail_row_fams.add(id(r["residue"]))
-        for con in list(m.component_objects(Constraint, active=True)):
-            axis_pos, _su = _time_index(con, time)
-            if axis_pos is None and id(con) not in tail_row_fams:
-                continue
-            axis_pos, combos = _axis(con, time)
-            tailfam = row_tail.get(id(con))
-            in_tail = id(con) in tail_row_fams
-            for o in combos:
-                pts = _points(con, axis_pos, o) or grid
-                rows = []
-                for t in pts:
-                    try:
-                        rows.append(
-                            con[_join_index(o, t, axis_pos)]
-                            if axis_pos is not None
-                            else (con[tuple(o) + (t,)] if o else con[t])
-                        )
-                    except KeyError:
-                        rows.append(None)
-                old_v = [None if cd is None else dual.get(cd) for cd in rows]
-                if all(v is None for v in old_v):
-                    continue
-                for t, cd in zip(pts, rows):
-                    if cd is None:
-                        continue
-                    if in_tail:
-                        t_abs = tN + math.atanh(min(t, 1 - 1e-12)) / gamma
-                        tau2 = math.tanh(gamma * (t_abs + dt - tN))
-                        val = _interp(pts, old_v, tau2)
-                    else:
-                        tp = t + dt
-                        if tp <= pts[-1] + _EPS:
-                            val = _interp(pts, old_v, tp)
-                        elif tailfam is not None:
-                            fpts = _own(tailfam, o)
-                            fys = [
-                                dual.get(tailfam[tuple(o) + (q,)] if o else tailfam[q])
-                                for q in fpts
-                            ]
-                            tau = math.tanh(gamma * (tp - tN))
-                            val = _interp(fpts, fys, tau)
-                        else:
-                            val = old_v[-1]
-                    if val is not None:
-                        dual[cd] = val
-        shifted.append("dual")
-
-    for zname in ("ipopt_zL", "ipopt_zU"):
-        z_out = m.component(zname + "_out")
-        z_in = m.component(zname + "_in")
-        if _is_suffix(z_out) and _is_suffix(z_in):
-            # dense seed first: an absent entry reads as a zero multiplier
-            # to the solver, which poisons a warm start far worse than a
-            # stale one; every solve-1 value carries, the shifted
-            # trajectories then overwrite theirs
-            for vd, val in z_out.items():
-                z_in[vd] = val
-            shift_var_suffix(
-                lambda vd, _s=z_out: _s.get(vd),
-                lambda vd, val, _s=z_in: _s.__setitem__(vd, val),
-            )
-            shifted.append(zname)
-    if shifted:
-        report.multipliers = "shifted: " + ", ".join(shifted)
     return report

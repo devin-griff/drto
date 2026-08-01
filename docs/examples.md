@@ -50,10 +50,10 @@ unmodified IDAES models.
   `drto.cold_start_dynamic` working the full algebraic cascade, linear
   and exponential profiles through the same solve, with the solver logs.
 - [Warm start on the IDAES CSTR](notebooks/cstr_warm_start.ipynb) —
-  one loop iteration on a persistent scaled model: the solution and its
-  multipliers shift one sampling time forward, tail included with zero
-  fills, and the warm-started solve lands in single digits against the
-  cold twenty-three.
+  one loop iteration on a persistent scaled model: the solution shifts
+  one sampling time forward, tail included with zero fills, and the
+  warm-started solve lands in single digits against the cold
+  twenty-three.
 - [Advanced step on the IDAES CSTR](notebooks/cstr_advanced_step.ipynb)
   — solve at a prediction, correct at the measurement without
   re-solving: the implemented moves within half a percent of the warm
