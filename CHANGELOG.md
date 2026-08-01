@@ -20,10 +20,14 @@ All notable changes to this project are documented here. The format is based on
   take their declared targets and derivatives zero; with a tail the
   previous solution covers the whole problem and the report's fill
   count is zero. Values only; the loop sets the initial condition from
-  the measurement. The IDAES CSTR notebook
-  (`examples/cstr_warm_start.ipynb`) runs one loop iteration: the
-  warm-started solve beats a fresh exponential cold start at the same
-  state (10 iterations against 11, the original solve at 14).
+  the measurement. The multipliers are part of the solution: with the
+  suffixes declared, equality duals and bound multipliers shift too,
+  every solve-1 bound multiplier seeding the `_in` suffixes densely
+  first, since an absent entry reads as zero to the solver. The IDAES
+  CSTR notebook (`examples/cstr_warm_start.ipynb`) runs one loop
+  iteration on a persistent scaled model: the cold solve takes 23
+  iterations, and the warm-started one, shifted primals and multipliers
+  with the solver's warm-start options at the call site, takes 9.
 
 - The advanced-step correction (feature 012).
   `drto.advanced_step_controller(m)` corrects a pounce-solved horizon to

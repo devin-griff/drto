@@ -171,6 +171,30 @@ def test_a_reference_controls_underlying_members_shift(monkeypatch):
     assert r.n_filled == 0, r.filled_names
 
 
+def test_bound_multipliers_seed_densely_then_shift():
+    # an absent _in entry reads as a zero multiplier to the solver, so
+    # every solve-1 value carries; shifted trajectories overwrite theirs
+    m = ready_model()
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    m.ipopt_zL_out = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    m.ipopt_zL_in = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    b = m.drto_ih
+    grid = sorted(m.t)
+    for t in grid:
+        m.z[t].set_value(0.5)
+        m.u[t].set_value(0.5)
+        m.ipopt_zL_out[m.u[t]] = 1.0 + 0.1 * t  # a trajectory to shift
+    m.ipopt_zL_out[b.z_pin_lo] = 42.0  # outside every shifted trajectory
+    r = drto.warm_start_dynamic(m)
+    assert "ipopt_zL" in r.multipliers
+    # the uncovered slack carried its multiplier instead of reading zero
+    assert m.ipopt_zL_in[b.z_pin_lo] == 42.0
+    # and a covered trajectory shifted: value one step later
+    t0 = grid[0]
+    assert m.ipopt_zL_in[m.u[t0]] == pytest.approx(1.0 + 0.1 * (t0 + DT))
+
+
 def test_algebra_shifts_through_the_recorded_tail():
     m = block_model()
     pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
