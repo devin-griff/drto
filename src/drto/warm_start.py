@@ -297,7 +297,11 @@ def warm_start_dynamic(m):
         for r in reg.declarations(kind):
             con = r["component"]
             cd = next(iter(con.values())) if con.is_indexed() else con
-            side, _ = _side_matching(cd, _is_var_member, fn, "the cost variable")
+            try:
+                side, _ = _side_matching(cd, _is_var_member, fn, "the cost variable")
+            except ValueError:
+                continue  # a rewritten row (a scaled clone): the cost is
+                # plain algebra there and keeps its values
             if id(side.parent_component()) not in {id(c) for c in cost_vars}:
                 cost_vars.append(side.parent_component())
 
@@ -594,6 +598,12 @@ def warm_start_dynamic(m):
         z_out = m.component(zname + "_out")
         z_in = m.component(zname + "_in")
         if _is_suffix(z_out) and _is_suffix(z_in):
+            # dense seed first: an absent entry reads as a zero multiplier
+            # to the solver, which poisons a warm start far worse than a
+            # stale one; every solve-1 value carries, the shifted
+            # trajectories then overwrite theirs
+            for vd, val in z_out.items():
+                z_in[vd] = val
             shift_var_suffix(
                 lambda vd, _s=z_out: _s.get(vd),
                 lambda vd, val, _s=z_in: _s.__setitem__(vd, val),
