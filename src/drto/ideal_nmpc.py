@@ -168,7 +168,7 @@ def ideal_nmpc(
     disturbances : mapping, optional
         Declared disturbance (the component, or its name) to its
         realization: a sequence gives the per-step values as given, a
-        number the standard deviation of independent zero-mean draws.
+        number the standard deviation of independent zero-mean normal draws.
         A disturbance with no entry is zero.
     seed : int, optional
         Seeds the disturbance draws, making them reproducible.

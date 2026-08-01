@@ -76,7 +76,7 @@ disturbance, the optimization mode's convention.
 
 Each declared disturbance's entry is either a sequence, the realization
 per step as given, or a number, the standard deviation of independent
-zero-mean draws each step, reproducible through `seed`. A disturbance
+zero-mean normal draws each step, reproducible through `seed`. A disturbance
 with no entry is zero.
 
 `solver` names the solver that runs every controller and process solve.
@@ -137,7 +137,7 @@ single call on the declared model.
   it, the controller and the process cold-started alike; every later
   solve is warm-started.
 - A disturbance entry that is a sequence is used as given; a number draws
-  independent zero-mean realizations with that standard deviation,
+  independent zero-mean normal realizations with that standard deviation,
   reproducibly under `seed`; a missing entry is zero.
 - `solver` names the solver for every controller and process solve,
   `"pounce"` the default. Under `"pounce"` or `"ipopt"` every
