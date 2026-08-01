@@ -882,6 +882,7 @@ class InfiniteHorizonTransformation(Transformation):
             dyn_copies[con] = Constraint(*others, b.tau_i, rule=dyn_rule)
             b.add_component(con.local_name, dyn_copies[con])
 
+        block_rows = {}
         # --- member-internal equations, replicated at the interior
         # collocation points exactly like flat algebraic equations ------
         for (B, cname), (csubs, entries) in bcons.items():
@@ -894,10 +895,10 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, tr = _entries[o]
                 return replace_expressions(expr, _emap(tr, sp))
 
-            b.add_component(
-                f"{B.local_name}_{cname}", Constraint(*csubs, b.tau_i, rule=bcon_rule)
-            )
+            block_rows[(B, cname)] = Constraint(*csubs, b.tau_i, rule=bcon_rule)
+            b.add_component(f"{B.local_name}_{cname}", block_rows[(B, cname)])
 
+        alg_rows = {}
         # --- algebraic equations, replicated as written at the interior
         # collocation points, where the dilated dynamics reference their
         # variables; no boundary or endpoint values ----------------------
@@ -913,7 +914,8 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, t_rep = _entries[o]
                 return replace_expressions(expr, _emap(t_rep, s))
 
-            b.add_component(con.local_name, Constraint(*others, b.tau_i, rule=alg_rule))
+            alg_rows[con] = Constraint(*others, b.tau_i, rule=alg_rule)
+            b.add_component(con.local_name, alg_rows[con])
 
         # --- residue rows of the declared dynamics, replicated as written
         # at the interior collocation points like algebraic equations -----
@@ -1139,6 +1141,10 @@ class InfiniteHorizonTransformation(Transformation):
             reg._record_segment("block_member", B, member=lname, copy=v)
         for pcomp, v in pseg.items():
             reg._record_segment("packed_member", pcomp, copy=v)
+        for con, row in alg_rows.items():
+            reg._record_segment("algebraic_row", con, copy=row)
+        for (B, cname), row in block_rows.items():
+            reg._record_segment("block_row", B, member=cname, copy=row)
         reg._record_segment("segment", b, gamma=b.gamma)
 
         reg.record_transformation(

@@ -239,5 +239,11 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
             "pyomo_pounce.initialize directly."
         )
     if scaled:
+        # values only: the throwaway clone's dual and rc suffixes would
+        # make propagate_solution demand an objective to rescale them
+        for _nm in ("dual", "rc"):
+            _c = target.component(_nm)
+            if _c is not None and _c.ctype is Suffix:
+                target.del_component(_c)
         xfrm.propagate_solution(target, model)
     return report
