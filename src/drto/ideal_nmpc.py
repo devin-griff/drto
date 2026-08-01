@@ -14,8 +14,9 @@ The input is the declared, discretized model, with
 The loop builds both sides from it: a clone becomes the process through
 ``drto.dynamic_simulation`` with the controls first fixed at the
 declared control targets, and the input becomes the controller through
-``drto.dynamic_optimization``. The first solve is cold-started, the
-controller and the process alike; every later one warm-starts from the
+``drto.dynamic_optimization``. The first solve is initialized per the
+``initialize`` option, the cold start by default on the controller and
+the process alike; every later one warm-starts from the
 shifted previous solution, and under the ``pounce`` or ``ipopt``
 solvers it runs with the warm start recipe, the ``warm_start`` mapping
 laid over the documented default.
@@ -33,6 +34,7 @@ it directly.
 import contextlib
 import io
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import pyomo.environ as pyo
@@ -44,7 +46,7 @@ from drto.declarations import _is_var_member, _side_matching
 from drto.dynamic_optimization import _members, _spread
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
-from drto.initialize_steady_state import _attached
+from drto.initialize_steady_state import _attached, initialize_steady_state
 from drto.warm_start import warm_start_dynamic
 
 #: The default recipe for the warm-started solves, under the solvers
@@ -188,7 +190,7 @@ def ideal_nmpc(
     dynamic_optimization=None,
     disturbances=None,
     seed=None,
-    cold_start=True,
+    initialize="cold",
     solver="pounce",
     warm_start=None,
     tee=False,
@@ -218,10 +220,14 @@ def ideal_nmpc(
         A disturbance with no entry is zero.
     seed : int, optional
         Seeds the disturbance draws, making them reproducible.
-    cold_start : bool or mapping
-        The first solve's cold start, the controller and the process
-        alike: ``True`` (the default) runs ``drto.cold_start_dynamic``,
-        a mapping passes through as its options, ``False`` skips it.
+    initialize : str, mapping, or False
+        The first solve's initialization. ``"cold"`` (the default) runs
+        ``drto.cold_start_dynamic`` on the controller and the process
+        alike, a mapping passing through as its options; ``"steady"``
+        runs ``drto.initialize_steady_state`` on the input before the
+        sides are built, so both inherit the broadcast (that function's
+        own contract applies: the input precedes
+        ``drto.infinite_horizon``); ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
         ``"pounce"`` and ``"ipopt"`` warm start between steps.
@@ -253,6 +259,15 @@ def ideal_nmpc(
         names the step).
     """
     fn = "ideal_nmpc"
+    if not (
+        initialize is False
+        or initialize in ("cold", "steady")
+        or isinstance(initialize, Mapping)
+    ):
+        raise ValueError(
+            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
+            f"start's options), 'steady', or False; got {initialize!r}."
+        )
     if steps < 1:
         raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
     reg = info(m)
@@ -335,6 +350,11 @@ def ideal_nmpc(
     if not opt.available(exception_flag=False):
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
+    # the steady initialization runs on the input before the sides are
+    # built, so the process clone and the controller both inherit it
+    if initialize == "steady":
+        initialize_steady_state(m)
+
     # the process: a clone in simulation mode, its controls first fixed
     # at the declared control targets
     uss = list(reg.declarations("steady_state_control"))
@@ -365,8 +385,8 @@ def ideal_nmpc(
     # the controller and the process cold-start alike, so the plant's
     # first simulation starts initialized too; the plant is already cut,
     # so its cold start is one element's worth
-    if cold_start is not False:
-        opts = {} if cold_start is True else dict(cold_start)
+    if initialize == "cold" or isinstance(initialize, Mapping):
+        opts = {} if initialize == "cold" else dict(initialize)
         cold_start_dynamic(m, **opts)
         cold_start_dynamic(process, **opts)
 

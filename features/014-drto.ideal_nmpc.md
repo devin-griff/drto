@@ -26,10 +26,13 @@ history = drto.ideal_nmpc(
                                        # draws, a sequence the per-step
                                        # values; omitted is zero
     seed=0,                            # makes the draws reproducible
-    cold_start=True,                   # the first solve's cold start: a
-                                       # mapping passes through to
-                                       # drto.cold_start_dynamic, False
-                                       # skips it
+    initialize="cold",                 # the first solve's
+                                       # initialization: "cold" runs
+                                       # drto.cold_start_dynamic (a
+                                       # mapping passes its options),
+                                       # "steady" runs
+                                       # drto.initialize_steady_state,
+                                       # False skips it
     solver="pounce",                   # the solver, by name
     warm_start={"mu_init": 1e-6},      # options for the warm-started
                                        # solves, laid over the default
@@ -64,11 +67,13 @@ Ideal means the solve is treated as instantaneous: the measurement
 arrives, the problem is solved, and the move is implemented at the same
 instant. The loop, each step:
 
-1. Initialize: `drto.cold_start_dynamic` on the first step (on by
-   default, a mapping passing through as its options, `cold_start=False`
-   skipping it), the controller and the process cold-started alike so
-   the plant's first simulation starts initialized too;
-   `drto.warm_start_dynamic` on every later one.
+1. Initialize, per the `initialize` option: the cold start by default,
+   the controller and the process alike so the plant's first simulation
+   starts initialized too (a mapping passing through as
+   `drto.cold_start_dynamic`'s options); the steady broadcast with
+   `"steady"`, `drto.initialize_steady_state` running on the input
+   before the sides are built so both inherit it; nothing with
+   `False`. `drto.warm_start_dynamic` on every later step.
 2. Solve the dynamic optimization at the current initial condition.
 3. Implement: read each control's first move and write it into the
    process clone's fixed controls.
@@ -149,10 +154,14 @@ single call on the declared model.
   implements the first moves on the process clone, fixes its
   disturbances at the step's realization, simulates, and feeds the state
   one sample in back as both models' initial condition.
-- The first solve is cold-started by default, a mapping passing through
-  to `drto.cold_start_dynamic` as given, and `cold_start=False` skipping
-  it, the controller and the process cold-started alike; every later
-  solve is warm-started.
+- `initialize` picks the first solve's initialization: `"cold"` (the
+  default) runs `drto.cold_start_dynamic` on the controller and the
+  process alike, a mapping passing through as its options; `"steady"`
+  runs `drto.initialize_steady_state` on the input before the sides are
+  built, so both inherit the broadcast, under that function's own
+  contract (the input precedes `drto.infinite_horizon`, whose violation
+  raises its descriptive error); `False` skips initialization; anything
+  else is a descriptive error. Every later solve is warm-started.
 - A disturbance entry that is a sequence is used as given; a number draws
   independent zero-mean normal realizations with that standard deviation,
   reproducibly under `seed`; a missing entry is zero.

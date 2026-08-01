@@ -299,19 +299,66 @@ def test_a_failed_solve_names_the_step(monkeypatch):
 
 
 @needs_ipopt
-def test_cold_start_options_pass_through(monkeypatch):
+def test_initialize_mapping_passes_to_the_cold_start(monkeypatch):
     seen = []
     monkeypatch.setattr(
         loop_module, "cold_start_dynamic", lambda m, **kw: seen.append(kw)
     )
     drto.ideal_nmpc(
-        loop_model(), steps=1, solver="ipopt", cold_start={"profile": "exponential"}
+        loop_model(), steps=1, solver="ipopt", initialize={"profile": "exponential"}
     )
     # the controller and the process cold-start alike
     assert seen == [{"profile": "exponential"}, {"profile": "exponential"}]
     seen.clear()
-    drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt", cold_start=False)
+    drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt", initialize=False)
     assert seen == []
+
+
+def test_initialize_rejects_unknown_values():
+    with pytest.raises(ValueError, match="'cold'"):
+        drto.ideal_nmpc(loop_model(), steps=1, initialize="warm")
+
+
+@needs_ipopt
+def test_initialize_steady_runs_on_the_input_before_the_sides(monkeypatch):
+    calls = []
+
+    def spy(mm):
+        # the input is untransformed at this point: the broadcast must
+        # precede the mode transforms so both sides inherit it
+        assert not drto.info(mm).transformations
+        calls.append(mm)
+
+    monkeypatch.setattr(loop_module, "initialize_steady_state", spy)
+    m = loop_model()
+    drto.ideal_nmpc(m, steps=1, solver="ipopt", initialize="steady")
+    assert calls == [m]
+
+
+@needs_pounce
+def test_initialize_steady_initializes_the_loop():
+    # hicks: no declared disturbance, so its steady reduction is square
+    # (initialize_steady_state leaves a declared disturbance free, its
+    # own descriptive error; the loop adds nothing to that contract)
+    m = hicks(N=5)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    h = drto.ideal_nmpc(m, steps=2, initialize="steady")
+    assert h.states["zc"][0] == pytest.approx(0.625)  # the hooks still rule
+    # from the flat steady start the first step still moves to target
+    assert abs(h.states["zc"][1] - 0.6416) < abs(0.625 - 0.6416)
+
+
+@needs_pounce
+def test_initialize_steady_with_a_tail_is_that_functions_error():
+    m = hicks(N=5)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    with pytest.raises(ValueError, match="before the dynamic transforms"):
+        drto.ideal_nmpc(m, steps=1, initialize="steady")
 
 
 @needs_ipopt
