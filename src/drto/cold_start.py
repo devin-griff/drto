@@ -314,5 +314,11 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
         for con in rows:
             con.activate()
     if scaled:
+        # values only: the throwaway clone's dual and rc suffixes would
+        # make propagate_solution demand an objective to rescale them
+        for _nm in ("dual", "rc"):
+            _c = solve_m.component(_nm)
+            if _c is not None and _c.ctype is pyo.Suffix:
+                solve_m.del_component(_c)
         xfrm.propagate_solution(solve_m, m)
     return report
