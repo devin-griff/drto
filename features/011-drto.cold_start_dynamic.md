@@ -126,3 +126,7 @@ fixed point, the soft pin already satisfied.
   solves; a model with `Block(time)` structure initializes the same way.
 - Returns a readable report in the feature 010 shape, adding the
   interpolation and the per-point solves.
+- A member of a declared component that does not exist is skipped,
+  values only as ever: a model cut to a window of the horizon (the
+  closed loop's one-sample plant) initializes over the members it
+  kept, without recreating what was cut.

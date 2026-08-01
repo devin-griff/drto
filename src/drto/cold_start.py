@@ -174,6 +174,12 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
             start = z0.get(id(member0), tgt)
             span = tgt - start
             for t in grid:
+                # a member that does not exist is skipped: a model cut
+                # to a window of the horizon (the loop's one-sample
+                # plant) initializes over the members it kept
+                idx = _join_index(o, t, pos)
+                if idx not in z:
+                    continue
                 s = (t - t0) / horizon
                 if profile == "exponential":
                     val = start + span * (1.0 - math.exp(-d * s)) / denom
@@ -181,7 +187,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
                 else:
                     val = start + span * s
                     slope = span / horizon
-                vd = z[_join_index(o, t, pos)]
+                vd = z[idx]
                 if not vd.fixed:
                     vd.set_value(val)
                 slope_of[id(vd)] = slope
@@ -314,11 +320,22 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
         for con in rows:
             con.activate()
     if scaled:
-        # values only: the throwaway clone's dual and rc suffixes would
-        # make propagate_solution demand an objective to rescale them
-        for _nm in ("dual", "rc"):
-            _c = solve_m.component(_nm)
-            if _c is not None and _c.ctype is pyo.Suffix:
-                solve_m.del_component(_c)
-        xfrm.propagate_solution(solve_m, m)
+        # values only, copied by position: the clone is this model's
+        # deepcopy, so the var datas align one to one. Pyomo's
+        # propagate_solution is avoided deliberately: it iterates Var
+        # containers including References, and indexing a Reference
+        # rebuilds members on demand, which resurrects what a model cut
+        # to a window of the horizon removed (the closed loop's
+        # one-sample plant); it also wants an objective to rescale the
+        # clone's solver suffixes, which values-only never needs
+        fmap = solve_m.component_scaling_factor_map
+        for vo, vs in zip(
+            m.component_data_objects(Var, descend_into=True),
+            solve_m.component_data_objects(Var, descend_into=True),
+        ):
+            if vs.value is not None:
+                vo.set_value(
+                    pyo.value(vs) / (fmap[vs] if vs in fmap else 1.0),
+                    skip_validation=True,
+                )
     return report

@@ -103,6 +103,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `cold_start_dynamic` initializes over the members a model kept: a
+  member that does not exist is skipped rather than rebuilt, and the
+  scaled solves' values copy back positionally instead of through
+  pyomo's `propagate_solution`, whose Var-container iteration indexes
+  References and thereby rebuilds members on demand. A model cut to a
+  window of the horizon (the closed loop's one-sample plant, cut
+  straight after the simulation transform) cold-starts in one
+  element's time: on the IDAES CSTR the plant's cold start drops from
+  0.8 s to 0.09 s and the demo loop from 11 s to about 5 s.
+
 - The terminal segment's endpoint pin penalty gains a quadratic term
   (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
   the same `mu`. The linear part is the exact L1 pin as before, zero

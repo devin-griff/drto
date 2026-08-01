@@ -345,6 +345,10 @@ def ideal_nmpc(
     process = TransformationFactory("drto.dynamic_simulation").create_using(
         m, controls=at_targets
     )
+    # the plant is the one-sample simulation from here on: everything
+    # downstream (cold start, scaling clone, every solve) sees only the
+    # first element
+    _one_sample(process)
     _prune_suffixes(process)
 
     # the input becomes the controller
@@ -359,15 +363,12 @@ def ideal_nmpc(
     warm_opts.update(warm_start or {})
 
     # the controller and the process cold-start alike, so the plant's
-    # first simulation starts initialized too; the cold start runs on
-    # the full clone, then the plant is cut to the one-sample
-    # simulation the loop actually solves
+    # first simulation starts initialized too; the plant is already cut,
+    # so its cold start is one element's worth
     if cold_start is not False:
         opts = {} if cold_start is True else dict(cold_start)
         cold_start_dynamic(m, **opts)
         cold_start_dynamic(process, **opts)
-    _one_sample(process)
-    _prune_suffixes(process)
 
     # an active scaling_factor suffix: the loop runs both sides on scaled
     # clones, built once, and reads back in the model's own units
