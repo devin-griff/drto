@@ -31,6 +31,9 @@ history = drto.ideal_nmpc(
                                        # drto.cold_start_dynamic, False
                                        # skips it
     solver="pounce",                   # the solver, by name
+    warm_start={"mu_init": 1e-6},      # options for the warm-started
+                                       # solves, laid over the default
+                                       # recipe
 )
 
 drto.plot_states(history)
@@ -55,7 +58,9 @@ instant. The loop, each step:
 
 1. Initialize: `drto.cold_start_dynamic` on the first step (on by
    default, a mapping passing through as its options, `cold_start=False`
-   skipping it), `drto.warm_start_dynamic` on every later one.
+   skipping it), the controller and the process cold-started alike so
+   the plant's first simulation starts initialized too;
+   `drto.warm_start_dynamic` on every later one.
 2. Solve the dynamic optimization at the current initial condition.
 3. Implement: read each control's first move and write it into the
    process clone's fixed controls.
@@ -75,15 +80,14 @@ zero-mean draws each step, reproducible through `seed`. A disturbance
 with no entry is zero.
 
 `solver` names the solver that runs every controller and process solve.
-Under `"pounce"` or `"ipopt"` the loop leverages the warm start fully:
-the multiplier suffixes (`dual`, `ipopt_zL_out`, `ipopt_zU_out`,
-`ipopt_zL_in`, `ipopt_zU_in`) are declared on the controller before the
-first solve, so `drto.warm_start_dynamic` shifts the multipliers along
-with the primals, and every warm-started solve runs with the feature 013
-settings: `warm_start_init_point=yes`, `mu_init=1e-6`, and the `1e-9`
-bound and multiplier pushes. Another solver runs the loop on the primal
-shift alone. A solve that fails stops the loop with an error naming the
-step.
+Under `"pounce"` or `"ipopt"` every warm-started solve runs with the
+warm start recipe, and `warm_start` lays user options over it: the
+default is `warm_start_init_point=yes`, `mu_init=1e-6`, and the `1e-9`
+bound and multiplier pushes, so `warm_start={"mu_init": 1e-4}` retunes
+one knob without restating the rest. Under another solver the loop warm
+starts on the shifted values alone, a given `warm_start` mapping passing
+to the solves as is. A solve that fails stops the loop with an error
+naming the step.
 
 An active `scaling_factor` suffix is honored the way the initializers
 honor it: the loop builds the controller's and the process's scaled
@@ -130,16 +134,18 @@ single call on the declared model.
   one sample in back as both models' initial condition.
 - The first solve is cold-started by default, a mapping passing through
   to `drto.cold_start_dynamic` as given, and `cold_start=False` skipping
-  it; every later solve is warm-started.
+  it, the controller and the process cold-started alike; every later
+  solve is warm-started.
 - A disturbance entry that is a sequence is used as given; a number draws
   independent zero-mean realizations with that standard deviation,
   reproducibly under `seed`; a missing entry is zero.
 - `solver` names the solver for every controller and process solve,
-  `"pounce"` the default. Under `"pounce"` or `"ipopt"` the loop declares
-  the multiplier suffixes on the controller before the first solve and
-  runs every warm-started solve with the feature 013 warm start settings;
-  under another solver the loop runs on the primal shift alone. A failed
-  solve raises an error naming the step.
+  `"pounce"` the default. Under `"pounce"` or `"ipopt"` every
+  warm-started solve runs with the warm start recipe
+  (`warm_start_init_point=yes`, `mu_init=1e-6`, the `1e-9` pushes), a
+  `warm_start` mapping laid over it; under another solver the loop warm
+  starts on the shifted values alone, a given mapping passing through as
+  is. A failed solve raises an error naming the step.
 - With an active `scaling_factor` suffix the loop builds each side's
   scaled clone once and runs every solve and warm start on it; the
   history lands in the model's own units, and a scaling-tagged hicks loop

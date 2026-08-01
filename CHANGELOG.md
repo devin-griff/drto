@@ -15,10 +15,11 @@ All notable changes to this project are documented here. The format is based on
   `drto.dynamic_optimization`, and each step solves at the measured
   state, implements the first move, and simulates one sample under a
   per-step disturbance realization (sequences as given, or seeded
-  zero-mean draws). The first solve is cold-started and every later one
-  warm-started; under `pounce` or `ipopt` the loop declares the
-  multiplier suffixes so the shift carries them, and runs the
-  warm-started solves with the feature 013 settings. An active
+  zero-mean draws). The first solve is cold-started, the controller and
+  the process alike, and every later one warm-started from the shifted
+  previous solution; under `pounce` or `ipopt` the warm-started solves
+  run with the warm start recipe, a `warm_start` mapping laying user
+  options over the documented default. An active
   `scaling_factor` suffix runs the whole loop on persistent scaled
   clones with the history read back in the model's own units.
   `drto.plot_states` and `drto.plot_controls` accept the returned

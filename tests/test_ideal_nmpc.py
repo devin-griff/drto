@@ -249,20 +249,34 @@ def test_warm_started_solves_get_the_recipe(monkeypatch):
     assert rec.calls[2]["warm_start_init_point"] == "yes"
     assert rec.calls[2]["mu_init"] == pytest.approx(1e-6)
     assert rec.calls[3] == {}
-    # the multiplier suffixes were declared before the first solve and
-    # filled by it, so the warm start had multipliers to shift
-    assert m.component("ipopt_zL_in") is not None
-    assert len(m.dual) > 0
+    # the loop declares no suffixes: the warm start is the shifted
+    # values plus the recipe, nothing else
+    assert m.component("dual") is None
+    assert m.component("ipopt_zL_in") is None
 
 
 @needs_ipopt
-def test_another_solver_runs_the_primal_shift_alone(monkeypatch):
+def test_warm_start_options_lay_over_the_recipe(monkeypatch):
+    rec = _Recorder(pyo.SolverFactory("ipopt"))
+    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    drto.ideal_nmpc(loop_model(), steps=2, solver="ipopt", warm_start={"mu_init": 1e-4})
+    assert rec.calls[2]["mu_init"] == pytest.approx(1e-4)  # the override
+    assert rec.calls[2]["warm_start_init_point"] == "yes"  # the rest stays
+
+
+@needs_ipopt
+def test_another_solver_warm_starts_on_the_shifted_values_alone(monkeypatch):
     rec = _Recorder(pyo.SolverFactory("ipopt"))
     monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
     m = loop_model()
     drto.ideal_nmpc(m, steps=2, solver="other")
     assert all(c == {} for c in rec.calls)
     assert m.component("dual") is None
+    # a given mapping still reaches the warm solves as is
+    rec = _Recorder(pyo.SolverFactory("ipopt"))
+    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    drto.ideal_nmpc(loop_model(), steps=2, solver="other", warm_start={"max_iter": 400})
+    assert rec.calls[2] == {"max_iter": 400}
 
 
 @needs_ipopt
@@ -293,7 +307,8 @@ def test_cold_start_options_pass_through(monkeypatch):
     drto.ideal_nmpc(
         loop_model(), steps=1, solver="ipopt", cold_start={"profile": "exponential"}
     )
-    assert seen == [{"profile": "exponential"}]
+    # the controller and the process cold-start alike
+    assert seen == [{"profile": "exponential"}, {"profile": "exponential"}]
     seen.clear()
     drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt", cold_start=False)
     assert seen == []

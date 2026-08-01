@@ -14,11 +14,11 @@ The input is the declared, discretized model, with
 The loop builds both sides from it: a clone becomes the process through
 ``drto.dynamic_simulation`` with the controls first fixed at the
 declared control targets, and the input becomes the controller through
-``drto.dynamic_optimization``. The first solve is cold-started, every
-later one warm-started, and under the ``pounce`` or ``ipopt`` solvers
-the multiplier suffixes are declared before the first solve so
-``drto.warm_start_dynamic`` shifts the multipliers along with the
-primals and the warm-started solves run with the feature 013 settings.
+``drto.dynamic_optimization``. The first solve is cold-started, the
+controller and the process alike; every later one warm-starts from the
+shifted previous solution, and under the ``pounce`` or ``ipopt``
+solvers it runs with the warm start recipe, the ``warm_start`` mapping
+laid over the documented default.
 
 An active ``scaling_factor`` suffix is honored the way the initializers
 honor it: the loop builds each side's scaled clone once, runs every
@@ -45,8 +45,8 @@ from drto.info import info
 from drto.initialize_steady_state import _attached
 from drto.warm_start import warm_start_dynamic
 
-#: The feature 013 warm start settings, applied to every warm-started
-#: solve when the solver understands them.
+#: The default recipe for the warm-started solves, under the solvers
+#: that understand it; the ``warm_start`` option lays over this.
 _WARM_START_OPTIONS = {
     "warm_start_init_point": "yes",
     "mu_init": 1e-6,
@@ -54,19 +54,9 @@ _WARM_START_OPTIONS = {
     "warm_start_mult_bound_push": 1e-9,
 }
 
-#: The solvers that read the warm start settings and the multiplier
-#: suffixes; any other solver runs the loop on the primal shift alone.
+#: The solvers that read the warm start recipe; any other solver warm
+#: starts on the shifted values alone.
 _WARM_SOLVERS = ("pounce", "ipopt")
-
-#: The multiplier suffixes the warm start shifts, with their directions:
-#: the solver writes dual and the _out pair, the shift fills the _in pair.
-_SUFFIXES = (
-    ("dual", Suffix.IMPORT),
-    ("ipopt_zL_out", Suffix.IMPORT),
-    ("ipopt_zU_out", Suffix.IMPORT),
-    ("ipopt_zL_in", Suffix.EXPORT),
-    ("ipopt_zU_in", Suffix.EXPORT),
-)
 
 #: The mode transforms; the loop applies its own, so the input comes first.
 _TRANSFORMED = (
@@ -155,6 +145,7 @@ def ideal_nmpc(
     seed=None,
     cold_start=True,
     solver="pounce",
+    warm_start=None,
 ):
     """Run the ideal NMPC loop for ``steps`` samples; see the module
     docstring.
@@ -182,12 +173,18 @@ def ideal_nmpc(
     seed : int, optional
         Seeds the disturbance draws, making them reproducible.
     cold_start : bool or mapping
-        The first solve's cold start: ``True`` (the default) runs
-        ``drto.cold_start_dynamic``, a mapping passes through as its
-        options, ``False`` skips it.
+        The first solve's cold start, the controller and the process
+        alike: ``True`` (the default) runs ``drto.cold_start_dynamic``,
+        a mapping passes through as its options, ``False`` skips it.
     solver : str
         The solver, by name, for every controller and process solve.
         ``"pounce"`` and ``"ipopt"`` warm start between steps.
+    warm_start : mapping, optional
+        Solver options for the warm-started solves, laid over the
+        default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
+        ``warm_start_bound_push`` and ``warm_start_mult_bound_push``
+        at ``1e-9``) under ``"pounce"`` or ``"ipopt"``; under another
+        solver the mapping is used as given.
 
     Returns
     -------
@@ -305,13 +302,18 @@ def ideal_nmpc(
         m, **(dynamic_optimization or {})
     )
     _prune_suffixes(m)
-    warm = solver in _WARM_SOLVERS
-    if warm:
-        for name, direction in _SUFFIXES:
-            if m.component(name) is None:
-                m.add_component(name, Suffix(direction=direction))
+
+    # the warm-started solves' options: the recipe under the solvers
+    # that read it, the warm_start mapping laid over
+    warm_opts = dict(_WARM_START_OPTIONS) if solver in _WARM_SOLVERS else {}
+    warm_opts.update(warm_start or {})
+
+    # the controller and the process cold-start alike, so the plant's
+    # first simulation starts initialized too
     if cold_start is not False:
-        cold_start_dynamic(m, **({} if cold_start is True else dict(cold_start)))
+        opts = {} if cold_start is True else dict(cold_start)
+        cold_start_dynamic(m, **opts)
+        cold_start_dynamic(process, **opts)
 
     # an active scaling_factor suffix: the loop runs both sides on scaled
     # clones, built once, and reads back in the model's own units
@@ -399,12 +401,7 @@ def ideal_nmpc(
         # the first step
         if k > 0:
             warm_start_dynamic(ctrl)
-        _solve(
-            ctrl,
-            "controller",
-            k,
-            options=_WARM_START_OPTIONS if k > 0 and warm else None,
-        )
+        _solve(ctrl, "controller", k, options=warm_opts if k > 0 else None)
 
         # implement each control's first move on the process
         for u, pu in zip(c_controls, p_controls):
