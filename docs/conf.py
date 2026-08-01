@@ -26,6 +26,7 @@ _NOTEBOOKS = [
     "cstr_cold_start",
     "cstr_warm_start",
     "cstr_advanced_step",
+    "cstr_ideal_nmpc",
 ]
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"
