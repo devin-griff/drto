@@ -105,6 +105,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `cold_start_dynamic` gains `point_solves` (gh #43): `False` skips the
+  per-point algebra solves deliberately, the profiles and targets
+  landing without a solve and without the internal scaled clone, with
+  the report saying so. The profiles-only mode existed only as the
+  missing-install fallback; on large models the algebra cascade is the
+  cost that grows, and the choice belongs to the caller, reaching the
+  closed loop through the `initialize` mapping.
+
 - `cold_start_dynamic` initializes over the members a model kept: a
   member that does not exist is skipped rather than rebuilt, and the
   scaled solves' values copy back positionally instead of through
