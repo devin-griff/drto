@@ -86,3 +86,7 @@ carry today.
   `import drto` never touches it, and a missing install raises the
   house-style error naming the extra. drto's
   core stays solver-agnostic.
+- A declared disturbance is process noise, zero in the nominal
+  equilibrium: the pipeline holds it at zero for the solve, the same
+  convention as every control-side mode, and restores the fixed flags
+  it touched; the broadcast lands the zeros across the grid.
