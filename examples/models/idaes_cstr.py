@@ -24,7 +24,12 @@ Usage from a notebook in ``examples/``::
     m = build(N=10)
 """
 import pyomo.environ as pyo
-from idaes.core import FlowsheetBlock
+from idaes.core import FlowsheetBlock, declare_process_block_class
+from idaes.core.base.control_volume0d import ControlVolume0DBlock
+from idaes.core.base.control_volume_base import (
+    EnergyBalanceType,
+    MomentumBalanceType,
+)
 from idaes.models.properties.examples.saponification_reactions import (
     SaponificationReactionParameterBlock,
 )
@@ -32,6 +37,7 @@ from idaes.models.properties.examples.saponification_thermo import (
     SaponificationParameterBlock,
 )
 from idaes.models.unit_models import CSTR
+from idaes.models.unit_models.cstr import CSTRData
 
 import drto
 
@@ -53,19 +59,111 @@ def feed(blk, t):
     blk.inlet.pressure[t].fix(P_IN)
 
 
-def cstr(m):
+@declare_process_block_class("NoisyCSTR")
+class NoisyCSTRData(CSTRData):
+    """The packaged CSTR with additive noise in every balance equation.
+
+    The build is the parent's, verbatim, except the control volume's
+    balance builders receive IDAES's custom-term hooks: each species
+    balance gains the flowsheet's ``w_<component>`` variable (mol/s)
+    and the enthalpy balance gains ``w_energy`` (W), so the dynamics
+    read dM/dt = f + w with the equations still IDAES-generated. A
+    species without a matching flowsheet variable (water) gets no
+    noise term.
+    """
+
+    def _noise_molar(self, t, p, j):
+        w = self.flowsheet().component("w_" + j)
+        return w[t] if w is not None else 0 * pyo.units.mol / pyo.units.s
+
+    def _noise_energy(self, t):
+        return self.flowsheet().w_energy[t]
+
+    def build(self):
+        super(CSTRData, self).build()
+
+        self.control_volume = ControlVolume0DBlock(
+            dynamic=self.config.dynamic,
+            has_holdup=self.config.has_holdup,
+            property_package=self.config.property_package,
+            property_package_args=self.config.property_package_args,
+            reaction_package=self.config.reaction_package,
+            reaction_package_args=self.config.reaction_package_args,
+        )
+        self.control_volume.add_geometry()
+        self.control_volume.add_state_blocks(
+            has_phase_equilibrium=self.config.has_phase_equilibrium
+        )
+        self.control_volume.add_reaction_blocks(
+            has_equilibrium=self.config.has_equilibrium_reactions
+        )
+        self.control_volume.add_material_balances(
+            balance_type=self.config.material_balance_type,
+            has_rate_reactions=True,
+            has_equilibrium_reactions=self.config.has_equilibrium_reactions,
+            has_phase_equilibrium=self.config.has_phase_equilibrium,
+            custom_molar_term=self._noise_molar,
+        )
+        self.control_volume.add_energy_balances(
+            balance_type=self.config.energy_balance_type,
+            has_heat_of_reaction=self.config.has_heat_of_reaction,
+            has_heat_transfer=self.config.has_heat_transfer,
+            custom_term=self._noise_energy,
+        )
+        self.control_volume.add_momentum_balances(
+            balance_type=self.config.momentum_balance_type,
+            has_pressure_change=self.config.has_pressure_change,
+        )
+        self.add_inlet_port()
+        self.add_outlet_port()
+        self.volume = pyo.Reference(self.control_volume.volume[:])
+
+        @self.Constraint(
+            self.flowsheet().time,
+            self.config.reaction_package.rate_reaction_idx,
+            doc="CSTR performance equation",
+        )
+        def cstr_performance_eqn(b, t, r):
+            return b.control_volume.rate_reaction_extent[t, r] == (
+                b.volume[t] * b.control_volume.reactions[t].reaction_rate[r]
+            )
+
+        if (
+            self.config.has_heat_transfer is True
+            and self.config.energy_balance_type != EnergyBalanceType.none
+        ):
+            self.heat_duty = pyo.Reference(self.control_volume.heat[:])
+        if (
+            self.config.has_pressure_change is True
+            and self.config.momentum_balance_type != MomentumBalanceType.none
+        ):
+            self.deltaP = pyo.Reference(self.control_volume.deltaP[:])
+
+
+def cstr(m, noisy=False):
     m.fs.props = SaponificationParameterBlock()
     m.fs.rxn = SaponificationReactionParameterBlock(property_package=m.fs.props)
-    m.fs.cstr = CSTR(property_package=m.fs.props, reaction_package=m.fs.rxn,
+    unit = NoisyCSTR if noisy else CSTR
+    m.fs.cstr = unit(property_package=m.fs.props, reaction_package=m.fs.rxn,
                      has_equilibrium_reactions=False, has_heat_of_reaction=True,
                      has_heat_transfer=True)
     return m
 
-def build(N=10, h=1, ncp=3):
+def build(N=10, h=1, ncp=3, disturbance=False):
     samples = [i * h for i in range(N + 1)]
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=True, time_set=samples, time_units=pyo.units.s)
-    cstr(m)
+    if disturbance:
+        # additive process noise, one term per state's balance: mol/s in
+        # each species holdup equation, W in the energy holdup equation,
+        # zero nominally. Created before the unit, whose noisy build
+        # writes them into the balances through IDAES's custom terms
+        U = pyo.units
+        for j in ("NaOH", "EthylAcetate", "SodiumAcetate", "Ethanol"):
+            m.fs.add_component(
+                "w_" + j, pyo.Var(m.fs.time, initialize=0.0, units=U.mol / U.s))
+        m.fs.w_energy = pyo.Var(m.fs.time, initialize=0.0, units=U.W)
+    cstr(m, noisy=disturbance)
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
     pyo.TransformationFactory("dae.collocation").apply_to(
@@ -135,6 +233,9 @@ def build(N=10, h=1, ncp=3):
                cv.energy_holdup)
     drto.dynamics(cv.material_balances, cv.enthalpy_balances)
     drto.control(cv.heat, fin, profile="piecewise_constant")
+    if disturbance:
+        drto.disturbance(m.fs.w_NaOH, m.fs.w_EthylAcetate,
+                         m.fs.w_SodiumAcetate, m.fs.w_Ethanol, m.fs.w_energy)
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
     drto.initial_condition(m.ic_mat, m.ic_eng)

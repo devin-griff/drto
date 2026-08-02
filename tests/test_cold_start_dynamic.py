@@ -282,3 +282,27 @@ def test_point_solves_false_skips_the_algebra_deliberately():
 def test_point_solves_rejects_non_booleans():
     with pytest.raises(ValueError, match="point_solves"):
         drto.cold_start_dynamic(seeded(), point_solves="maybe")
+
+
+def test_the_report_carries_the_scaled_clone():
+    # the closed loop adopts the clone instead of deep-copying again
+    # (gh #42); without scaling, or with the solves skipped, there is
+    # no clone to carry
+    pytest.importorskip("pyomo_pounce")
+    m = seeded()
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for vd in m.z.values():
+        m.scaling_factor[vd] = 2.0
+    report = drto.cold_start_dynamic(m)
+    sm = report.scaled_model
+    assert sm is not None and sm is not m
+    fmap = sm.component_scaling_factor_map
+    # the clone holds the initialized profile in its own scaled units
+    tN = sorted(m.t)[-1]
+    assert pyo.value(sm.z[tN]) / fmap[sm.z[tN]] == pytest.approx(pyo.value(m.z[tN]))
+    assert drto.cold_start_dynamic(seeded()).scaled_model is None
+    m2 = seeded()
+    m2.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for vd in m2.z.values():
+        m2.scaling_factor[vd] = 2.0
+    assert drto.cold_start_dynamic(m2, point_solves=False).scaled_model is None

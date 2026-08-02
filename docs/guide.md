@@ -3,10 +3,11 @@
 drto has one idea: your Pyomo model already contains everything a dynamic
 optimization needs, so instead of rebuilding it in a modeling layer, you
 declare which components play which role and let transformations rewrite
-the model. This page walks the three workflows those declarations drive —
-an infinite-horizon controller, a forward simulation, and the steady-state
-branch — then the two how-tos that come up on real models: scaling and
-IDAES flowsheets.
+the model. This page walks the four workflows those declarations drive —
+an infinite-horizon controller, a forward simulation, the closed loop
+that runs the two against each other, and the steady-state branch — then
+the two how-tos that come up on real models: scaling and IDAES
+flowsheets.
 
 ## The registry
 
@@ -65,7 +66,7 @@ The control-side surface, in the order a model usually declares them:
 The estimation-side surface (`drto.measurement`,
 `drto.estimated_parameter`, `drto.estimation_stage_cost`,
 `drto.estimation_terminal_cost`, `drto.arrival_cost`) mirrors this for
-the planned moving-horizon estimation features.
+moving-horizon estimation.
 
 Declarations are checked as they are made, and a bad one raises a
 descriptive error at declaration time, not at solve time.
@@ -163,8 +164,83 @@ fixed at given profiles (or the values they hold), declared disturbances
 are fixed at given constants or sequences, the objective is zero, and the
 square system integrates forward with any NLP solver. The registry
 records what was fixed and the report names it. This is the plant in the
-planned closed-loop features: the same declarations, simulated one step
-at a time.
+closed loop below: the same declarations, simulated one step at a time.
+
+## Workflow: the closed loop
+
+`drto.ideal_nmpc` runs the receding-horizon loop the declarations
+describe, in one call on the declared, discretized model — terminal
+segment applied or not, before `drto.dynamic_optimization`:
+
+```python
+history = drto.ideal_nmpc(
+    m,
+    steps=50,
+    initial_condition={"z": 0.2},
+    disturbances={"w": 0.05},
+    seed=0,
+)
+drto.plot_states(history)
+drto.plot_controls(history)
+```
+
+The loop builds both sides of the control problem from the one model.
+The input itself becomes the controller through
+`drto.dynamic_optimization` (a `dynamic_optimization` mapping passes
+options through). A clone becomes the plant: its controls are fixed at
+the declared targets, `drto.dynamic_simulation` makes it square, and
+everything past the first sampling time is removed, so the plant is the
+one-sample integration the loop actually solves regardless of the
+declared horizon. Ideal means the solve is treated as instantaneous —
+measurement, solve, and implementation at the same instant. Each step
+solves the controller at the current state, writes the first control
+moves into the plant, fixes the plant's disturbances at the step's
+realization, simulates one sample, and feeds the end state back as both
+models' initial condition.
+
+`initial_condition` maps declared state names to the values written into
+the feedback-hook Params before the first step; omitted, the Params'
+current values are the first state.
+
+Each declared disturbance's `disturbances` entry is either a sequence,
+the per-step realization as given, or a number, the standard deviation of
+independent zero-mean normal draws, reproducible through `seed`; a
+disturbance with no entry is zero. The disturbance enters the plant only
+— the controller solves at zero disturbance, the optimization mode's
+convention.
+
+`initialize` picks the first solve's initialization: `"cold"` (the
+default) runs `drto.cold_start_dynamic` on controller and plant alike, a
+mapping passing through as its options; `"steady"` runs
+`drto.initialize_steady_state` on the input before the sides are built,
+so both inherit the broadcast; `False` skips initialization. Every later
+solve is warm-started with `drto.warm_start_dynamic`.
+
+`solver` names the solver for every solve, `"pounce"` the default. Under
+`"pounce"` or `"ipopt"`, warm-started controller solves run with a warm
+start recipe — `warm_start_init_point=yes`, `mu_init=1e-6`, and `1e-9`
+bound and multiplier pushes — and a `warm_start` mapping lays user
+options over it, so `warm_start={"mu_init": 1e-4}` retunes one knob
+without restating the rest. Under another solver the loop warm starts on
+the shifted values alone and a given `warm_start` mapping passes to the
+solves as is. The first solve runs at solver defaults. A solve that
+fails stops the loop with an error naming the step.
+
+`tee=True` streams every solve's output as the loop runs and keeps it:
+`history.logs` holds one `(step, side, text)` entry per solve in loop
+order. The default is quiet, nothing streamed, nothing kept.
+
+An active `scaling_factor` suffix is honored the way the initializers
+honor it: every solve and warm start runs on one persistent scaled clone
+per side for the whole loop — the cold start's own clone when it left
+one, a fresh build otherwise — and the history lands in the model's own
+units.
+
+The returned `NmpcHistory` holds the actual closed-loop trajectory —
+times, each declared state's values, the implemented moves, and the
+disturbance realizations, under the declared names and targets — and
+`drto.plot_states` and `drto.plot_controls` accept it in place of a
+model, drawing the moves as the staircase they physically are.
 
 ## Workflow: the steady-state branch
 

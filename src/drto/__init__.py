@@ -33,6 +33,7 @@ from drto.initialize_steady_state import SteadyStateInitReport, initialize_stead
 from drto.advanced_step import advanced_step_controller
 from drto.cold_start import ColdStartReport, cold_start_dynamic
 from drto.warm_start import WarmStartReport, warm_start_dynamic
+from drto.ideal_nmpc import NmpcHistory, ideal_nmpc
 from drto.objective import build_objective
 from drto.plotting import plot_controls, plot_stage_cost, plot_states
 
@@ -58,6 +59,8 @@ __all__ = [
     "cold_start_dynamic",
     "warm_start_dynamic",
     "WarmStartReport",
+    "ideal_nmpc",
+    "NmpcHistory",
     "ColdStartReport",
     "plot_states",
     "plot_controls",

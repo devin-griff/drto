@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
+  runs the closed loop the declarations describe from the declared,
+  discretized model: a clone becomes the process through
+  `drto.dynamic_simulation`, cut to the one-sample simulation each
+  plant solve integrates, the input becomes the controller through
+  `drto.dynamic_optimization`, and each step solves at the measured
+  state, implements the first move, and simulates one sample under a
+  per-step disturbance realization (sequences as given, or seeded
+  zero-mean draws). The first solve is initialized per the `initialize`
+  option: the cold start by default on the controller and the process
+  alike, a mapping its options, the steady broadcast with `"steady"`,
+  `False` skipping it; every later solve is warm-started from the
+  shifted previous solution; under `pounce` or `ipopt` the warm-started solves
+  run with the warm start recipe, a `warm_start` mapping laying user
+  options over the documented default. An active
+  `scaling_factor` suffix runs the whole loop on persistent scaled
+  clones with the history read back in the model's own units.
+  `drto.plot_states` and `drto.plot_controls` accept the returned
+  history and draw the actual trajectories, moves as the staircase they
+  physically are; `tee=True` streams every solve's output and returns
+  it on the history's `logs`. On the infinite-horizon hicks model the closed loop
+  approaches both declared targets monotonically; on the linear test
+  model it lands on the target in four samples. The IDAES CSTR notebook
+  (`examples/cstr_ideal_nmpc.ipynb`) runs 10 samples of closed loop in
+  14 s, the hot start driven onto the setpoint in about three, and a
+  second run under additive process noise, one drawn term per state
+  equation from the model's `disturbance=True` build (IDAES's
+  custom-term hooks writing dM/dt = f + w into the generated balances),
+  holds every state in a band around its setpoint.
+
 - Warm start (feature 013). `drto.warm_start_dynamic(m)` reuses the
   previous solution moved one sampling time forward: every variable
   takes the value the previous solution had one step later, copied
@@ -75,6 +105,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The closed loop adopts the cold start's scaled clone (gh #42): the
+  cold start's report carries the initialized clone as `scaled_model`,
+  and the loop takes it as the persistent solve model instead of
+  deep-copying the same model again, one deepcopy per side instead of
+  two. The clone lives as long as its report; without scaling, without
+  pounce, or with the point solves skipped there is none and the loop
+  builds its own as before.
+
 - `cold_start_dynamic` gains `point_solves` (gh #43): `False` skips the
   per-point algebra solves deliberately, the profiles and targets
   landing without a solve and without the internal scaled clone, with
@@ -82,6 +120,16 @@ All notable changes to this project are documented here. The format is based on
   missing-install fallback; on large models the algebra cascade is the
   cost that grows, and the choice belongs to the caller, reaching the
   closed loop through the `initialize` mapping.
+
+- `cold_start_dynamic` initializes over the members a model kept: a
+  member that does not exist is skipped rather than rebuilt, and the
+  scaled solves' values copy back positionally instead of through
+  pyomo's `propagate_solution`, whose Var-container iteration indexes
+  References and thereby rebuilds members on demand. A model cut to a
+  window of the horizon (the closed loop's one-sample plant, cut
+  straight after the simulation transform) cold-starts in one
+  element's time: on the IDAES CSTR the plant's cold start drops from
+  0.8 s to 0.09 s and the demo loop from 11 s to about 5 s.
 
 - `initialize_steady_state` holds a declared disturbance at zero for
   the equilibrium solve, the same convention as every control-side

@@ -28,10 +28,11 @@ history = drto.asnmpc(
                                        # draws, a sequence the per-step
                                        # values; omitted is zero
     seed=0,                            # makes the draws reproducible
-    cold_start=True,                   # the first solve's cold start: a
-                                       # mapping passes through to
-                                       # drto.cold_start_dynamic, False
-                                       # skips it
+    initialize="cold",                 # the first solve's
+                                       # initialization: "cold" the cold
+                                       # start (a mapping its options),
+                                       # "steady" the steady broadcast,
+                                       # False skips it
     solver="pounce",                   # the solver; the correction is a
                                        # pounce backsolve, so pounce only
 )

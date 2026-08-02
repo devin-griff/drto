@@ -18,7 +18,8 @@ the dynamic path runs first.
 
 An active ``scaling_factor`` suffix is honored: the pipeline runs scaled
 and the solved values land in the model's own units, with no change to
-the call.
+the call. A declared disturbance is held at zero for the solve, the
+control-side convention, with the touched fixed flags restored.
 
 pyomo-pounce is optional to drto: it is imported here at call time and a
 missing install raises with the ``pip install drto[pounce]`` instruction.
@@ -61,13 +62,14 @@ def initialize_steady_state(m, controls=None):
     Parameters
     ----------
     m : Block
-        A declared model (feature 002): steady-state (initialized in
-        place) or dynamic and discretized (initialized from a reduced
-        clone, broadcast flat).
+        A declared model: steady-state (initialized in place) or dynamic
+        and discretized (initialized from a reduced clone, broadcast
+        flat).
     controls : mapping, optional
         Declared control (the component, or its name) to the value the
         steady solve holds it at; controls not in the mapping hold the
-        values they already have. The feature 008 convention.
+        values they already have, ``drto.steady_state_simulation``'s
+        convention.
 
     Returns
     -------

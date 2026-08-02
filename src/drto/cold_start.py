@@ -10,11 +10,13 @@ lands exactly on the target at the horizon's end. Its
 DerivativeVar members hold the profile's slope, the controls (and a
 parameterized control's moves) hold their declared targets, and, with
 pyomo-pounce installed, the algebraic variables solve pointwise from
-every equation except the declared dynamics; with an active
-``scaling_factor`` suffix those solves run on a scaled clone and the
-values propagate back. A terminal segment rests at the targets: copies
-and segment controls at the targets, tau derivatives and pin slacks at
-zero.
+every equation except the declared dynamics (``point_solves=False``
+skips them deliberately); with an active
+``scaling_factor`` suffix those solves run on a scaled clone, the
+values propagate back, and the report carries the initialized clone as
+``scaled_model`` for a consumer that wants a persistent scaled model.
+A terminal segment rests at the targets: copies and segment controls
+at the targets, tau derivatives and pin slacks at zero.
 
 Values only, at any stage: the declared discretized model, or after
 ``drto.infinite_horizon``, ``drto.dynamic_optimization``, or
@@ -54,6 +56,11 @@ class ColdStartReport:
     segment: str = "(none attached)"
     point_solves: str = "skipped (pyomo-pounce not installed)"
     pipeline: object = None
+    #: The initialized scaled clone, when the solves ran scaled (its
+    #: factor map rides on it as ``component_scaling_factor_map``); the
+    #: closed loop adopts it as its persistent solve model.
+    #: Lives as long as the report does; drop the report to release it.
+    scaled_model: object = None
     notes: list = field(default_factory=list)
 
     def __str__(self):
@@ -183,6 +190,12 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
             start = z0.get(id(member0), tgt)
             span = tgt - start
             for t in grid:
+                # a member that does not exist is skipped: a model cut
+                # to a window of the horizon (the loop's one-sample
+                # plant) initializes over the members it kept
+                idx = _join_index(o, t, pos)
+                if idx not in z:
+                    continue
                 s = (t - t0) / horizon
                 if profile == "exponential":
                     val = start + span * (1.0 - math.exp(-d * s)) / denom
@@ -190,7 +203,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
                 else:
                     val = start + span * s
                     slope = span / horizon
-                vd = z[_join_index(o, t, pos)]
+                vd = z[idx]
                 if not vd.fixed:
                     vd.set_value(val)
                 slope_of[id(vd)] = slope
@@ -328,11 +341,23 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
         for con in rows:
             con.activate()
     if scaled:
-        # values only: the throwaway clone's dual and rc suffixes would
-        # make propagate_solution demand an objective to rescale them
-        for _nm in ("dual", "rc"):
-            _c = solve_m.component(_nm)
-            if _c is not None and _c.ctype is pyo.Suffix:
-                solve_m.del_component(_c)
-        xfrm.propagate_solution(solve_m, m)
+        # values only, copied by position: the clone is this model's
+        # deepcopy, so the var data objects align one to one. Pyomo's
+        # propagate_solution is avoided deliberately: it iterates Var
+        # containers including References, and indexing a Reference
+        # rebuilds members on demand, which resurrects what a model cut
+        # to a window of the horizon removed (the closed loop's
+        # one-sample plant); it also wants an objective to rescale the
+        # clone's solver suffixes, which values-only never needs
+        fmap = solve_m.component_scaling_factor_map
+        for vo, vs in zip(
+            m.component_data_objects(Var, descend_into=True),
+            solve_m.component_data_objects(Var, descend_into=True),
+        ):
+            if vs.value is not None:
+                vo.set_value(
+                    pyo.value(vs) / (fmap[vs] if vs in fmap else 1.0),
+                    skip_validation=True,
+                )
+        report.scaled_model = solve_m
     return report

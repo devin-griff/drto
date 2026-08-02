@@ -808,7 +808,7 @@ def steady_state(owner, target):
     """Pair a declared state with the mutable Param holding its setpoint.
 
     The target the tracking costs drive toward, populated by the
-    steady-state/RTO solve (feature 009), which is why the pairing is
+    steady-state/RTO solve, which is why the pairing is
     recorded: drto writes each solved state value into its target. One pair
     per call; returns the target, so a fresh Param wraps:
     ``m.z_ss = drto.steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))``.

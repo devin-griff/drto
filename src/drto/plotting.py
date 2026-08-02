@@ -166,6 +166,74 @@ def _targets(reg, kind):
     return {id(rec["of"]): rec["component"] for rec in reg.declarations(kind)}
 
 
+def _history_keys(recorded, selection, what):
+    """Resolve a history selection into recorded labels."""
+    if selection is None:
+        return list(recorded)
+    keys = []
+    for item in selection:
+        name = item if isinstance(item, str) else getattr(item, "local_name", item)
+        if name not in recorded:
+            raise ValueError(
+                f"'{name}' is not a recorded {what} of this history; "
+                f"recorded: {', '.join(recorded)}."
+            )
+        keys.append(name)
+    return keys
+
+
+def _draw_history(history, keys, series, targets, t_max, staircase):
+    """Draw a history's recorded trajectories, one fixed-size panel each.
+
+    The actual values draw the way a model's draw: states as filled
+    points at the sample instants, moves as the staircase they
+    physically are, each held over its sample. Setpoint lines come from
+    the recorded targets.
+    """
+    rows = max(1, math.ceil(len(keys) / 2))
+    fig, axes = plt.subplots(
+        rows, 2, figsize=(2 * _PANEL[0], rows * _PANEL[1]), sharex=True, squeeze=False
+    )
+    flat = [ax for row in axes for ax in row]
+    for ax in flat[len(keys) :]:
+        ax.axis("off")
+    drew_target = False
+    times = history.times
+    for ax, key in zip(flat, keys):
+        vals = series[key]
+        if staircase:
+            # a move holds over its sample: the last one extends to the
+            # final recorded instant
+            pts = [(t, v) for t, v in zip(times, vals + [vals[-1]]) if t <= t_max]
+            ax.step(*zip(*pts), where="post", color="C0")
+        else:
+            pts = [(t, v) for t, v in zip(times, vals) if t <= t_max]
+            ax.plot(*zip(*pts), "o", color="C0")
+        target = targets.get(key)
+        if target is not None:
+            ax.axhline(target, color="C0", linestyle=":")
+            drew_target = True
+        ax.set_title(key)
+    for ax in flat[max(0, len(keys) - 2) : len(keys)]:
+        ax.set_xlabel("time")
+    handles = [
+        (
+            _mlines.Line2D([], [], color="C0", drawstyle="steps-post")
+            if staircase
+            else _mlines.Line2D([], [], marker="o", color="C0", linestyle="")
+        )
+    ]
+    labels = ["actual"]
+    if drew_target:
+        handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
+        labels.append("setpoint")
+    fig.legend(
+        handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    return flat[: len(keys)]
+
+
 def _tail_points(b, tN, gamma, comp, other, taus, t_max):
     """Map a segment member's points to real time, split at element boundaries.
 
@@ -275,7 +343,17 @@ def plot_states(m, states=None, t_max=50):
     Setpoint lines come from the ``steady_state`` pairings; squares mark the
     segment's element boundaries, where the state value is the continuity
     extrapolation rather than a collocation point. Returns the panel axes.
+
+    Handed an :class:`drto.NmpcHistory` instead of a model, draws its
+    actual state trajectories at the recorded sample instants, the
+    setpoints from the recorded targets; ``states`` then selects the
+    recorded labels.
     """
+    from drto.ideal_nmpc import NmpcHistory
+
+    if isinstance(m, NmpcHistory):
+        keys = _history_keys(m.states, states, "state")
+        return _draw_history(m, keys, m.states, m.state_targets, t_max, False)
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("state"), states, "state", time)
@@ -327,7 +405,16 @@ def plot_controls(m, controls=None, t_max=50):
     Setpoint lines come from the ``steady_state_control`` pairings.
     Segment controls have no boundary values, so no squares. Returns the
     panel axes.
+
+    Handed an :class:`drto.NmpcHistory` instead of a model, draws the
+    implemented moves as the staircase they physically are, each held
+    over its sample; ``controls`` then selects the recorded labels.
     """
+    from drto.ideal_nmpc import NmpcHistory
+
+    if isinstance(m, NmpcHistory):
+        keys = _history_keys(m.moves, controls, "control")
+        return _draw_history(m, keys, m.moves, m.control_targets, t_max, True)
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("control"), controls, "control", time)

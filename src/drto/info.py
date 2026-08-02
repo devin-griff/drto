@@ -136,7 +136,7 @@ def info(m):
 class Info:
     """The drto registry: declarations by kind plus a transformation log.
 
-    Declarations are recorded by the declaration functions (feature 002)
+    Declarations are recorded by the declaration functions
     and read back by the transformations. Transformations record themselves,
     with an outcome annotation, in application order. Displaying the object
     (console ``repr`` or Jupyter) renders the drto-aware view of the model.

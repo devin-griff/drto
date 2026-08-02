@@ -40,8 +40,7 @@ drto.plot_states(m)
 
 The [user guide](guide.md) walks through this workflow and its siblings; the
 [examples](examples.md) run them on real systems, up to a full IDAES
-flowsheet; the [API reference](api.md) documents every public name; and the
-[design](design.md) page links the feature specs the package is built from.
+flowsheet; and the [API reference](api.md) documents every public name.
 
 ```{toctree}
 :maxdepth: 2
@@ -50,5 +49,4 @@ flowsheet; the [API reference](api.md) documents every public name; and the
 guide
 examples
 api
-design
 ```
