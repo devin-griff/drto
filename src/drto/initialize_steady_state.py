@@ -62,13 +62,14 @@ def initialize_steady_state(m, controls=None):
     Parameters
     ----------
     m : Block
-        A declared model (feature 002): steady-state (initialized in
-        place) or dynamic and discretized (initialized from a reduced
-        clone, broadcast flat).
+        A declared model: steady-state (initialized in place) or dynamic
+        and discretized (initialized from a reduced clone, broadcast
+        flat).
     controls : mapping, optional
         Declared control (the component, or its name) to the value the
         steady solve holds it at; controls not in the mapping hold the
-        values they already have. The feature 008 convention.
+        values they already have, ``drto.steady_state_simulation``'s
+        convention.
 
     Returns
     -------

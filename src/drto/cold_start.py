@@ -58,7 +58,7 @@ class ColdStartReport:
     pipeline: object = None
     #: The initialized scaled clone, when the solves ran scaled (its
     #: factor map rides on it as ``component_scaling_factor_map``); the
-    #: closed loop adopts it as its persistent solve model (gh #42).
+    #: closed loop adopts it as its persistent solve model.
     #: Lives as long as the report does; drop the report to release it.
     scaled_model: object = None
     notes: list = field(default_factory=list)
