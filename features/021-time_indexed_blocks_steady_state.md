@@ -43,8 +43,9 @@ inside another time-indexed Block, mirroring the terminal-segment rule
 
 ## Benefit hypothesis
 
-DESIGN.md's setpoint-consistency story says the steady target comes from the
-same declared model the controller uses. On IDAES models that story is
+Setpoint consistency requires that the steady target come from the
+same declared model the controller uses, so the tracking targets are a
+true fixed point of the dynamics by construction. On IDAES models that story is
 broken today: the declarations attach cleanly and `drto.dynamic_optimization`
 solves the flowsheet, but the reduction silently builds a broken model, so a
 user hand-builds a `dynamic=False` twin flowsheet and keeps its feed and

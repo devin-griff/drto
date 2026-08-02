@@ -15,7 +15,7 @@ never reaches `main`.
 ## Definition of done for a user-facing change
 
 A change that adds or changes user-visible behavior is not done until **all
-three** of these land in the same PR:
+four** of these land in the same PR:
 
 1. **Code + test.** The behavior, with a `pytest` that pins it. A test pins
    behavior only if it fails when the behavior is broken or removed; show
@@ -32,6 +32,13 @@ three** of these land in the same PR:
 3. **Docs.** The docstring, the relevant `docs/` guide or API page, and an
    example notebook where it applies, so the feature is documented where a
    user looks.
+4. **Naming.** Public names are fully written out, never abbreviated
+   (`initial_condition`, not `init_con`): these are setup-time calls where
+   brevity buys nothing, and the full forms are the control literature's
+   own vocabulary, so spelling them out forces the precise concept
+   (condition vs constraint). Declarations are bare nouns with no
+   `declare_` prefix, so the same function reads right tagging an attached
+   component and wrapping a fresh one (`m.z = drto.state(...)`).
 
 When the change touches a real model, run the example and read its numbers,
 not just its exit code: the report, the solver log's iteration count, the
@@ -52,4 +59,4 @@ python -m sphinx -b html -W --keep-going docs docs/_build/html  # docs build
 
 No em dashes anywhere: code, comments, docs, commits, changelog. Short plain
 sentences. Comments state present-tense rationale, not history; design history
-lives in `dev-notes/` and `DESIGN.md`.
+lives in `dev-notes/`.

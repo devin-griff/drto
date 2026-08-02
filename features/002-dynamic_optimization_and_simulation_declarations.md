@@ -213,6 +213,12 @@ declarations rather than re-deriving them.
   are read from the written equality's sides, either orientation, so
   `lhs == rhs` and `rhs == lhs` are equivalent; the constraint must be
   written as an explicit equality.
+- Cost variables are left unbounded. The defining equality fixes the
+  value, so a `NonNegativeReals` bound adds no information, and it places
+  the optimum exactly on the bound wherever the cost vanishes: settled
+  samples on a long horizon, a tail at equilibrium. Interior-point solvers
+  drag badly there (Hicks at N = 50: 43 iterations with the bound against
+  6 without, identical solutions).
 - Path constraints are not declared; they are the state variables' own bounds.
 - The estimation declarations (measurements, disturbances, arrival cost, and the
   estimation costs) are out of scope here and are specced with the estimation
