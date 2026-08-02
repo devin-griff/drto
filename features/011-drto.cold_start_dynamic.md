@@ -130,3 +130,8 @@ fixed point, the soft pin already satisfied.
   values only as ever: a model cut to a window of the horizon (the
   closed loop's one-sample plant) initializes over the members it
   kept, without recreating what was cut.
+- `point_solves` makes the algebra a choice: `True` (the default) runs
+  the per-point solves as ever; `False` skips them deliberately, the
+  profiles and targets landing without a solve and without the scaled
+  clone, the report saying "skipped (by option)" rather than blaming a
+  missing install. Anything else is a descriptive error.
