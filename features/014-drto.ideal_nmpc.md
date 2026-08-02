@@ -1,6 +1,6 @@
 # drto.ideal_nmpc
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
@@ -176,9 +176,10 @@ single call on the declared model.
 - `tee=True` streams each solve's output and returns it: the history's
   `logs` holds (step, side, text) for every controller and process
   solve in loop order; the default keeps and prints nothing.
-- With an active `scaling_factor` suffix the loop builds each side's
-  scaled clone once and runs every solve and warm start on it; the
-  history lands in the model's own units, and a scaling-tagged hicks loop
+- With an active `scaling_factor` suffix the loop runs every solve and
+  warm start on one persistent scaled clone per side, the cold start's
+  own clone when it left one and a fresh build otherwise; the history
+  lands in the model's own units, and a scaling-tagged hicks loop
   reproduces the unscaled loop's history.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and

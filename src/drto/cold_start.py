@@ -10,11 +10,13 @@ lands exactly on the target at the horizon's end. Its
 DerivativeVar members hold the profile's slope, the controls (and a
 parameterized control's moves) hold their declared targets, and, with
 pyomo-pounce installed, the algebraic variables solve pointwise from
-every equation except the declared dynamics; with an active
-``scaling_factor`` suffix those solves run on a scaled clone and the
-values propagate back. A terminal segment rests at the targets: copies
-and segment controls at the targets, tau derivatives and pin slacks at
-zero.
+every equation except the declared dynamics (``point_solves=False``
+skips them deliberately); with an active
+``scaling_factor`` suffix those solves run on a scaled clone, the
+values propagate back, and the report carries the initialized clone as
+``scaled_model`` for a consumer that wants a persistent scaled model.
+A terminal segment rests at the targets: copies and segment controls
+at the targets, tau derivatives and pin slacks at zero.
 
 Values only, at any stage: the declared discretized model, or after
 ``drto.infinite_horizon``, ``drto.dynamic_optimization``, or

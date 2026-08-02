@@ -18,7 +18,8 @@ the dynamic path runs first.
 
 An active ``scaling_factor`` suffix is honored: the pipeline runs scaled
 and the solved values land in the model's own units, with no change to
-the call.
+the call. A declared disturbance is held at zero for the solve, the
+control-side convention, with the touched fixed flags restored.
 
 pyomo-pounce is optional to drto: it is imported here at call time and a
 missing install raises with the ``pip install drto[pounce]`` instruction.
