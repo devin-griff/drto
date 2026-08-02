@@ -180,3 +180,22 @@ def test_scaling_suffix_scales_the_dynamic_pipeline():
         assert (vd.value is None) == (svd.value is None), svd.name
         if vd.value is not None:
             assert svd.value == pytest.approx(vd.value, abs=1e-7), svd.name
+
+
+def test_a_declared_disturbance_holds_at_zero():
+    # process noise is zero in the nominal equilibrium (gh #44): the
+    # pipeline holds a declared disturbance at zero for the solve, the
+    # control-side convention, and the broadcast lands it at zero with
+    # the fixed flags untouched on the model
+    from test_infinite_horizon import disturbed_model
+
+    m = disturbed_model()
+    for t in m.t:
+        m.w[t].set_value(0.7)  # away from zero, to prove the hold
+    drto.initialize_steady_state(m)
+    for t in m.t:
+        assert pyo.value(m.w[t]) == pytest.approx(0.0)
+        assert not m.w[t].fixed
+    # the equilibrium of dz = u - z + w at w = 0 is z = u
+    t0 = m.t.first()
+    assert pyo.value(m.z[t0]) == pytest.approx(pyo.value(m.u[t0]), abs=1e-6)
