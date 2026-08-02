@@ -20,8 +20,6 @@ Every spec has the same three parts:
   criterion passes.
 
 The specs live in the repository under
-[`features/`](https://github.com/devin-griff/drto/tree/main/features),
-and the
-[design record](https://github.com/devin-griff/drto/blob/main/DESIGN.md)
-holds the cross-cutting decisions. A feature request is a pull request
-adding a spec file under `features/` in the template format.
+[`features/`](https://github.com/devin-griff/drto/tree/main/features).
+A feature request is a pull request adding a spec file under `features/`
+in the template format.
