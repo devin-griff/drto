@@ -75,6 +75,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `cold_start_dynamic` gains `point_solves` (gh #43): `False` skips the
+  per-point algebra solves deliberately, the profiles and targets
+  landing without a solve and without the internal scaled clone, with
+  the report saying so. The profiles-only mode existed only as the
+  missing-install fallback; on large models the algebra cascade is the
+  cost that grows, and the choice belongs to the caller, reaching the
+  closed loop through the `initialize` mapping.
+
 - `initialize_steady_state` holds a declared disturbance at zero for
   the equilibrium solve, the same convention as every control-side
   mode, restoring the fixed flags it touched (gh #44). Previously the

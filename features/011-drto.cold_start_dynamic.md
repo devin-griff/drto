@@ -126,3 +126,8 @@ fixed point, the soft pin already satisfied.
   solves; a model with `Block(time)` structure initializes the same way.
 - Returns a readable report in the feature 010 shape, adding the
   interpolation and the per-point solves.
+- `point_solves` makes the algebra a choice: `True` (the default) runs
+  the per-point solves as ever; `False` skips them deliberately, the
+  profiles and targets landing without a solve and without the scaled
+  clone, the report saying "skipped (by option)" rather than blaming a
+  missing install. Anything else is a descriptive error.
