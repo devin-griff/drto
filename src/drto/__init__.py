@@ -3,7 +3,7 @@
 """drto: dynamic real-time optimization for Pyomo models.
 
 Receding-horizon NMPC and moving horizon estimation for ``pyomo.dae`` models.
-The design is recorded in DESIGN.md and the feature specs under ``features/``;
+The design is recorded in the feature specs under ``features/``;
 the surface fills in feature by feature, starting with the registry
 (``drto.info``).
 """

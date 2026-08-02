@@ -13,8 +13,7 @@ DRTO is a unified framework for dynamic real-time optimization built on Pyomo.
 Alpha, and built spec-first: the surface lands one feature at a time. What is
 implemented today is tracked per feature in
 [`features/README.md`](features/README.md), which is the one place that status
-lives and is kept current as each feature merges. DESIGN.md remains the design
-record.
+lives and is kept current as each feature merges.
 
 ## Install
 
