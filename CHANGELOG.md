@@ -75,6 +75,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `initialize_steady_state` holds a declared disturbance at zero for
+  the equilibrium solve, the same convention as every control-side
+  mode, restoring the fixed flags it touched (gh #44). Previously the
+  disturbance rode the reduction as a free variable and any disturbed
+  model failed with the non-square error.
+
 - The terminal segment's endpoint pin penalty gains a quadratic term
   (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
   the same `mu`. The linear part is the exact L1 pin as before, zero

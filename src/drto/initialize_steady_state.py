@@ -204,46 +204,61 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
                     f"controls={{{name}: value}} or initialize it."
                 )
 
-    # an active scaling_factor suffix: the pipeline runs on a scaled
-    # clone and the values propagate back; the model stays in its own
-    # units, the same contract as cold_start_dynamic's per-point solves
-    scaled = any(
-        s.local_name == "scaling_factor"
-        for s in model.component_objects(Suffix, active=True)
-    )
-    if scaled:
-        xfrm = TransformationFactory("core.scale_model")
-        target = xfrm.create_using(model, rename=False)
-        decisions = list(info(target).components("control"))
-    else:
-        target, decisions = model, list(declared.values())
-    report = pyomo_pounce.initialize(target, decisions=decisions)
-    block = report.block
-    if block is not None and not block.square:
-        detail = []
-        if block.underconstrained_variables:
-            detail.append(
-                "underconstrained (specify or declare as controls): "
-                + ", ".join(block.underconstrained_variables)
-            )
-        if block.overconstrained_constraints:
-            detail.append(
-                "overconstrained (redundant or conflicting): "
-                + ", ".join(block.overconstrained_constraints)
-            )
-        raise ValueError(
-            "drto: initialize_steady_state found a non-square steady "
-            "system, so the equilibrium is not fully determined; "
-            + "; ".join(detail)
-            + ". For deliberately partial initialization call "
-            "pyomo_pounce.initialize directly."
+    # a declared disturbance is process noise, zero in the nominal
+    # equilibrium: held at zero for the solve, the same convention as
+    # every control-side mode, with the touched fixed flags restored
+    # after (gh #44)
+    held_zero = []
+    for comp in reg.components("disturbance"):
+        for vd in comp.values() if comp.is_indexed() else (comp,):
+            if not vd.fixed:
+                vd.set_value(0.0)
+                vd.fix()
+                held_zero.append(vd)
+    try:
+        # an active scaling_factor suffix: the pipeline runs on a scaled
+        # clone and the values propagate back; the model stays in its own
+        # units, the same contract as cold_start_dynamic's per-point solves
+        scaled = any(
+            s.local_name == "scaling_factor"
+            for s in model.component_objects(Suffix, active=True)
         )
-    if scaled:
-        # values only: the throwaway clone's dual and rc suffixes would
-        # make propagate_solution demand an objective to rescale them
-        for _nm in ("dual", "rc"):
-            _c = target.component(_nm)
-            if _c is not None and _c.ctype is Suffix:
-                target.del_component(_c)
-        xfrm.propagate_solution(target, model)
-    return report
+        if scaled:
+            xfrm = TransformationFactory("core.scale_model")
+            target = xfrm.create_using(model, rename=False)
+            decisions = list(info(target).components("control"))
+        else:
+            target, decisions = model, list(declared.values())
+        report = pyomo_pounce.initialize(target, decisions=decisions)
+        block = report.block
+        if block is not None and not block.square:
+            detail = []
+            if block.underconstrained_variables:
+                detail.append(
+                    "underconstrained (specify or declare as controls): "
+                    + ", ".join(block.underconstrained_variables)
+                )
+            if block.overconstrained_constraints:
+                detail.append(
+                    "overconstrained (redundant or conflicting): "
+                    + ", ".join(block.overconstrained_constraints)
+                )
+            raise ValueError(
+                "drto: initialize_steady_state found a non-square steady "
+                "system, so the equilibrium is not fully determined; "
+                + "; ".join(detail)
+                + ". For deliberately partial initialization call "
+                "pyomo_pounce.initialize directly."
+            )
+        if scaled:
+            # values only: the throwaway clone's dual and rc suffixes would
+            # make propagate_solution demand an objective to rescale them
+            for _nm in ("dual", "rc"):
+                _c = target.component(_nm)
+                if _c is not None and _c.ctype is Suffix:
+                    target.del_component(_c)
+            xfrm.propagate_solution(target, model)
+        return report
+    finally:
+        for vd in held_zero:
+            vd.unfix()
