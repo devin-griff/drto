@@ -135,3 +135,9 @@ fixed point, the soft pin already satisfied.
   profiles and targets landing without a solve and without the scaled
   clone, the report saying "skipped (by option)" rather than blaming a
   missing install. Anything else is a descriptive error.
+- When the solves ran scaled, the report carries the initialized scaled
+  clone as `scaled_model`, its factor map riding on it, so a consumer
+  that wants a persistent scaled model (the closed loop) adopts it
+  instead of deep-copying again; it is `None` without scaling, without
+  pounce, or with the solves skipped, and it lives as long as the
+  report does.

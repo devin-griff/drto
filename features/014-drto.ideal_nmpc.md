@@ -108,10 +108,11 @@ step, the side (controller or process), and the solver's text. The
 default is quiet, nothing streamed, nothing kept.
 
 An active `scaling_factor` suffix is honored the way the initializers
-honor it: the loop builds the controller's and the process's scaled
-clones once, runs every solve and warm start on those clones for the
-whole loop, and reads the history back in the model's own units. The
-feedback hooks are Params and stay physical.
+honor it: the loop runs every solve and warm start on one persistent
+scaled clone per side for the whole loop, adopting the cold start's own
+clone when it left one and building it otherwise, and reads the history
+back in the model's own units. The feedback hooks are Params and stay
+physical.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the

@@ -415,6 +415,34 @@ def test_tee_streams_and_returns_every_solves_output(capsys):
     assert "Number of Iterations" not in capsys.readouterr().out
 
 
+@needs_ipopt
+def test_the_loop_adopts_the_cold_starts_scaled_clone(monkeypatch):
+    reports, seen = [], []
+    real_cold = loop_module.cold_start_dynamic
+
+    def spy_cold(mm, **kw):
+        r = real_cold(mm, **kw)
+        reports.append(r)
+        return r
+
+    class Rec(_Recorder):
+        def solve(self, model, **kwds):
+            seen.append(model)
+            return super().solve(model, **kwds)
+
+    monkeypatch.setattr(loop_module, "cold_start_dynamic", spy_cold)
+    rec = Rec(pyo.SolverFactory("ipopt"))
+    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    m = loop_model()
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for vd in m.z.values():
+        m.scaling_factor[vd] = 2.0
+    drto.ideal_nmpc(m, steps=1, solver="ipopt")
+    # the solve models are the cold start's own clones, not re-copies
+    assert seen[0] is reports[0].scaled_model
+    assert seen[1] is reports[1].scaled_model
+
+
 # ── scaling ──────────────────────────────────────────────────────────────────
 
 

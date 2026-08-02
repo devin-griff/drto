@@ -54,6 +54,11 @@ class ColdStartReport:
     segment: str = "(none attached)"
     point_solves: str = "skipped (pyomo-pounce not installed)"
     pipeline: object = None
+    #: The initialized scaled clone, when the solves ran scaled (its
+    #: factor map rides on it as ``component_scaling_factor_map``); the
+    #: closed loop adopts it as its persistent solve model (gh #42).
+    #: Lives as long as the report does; drop the report to release it.
+    scaled_model: object = None
     notes: list = field(default_factory=list)
 
     def __str__(self):
@@ -352,4 +357,5 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
                     pyo.value(vs) / (fmap[vs] if vs in fmap else 1.0),
                     skip_validation=True,
                 )
+        report.scaled_model = solve_m
     return report

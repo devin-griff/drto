@@ -385,10 +385,11 @@ def ideal_nmpc(
     # the controller and the process cold-start alike, so the plant's
     # first simulation starts initialized too; the plant is already cut,
     # so its cold start is one element's worth
+    ctrl_cold = plant_cold = None
     if initialize == "cold" or isinstance(initialize, Mapping):
         opts = {} if initialize == "cold" else dict(initialize)
-        cold_start_dynamic(m, **opts)
-        cold_start_dynamic(process, **opts)
+        ctrl_cold = cold_start_dynamic(m, **opts)
+        plant_cold = cold_start_dynamic(process, **opts)
 
     # an active scaling_factor suffix: the loop runs both sides on scaled
     # clones, built once, and reads back in the model's own units
@@ -397,9 +398,17 @@ def ideal_nmpc(
         for s in m.component_objects(Suffix, active=True)
     )
     if scaled:
+        # the cold start already built and initialized each side's
+        # scaled clone; adopt it instead of deep-copying again (gh #42),
+        # building one only when the cold start left none (steady or
+        # skipped initialization, point solves off)
         xfrm = TransformationFactory("core.scale_model")
-        ctrl = xfrm.create_using(m, rename=False)
-        plant = xfrm.create_using(process, rename=False)
+        ctrl = getattr(ctrl_cold, "scaled_model", None) or xfrm.create_using(
+            m, rename=False
+        )
+        plant = getattr(plant_cold, "scaled_model", None) or xfrm.create_using(
+            process, rename=False
+        )
         fmap = ctrl.component_scaling_factor_map
         pmap = plant.component_scaling_factor_map
     else:
