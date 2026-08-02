@@ -84,7 +84,7 @@ def _target(pairings, comp, kind, fn):
     )
 
 
-def cold_start_dynamic(m, profile="linear", time_constant=None):
+def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=True):
     """Initialize ``m`` from its declared initial condition to its declared
     steady-state targets; see the module docstring.
 
@@ -92,7 +92,11 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
     ``"exponential"`` (a normalized decay landing exactly on the target
     at the horizon's end). ``time_constant`` is the decay's time
     constant in the horizon's own units, a third of the horizon when not
-    given; it belongs to the exponential profile only.
+    given; it belongs to the exponential profile only. ``point_solves``
+    is the algebra choice: ``True`` (the default) runs the per-point
+    solves, ``False`` skips them deliberately, the profiles and targets
+    landing without a solve, the scaled clone never built, and the
+    report saying so.
 
     Returns a :class:`ColdStartReport`; values only, nothing added or
     removed, and the fixed flags are untouched.
@@ -102,6 +106,11 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
         raise ValueError(
             f"drto: {fn}: unknown profile '{profile}'; the profiles are "
             f"'linear' and 'exponential'."
+        )
+    if point_solves not in (True, False):
+        raise ValueError(
+            f"drto: {fn}: point_solves is True (run the per-point algebra "
+            f"solves) or False (skip them); got {point_solves!r}."
         )
     if time_constant is not None:
         if profile != "exponential":
@@ -258,6 +267,11 @@ def cold_start_dynamic(m, profile="linear", time_constant=None):
     # close keeps its value and is reported underconstrained. With an
     # active scaling_factor suffix the solves run on a scaled clone and
     # the values propagate back; the model stays in its own units.
+    if not point_solves:
+        # the deliberate skip: the profiles and targets are the whole
+        # initialization, no clone, no solve
+        report.point_solves = "skipped (by option)"
+        return report
     if not pounce_available:
         return report
     scaled = any(

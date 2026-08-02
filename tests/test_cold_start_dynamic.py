@@ -262,3 +262,23 @@ def test_residue_algebra_solves_in_the_point_solves():
         if con.parent_component() is m.bal:
             continue
         assert abs(pyo.value(con.body) - pyo.value(con.lower)) < 1e-6, con.name
+
+
+def test_point_solves_false_skips_the_algebra_deliberately():
+    # the profiles-only mode as a choice (gh #43): sentinel algebraic
+    # values survive, and the report names the option, not a missing
+    # install
+    pytest.importorskip("pyomo_pounce")
+    m = seeded()
+    for t in m.t:
+        m.cost[t].set_value(123.25)
+    report = drto.cold_start_dynamic(m, point_solves=False)
+    assert all(pyo.value(m.cost[t]) == 123.25 for t in m.t)
+    assert report.point_solves == "skipped (by option)"
+    # the states still ran their profile: the ramp landed
+    assert pyo.value(m.z[sorted(m.t)[-1]]) == pytest.approx(0.5)
+
+
+def test_point_solves_rejects_non_booleans():
+    with pytest.raises(ValueError, match="point_solves"):
+        drto.cold_start_dynamic(seeded(), point_solves="maybe")
