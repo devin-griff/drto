@@ -50,8 +50,8 @@ from pyomo.core.expr import identify_variables, replace_expressions
 from pyomo.dae import DerivativeVar
 from pyomo.network import Port
 
-from drto.declarations import _side_matching, pyomo_cvp_available
-from drto.infinite_horizon import _is_derivative, _split_index, _time_index
+from drto.declarations import _dynamics_sides, pyomo_cvp_available
+from drto.infinite_horizon import _split_index, _time_index
 from drto.info import info
 
 #: The declarations the transform requires.
@@ -109,12 +109,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 covered.add(id(vd.parent_component()))
         for con in reg.components("dynamics"):
             for cd in con.values() if con.is_indexed() else (con,):
-                side, _ = _side_matching(
-                    cd,
-                    _is_derivative,
-                    "dynamic_to_steady_state",
-                    "a DerivativeVar (dz/dt)",
-                )
+                side, _coeff, _ = _dynamics_sides(cd, time, "dynamic_to_steady_state")
                 if id(side.parent_component().get_state_var()) not in covered:
                     raise ValueError(
                         f"drto: dynamic_to_steady_state: '{cd.name}' "

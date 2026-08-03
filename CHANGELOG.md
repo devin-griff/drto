@@ -105,6 +105,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.dynamics` reads the derivative side through its coefficients
+  (gh #51): a dynamics row's derivative side may be the DerivativeVar
+  multiplied by derivative-free factors, IDAES `ControlVolume1D`'s
+  `length * accumulation` idiom, with a side differentiated along the
+  declared time set winning over a spatial-derivative side in either
+  orientation. The steady reduction and the terminal segment read the
+  same shape, the segment carrying the coefficient onto the dilated
+  tail dynamics, verified equivalent to the hand-divided bare form
+  through a live tail. The PrOMMiS mixer-settler's settler balances,
+  the motivating model, declare cleanly.
+
 - The closed loop adopts the cold start's scaled clone (gh #42): the
   cold start's report carries the initialized clone as `scaled_model`,
   and the loop takes it as the persistent solve model instead of
