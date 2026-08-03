@@ -57,7 +57,7 @@ unmodified IDAES models.
 - [Advanced step on the IDAES CSTR](notebooks/cstr_advanced_step.ipynb)
   — solve at a prediction, correct at the measurement without
   re-solving: the implemented moves within half a percent of the warm
-  re-solve, twenty times faster.
+  re-solve, twenty-five times faster.
 - [Ideal NMPC on the IDAES CSTR](notebooks/cstr_ideal_nmpc.ipynb) —
   the closed loop in one call: measure, solve, implement, simulate,
   the cold start then warm-started re-solves on persistent scaled
