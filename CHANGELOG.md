@@ -80,7 +80,7 @@ All notable changes to this project are documented here. The format is based on
   the scaling suffix serves the cold start and then deactivates, since
   the solver-facing keys are presolved away) and reads the correction
   against a warm re-solve: an order of magnitude faster with the
-  implemented moves within half a percent.
+  implemented moves within a percent.
 
 - Cold start (feature 011). `drto.cold_start_dynamic(m)` initializes a
   dynamic model from its declared initial condition to its declared
