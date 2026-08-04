@@ -473,9 +473,9 @@ def _register_dynamics(components):
     if not states:
         raise ValueError(f"drto: {fn} requires drto.state first.")
     # a container with any declared member is covered: a state may be a
-    # Reference over a member subset (gh #20), and the rows differentiating
-    # the undeclared members are the algebraic residue the transforms
-    # replicate as written
+    # Reference over a member subset (gh #20); the rows differentiating
+    # the undeclared members stay algebraic, and the transforms
+    # replicate them as written
     covered = {id(s) for s in states}
     for s in states:
         for vd in s.values() if s.is_indexed() else (s,):

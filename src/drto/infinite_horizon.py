@@ -30,8 +30,8 @@ freedoms allow). A pin requires a declared ``drto.steady_state`` target for
 every state.
 
 States may carry index sets besides time; copies, linking, and replication
-run per member. Algebraic variables and equations ride along without being
-declared: any time-indexed variable the replicated equations reference that
+run per member. Algebraic variables and equations need no declarations:
+any time-indexed variable the replicated equations reference that
 is not a declared state or control gets a segment copy, and every active
 time-indexed constraint not declared as something else (and not a
 discretization artifact of the declared time set) is replicated at the
@@ -370,7 +370,7 @@ class InfiniteHorizonTransformation(Transformation):
         # of a packed Var (gh #20). A container with any declared member is
         # covered for the derivative checks, and the undeclared members of
         # a covered container (with their derivatives) copy per member as
-        # the algebraic residue.
+        # algebraic rows for the undeclared members.
         state_member = {}
         for z in states:
             zpos, zsubs = _time_index(z, time)
@@ -381,7 +381,7 @@ class InfiniteHorizonTransformation(Transformation):
         for z in states:
             for vd in z.values():
                 covered.add(id(vd.parent_component()))
-        flat_partial = {}  # container -> set of residue combos referenced
+        flat_partial = {}  # container -> undeclared member combos referenced
 
         # --- index layout helpers -------------------------------------
         layout = {}
@@ -565,15 +565,15 @@ class InfiniteHorizonTransformation(Transformation):
                 elif id(v) in state_member or id(v) in control_data:
                     pass  # routed to the declared component's copy
                 elif isinstance(comp, DerivativeVar):
-                    # a residue member's derivative copies per member; a
-                    # declared member's maps to the dilated segment deriv
+                    # an undeclared member's derivative copies per member;
+                    # a declared member's maps to the dilated segment deriv
                     xvd = comp.get_state_var()[v.index()]
                     if id(xvd) not in state_member:
                         o2, _t2 = _split_index(v.index(), pos, len(subs))
                         flat_partial.setdefault(comp, set()).add(o2)
                 elif id(comp) in covered:
-                    # a partially declared container: the residue member
-                    # copies per member, not the container wholesale
+                    # a partially declared container: the undeclared
+                    # member copies alone, not the container wholesale
                     o2, _t2 = _split_index(v.index(), pos, len(subs))
                     flat_partial.setdefault(comp, set()).add(o2)
                 elif comp not in states_set and comp not in controls_set:
@@ -589,8 +589,8 @@ class InfiniteHorizonTransformation(Transformation):
                 zvd = deriv_side.parent_component().get_state_var()[deriv_side.index()]
                 hit = state_member.get(id(zvd))
                 if hit is None:
-                    # a row differentiating an undeclared member is the
-                    # residue: replicated as written, an algebraic equation
+                    # a row differentiating an undeclared member is
+                    # replicated as written, an algebraic equation
                     # determining the member's derivative copy
                     _scan(cd.expr, t_rep, cd.name)
                     residue[o] = (cd.expr, t_rep)
@@ -687,8 +687,8 @@ class InfiniteHorizonTransformation(Transformation):
                 _note_defined(rhs, flat_too=False)
                 if coeff is not None:
                     _note_defined(coeff, flat_too=False)
-        # a residue row replicated as written is the defining equation of
-        # the residue member's derivative copy
+        # an undeclared member's row replicated as written is the
+        # defining equation of the member's derivative copy
         for residue in dyn_residue.values():
             for expr, _t in residue.values():
                 _note_defined(expr)
@@ -777,7 +777,7 @@ class InfiniteHorizonTransformation(Transformation):
             v = bseg[key]
             return v[tuple(o) + (s,)] if o else v[s]
 
-        # residue members of partially declared containers copy per member,
+        # undeclared members of partially declared containers copy per member,
         # over a set of the referenced combos, not the container wholesale
         pseg = {}
 
@@ -854,7 +854,7 @@ class InfiniteHorizonTransformation(Transformation):
                             continue
                         hit = state_member.get(id(dv.get_state_var()[idx]))
                         if hit is None:
-                            continue  # residue: the partial loop maps it
+                            continue  # undeclared: the member loop maps it
                         z, zo = hit
                         dseg = derivs[z]
                         seg_deriv = dseg[tuple(zo) + (s,)] if zo else dseg[s]
@@ -946,7 +946,7 @@ class InfiniteHorizonTransformation(Transformation):
                 lhs = blk.gamma * (1 - s**2) * deriv
                 if coeff is not None:
                     # the written side's fixed coefficient (an IDAES CV1D's
-                    # length) rides the dilated derivative unchanged
+                    # length) multiplies the dilated derivative unchanged
                     lhs = replace_expressions(coeff, _emap(t_rep, s)) * lhs
                 return lhs == replace_expressions(rhs, _emap(t_rep, s))
 
@@ -994,7 +994,7 @@ class InfiniteHorizonTransformation(Transformation):
             alg_rows[con] = Constraint(*others, b.tau_i, rule=alg_rule)
             b.add_component(_fresh(con.local_name, con.name), alg_rows[con])
 
-        # --- residue rows of the declared dynamics, replicated as written
+        # --- the undeclared members' dynamics rows, replicated as written
         # at the interior collocation points like algebraic equations -----
         residues = {}
         for con, residue in dyn_residue.items():

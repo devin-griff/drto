@@ -101,8 +101,8 @@ class DynamicToSteadyStateTransformation(Transformation):
         # a state may be a Reference over a member subset of a packed Var
         # (gh #20): a container with any declared member is covered, its
         # dynamics rows accepted and every one of its accumulations pinned
-        # at zero, the residue members' too, since steady state is steady
-        # for the residue
+        # at zero, the undeclared members' too, since steady state is
+        # steady for them as well
         covered = {id(s) for s in states_set}
         for s in states_set:
             for vd in s.values() if s.is_indexed() else (s,):
@@ -267,8 +267,8 @@ class DynamicToSteadyStateTransformation(Transformation):
             parent.add_component(name, new)
             if id(comp) in deriv_ids:
                 # zero at steady state, by definition: every accumulation
-                # of a covered container rests, the residue members too,
-                # which is what closes the residue rows at the point (the
+                # of a covered container rests, the undeclared members'
+                # too, which is what closes their rows at the point (the
                 # water balance determining the outlet flow)
                 for vd in new.values() if new.is_indexed() else (new,):
                     vd.set_value(0.0)
