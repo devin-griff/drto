@@ -370,7 +370,7 @@ class InfiniteHorizonTransformation(Transformation):
         # of an indexed Var (gh #20). A container with any declared member is
         # covered for the derivative checks, and the undeclared members of
         # a covered container (with their derivatives) copy per member as
-        # algebraic equations for the entries never declared as states.
+        # algebraic equations like any other.
         state_member = {}
         for z in states:
             zpos, zsubs = _time_index(z, time)
@@ -381,7 +381,7 @@ class InfiniteHorizonTransformation(Transformation):
         for z in states:
             for vd in z.values():
                 covered.add(id(vd.parent_component()))
-        flat_partial = {}  # indexed Var -> its referenced non-state entries
+        flat_partial = {}  # indexed Var -> its referenced algebraic entries
 
         # --- index layout helpers -------------------------------------
         layout = {}
@@ -565,16 +565,16 @@ class InfiniteHorizonTransformation(Transformation):
                 elif id(v) in state_member or id(v) in control_data:
                     pass  # routed to the declared component's copy
                 elif isinstance(comp, DerivativeVar):
-                    # the derivative of an entry never declared as a state
-                    # copies entry by entry; a declared state's derivative
-                    # maps to the dilated segment derivative
+                    # an algebraic entry's derivative copies entry by
+                    # entry; a declared state's derivative maps to the
+                    # dilated segment derivative
                     xvd = comp.get_state_var()[v.index()]
                     if id(xvd) not in state_member:
                         o2, _t2 = _split_index(v.index(), pos, len(subs))
                         flat_partial.setdefault(comp, set()).add(o2)
                 elif id(comp) in covered:
                     # only some entries of this Var are states: the
-                    # non-state entry copies alone, not the whole Var
+                    # algebraic entry copies alone, not the whole Var
                     o2, _t2 = _split_index(v.index(), pos, len(subs))
                     flat_partial.setdefault(comp, set()).add(o2)
                 elif comp not in states_set and comp not in controls_set:
@@ -688,8 +688,8 @@ class InfiniteHorizonTransformation(Transformation):
                 _note_defined(rhs, flat_too=False)
                 if coeff is not None:
                     _note_defined(coeff, flat_too=False)
-        # a non-state entry's balance replicated as written is the
-        # defining equation of that entry's derivative copy
+        # an algebraic entry's balance, replicated as written, defines
+        # that entry's derivative copy
         for residue in dyn_residue.values():
             for expr, _t in residue.values():
                 _note_defined(expr)
@@ -778,7 +778,7 @@ class InfiniteHorizonTransformation(Transformation):
             v = bseg[key]
             return v[tuple(o) + (s,)] if o else v[s]
 
-        # non-state entries of partly-state indexed Vars copy entry by entry,
+        # algebraic entries of partly declared Vars copy entry by entry,
         # over a set of the referenced combos, not the container wholesale
         pseg = {}
 
@@ -995,7 +995,7 @@ class InfiniteHorizonTransformation(Transformation):
             alg_rows[con] = Constraint(*others, b.tau_i, rule=alg_rule)
             b.add_component(_fresh(con.local_name, con.name), alg_rows[con])
 
-        # --- balances of entries never declared as states, as written
+        # --- the algebraic entries' balances, replicated as written
         # at the interior collocation points like algebraic equations -----
         residues = {}
         for con, residue in dyn_residue.items():

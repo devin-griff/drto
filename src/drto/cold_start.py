@@ -309,8 +309,8 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
                 con.deactivate()
     # the terminal segment mirrors the finite horizon: its state and
     # control copies are held at the values set above, and set aside are
-    # its copies of the declared dynamics, including the balance
-    # equations of entries never declared as states (the water holdup)
+    # its copies of the declared dynamics, including the algebraic
+    # entries' balances (the water holdup)
     # plus the rows those values satisfy by construction (the link, the
     # continuity, the pin), which would otherwise re-solve held copies.
     # The pin slacks then sit in no active row and stay at zero, and a
