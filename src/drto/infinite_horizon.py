@@ -34,7 +34,13 @@ run per member. Algebraic variables and equations ride along without being
 declared: any time-indexed variable the replicated equations reference that
 is not a declared state or control gets a segment copy, and every active
 time-indexed constraint not declared as something else (and not a
-discretization artifact) is replicated at the interior collocation points.
+discretization artifact of the declared time set) is replicated at the
+interior collocation points. A time-indexed Block family may carry further
+indices (an IDAES stage element, a spatial node): each non-time combination
+replicates as its own family. A derivative over another ContinuousSet (a
+spatial axis) is ordinary algebra, its discretization rows replicating with
+it, and same-named components from different units take distinct segment
+names.
 A replicated equation may reference a declared state's derivative (the
 index-reduced energy-balance case): the reference maps to the segment
 derivative with the dilation factor, the same rewrite the dynamics get.
@@ -419,16 +425,32 @@ class InfiniteHorizonTransformation(Transformation):
             "terminal_constraint",
         ):
             declared_cons.update(reg.components(kind))
+
+        def _time_artifact(con):
+            """Whether a pyomo.dae artifact belongs to the declared time
+            set. A discretization equation is the time set's when its
+            derivative is taken with respect to it; one over another
+            ContinuousSet (a spatial axis) is real algebra the segment
+            must replicate (a settler's ``material_flow_dx_disc_eq``).
+            Continuity rows carry no derivative and arise from the
+            declared-time collocation in the meshes drto supports."""
+            cd = next(iter(con.values())) if con.is_indexed() else con
+            for v in identify_variables(cd.body, include_fixed=True):
+                dv = v.parent_component()
+                if isinstance(dv, DerivativeVar):
+                    return time in dv.get_continuousset_list()
+            return True
+
         alg_cons = []
         for con in model.component_objects(Constraint, active=True):
             # pyomo.dae artifacts: collocation equations ('_disc_') and the
             # Legendre continuity equations ('_cont_eq'); the segment builds
             # its own discretization with its own continuity
+            if con in declared_cons:
+                continue
             if (
-                con in declared_cons
-                or "_disc_" in con.local_name
-                or con.local_name.endswith("_cont_eq")
-            ):
+                "_disc_" in con.local_name or con.local_name.endswith("_cont_eq")
+            ) and _time_artifact(con):
                 continue
             pos, _ = _time_index(con, time)
             if pos is None:
@@ -439,9 +461,12 @@ class InfiniteHorizonTransformation(Transformation):
         block_alg = {}  # (Block component, member-local name) -> own subsets
 
         def _block_key(v, where=None):
-            """(B, t, local_name) for data reached through a time-indexed
-            Block member, or None. With ``where`` set, unsupported shapes
-            raise; without it they return None (the guard's silent mode)."""
+            """(B, other-coords, t, local_name) for data reached through a
+            time-indexed Block member, or None. A Block family may carry
+            indices besides time (an IDAES stage or a spatial node); each
+            non-time combination is its own family, replicated separately.
+            With ``where`` set, unsupported shapes raise; without it they
+            return None (the guard's silent mode)."""
             comp = v.parent_component()
             first = comp.parent_block()
             bd, found = first, None
@@ -459,15 +484,6 @@ class InfiniteHorizonTransformation(Transformation):
                                 f"is not supported."
                             )
                         return None
-                    if len(bsubs) != 1:
-                        if where:
-                            raise ValueError(
-                                f"drto: infinite_horizon cannot replicate "
-                                f"'{where}': '{pc.name}' is indexed by more "
-                                f"than the declared time set, which is not "
-                                f"supported."
-                            )
-                        return None
                     if bd is not first:
                         if where:
                             raise ValueError(
@@ -477,22 +493,33 @@ class InfiniteHorizonTransformation(Transformation):
                                 f"'{bd.name}', which is not supported."
                             )
                         return None
-                    found = (pc, bd.index(), comp.local_name)
+                    bo, bt = _split_index(bd.index(), bpos, len(bsubs))
+                    found = (pc, bo, bt, comp.local_name)
                 bd = bd.parent_block()
             return found
+
+        def _bpos(B):
+            return _time_index(B, time)[0]
+
+        def _bname(bo):
+            """A component-name fragment for a Block's non-time coords."""
+            return "".join(f"_{str(x).replace('.', 'p')}" for x in bo)
 
         def _scan(expr, t_rep, where):
             """Validate a template; collect the algebraic components."""
             for v in identify_variables(expr, include_fixed=True):
                 comp = v.parent_component()
-                if isinstance(comp, DerivativeVar):
+                if isinstance(
+                    comp, DerivativeVar
+                ) and comp.get_continuousset_list() == [time]:
                     # a declared state's time derivative is allowed: the
                     # replication maps it to the segment derivative with
                     # the dilation factor, the same rewrite the dynamics
-                    # get (an index-reduced energy balance is the real case)
-                    if id(
-                        comp.get_state_var()
-                    ) not in covered or comp.get_continuousset_list() != [time]:
+                    # get (an index-reduced energy balance is the real case).
+                    # A derivative over another ContinuousSet (a spatial
+                    # axis) is ordinary algebra: copied per member, closed
+                    # by its replicated discretization equation
+                    if id(comp.get_state_var()) not in covered:
                         raise ValueError(
                             f"drto: infinite_horizon cannot replicate "
                             f"'{where}': it references the derivative "
@@ -505,7 +532,7 @@ class InfiniteHorizonTransformation(Transformation):
                     bb = _block_key(v, where)
                     if bb is None:
                         continue  # time-invariant: shared as-is
-                    B, tb, lname = bb
+                    B, bo, tb, lname = bb
                     if tb != t_rep:
                         raise ValueError(
                             f"drto: infinite_horizon cannot replicate "
@@ -519,8 +546,8 @@ class InfiniteHorizonTransformation(Transformation):
                         # member family here would shadow it in the
                         # expression map and orphan the control copy
                         pass
-                    elif (B, lname) not in block_alg:
-                        block_alg[(B, lname)] = (
+                    elif (B, bo, lname) not in block_alg:
+                        block_alg[(B, bo, lname)] = (
                             list(comp.index_set().subsets())
                             if comp.is_indexed()
                             else []
@@ -594,13 +621,13 @@ class InfiniteHorizonTransformation(Transformation):
 
         def _collect_block_cons():
             grew = False
-            for B in {B for (B, _) in block_alg}:
-                if B in bexamined:
+            for B, bo in {(B, bo) for (B, bo, _) in block_alg}:
+                if (B, bo) in bexamined:
                     continue
-                bexamined.add(B)
+                bexamined.add((B, bo))
                 grew = True
                 rep_t = t_end
-                member = B[rep_t]
+                member = B[_join_index(bo, rep_t, _bpos(B))]
                 for c in member.component_objects(Constraint, active=True):
                     entries = {}
                     if c.is_indexed():
@@ -611,7 +638,7 @@ class InfiniteHorizonTransformation(Transformation):
                         entries[()] = (c.expr, rep_t)
                     for o, (e, tr) in entries.items():
                         _scan(e, tr, f"{member.name}.{c.local_name}")
-                    bcons[(B, c.local_name)] = (
+                    bcons[(B, bo, c.local_name)] = (
                         list(c.index_set().subsets()) if c.is_indexed() else [],
                         entries,
                     )
@@ -640,7 +667,7 @@ class InfiniteHorizonTransformation(Transformation):
                     defined.add(v.parent_component())
                 bb = _block_key(v)
                 if bb is not None:
-                    bdefined.add((bb[0], bb[2]))
+                    bdefined.add((bb[0], bb[1], bb[3]))
 
         for entries in alg_reps.values():
             for expr, _ in entries.values():
@@ -660,12 +687,18 @@ class InfiniteHorizonTransformation(Transformation):
                 _note_defined(rhs, flat_too=False)
                 if coeff is not None:
                     _note_defined(coeff, flat_too=False)
+        # a residue row replicated as written is the defining equation of
+        # the residue member's derivative copy
+        for residue in dyn_residue.values():
+            for expr, _t in residue.values():
+                _note_defined(expr)
         _note_defined(psi, flat_too=False)
         for key in block_alg:
             if key not in bdefined:
-                B, lname = key
+                B, bo, lname = key
+                at = "[t]" if not bo else f"[t, {', '.join(map(str, bo))}]"
                 raise ValueError(
-                    f"drto: infinite_horizon copies '{B.name}[t].{lname}' to "
+                    f"drto: infinite_horizon copies '{B.name}{at}.{lname}' to "
                     f"the segment, but no replicated equation involves it; "
                     f"its defining equation must live in the Block members "
                     f"or be indexed by the declared time set '{time.name}'."
@@ -678,6 +711,19 @@ class InfiniteHorizonTransformation(Transformation):
                     f"defining equation must be indexed by the declared "
                     f"time set '{time.name}'."
                 )
+        # the same strictness for partially copied containers: their
+        # members appearing only in the dilated dynamics would be free
+        # inputs on the tail (a spatial flow derivative whose
+        # discretization row was mistaken for a time artifact)
+        for pcomp in flat_partial:
+            if pcomp not in defined:
+                raise ValueError(
+                    f"drto: infinite_horizon copies members of "
+                    f"'{pcomp.name}' to the segment, but no replicated "
+                    f"equation involves them; their defining equations "
+                    f"must be indexed by the declared time set "
+                    f"'{time.name}'."
+                )
 
         # --- the segment block ----------------------------------------
         b = Block(concrete=True)
@@ -685,6 +731,19 @@ class InfiniteHorizonTransformation(Transformation):
         b.tau = ContinuousSet(bounds=(0, 1))
         b.gamma = Param(initialize=1.0, mutable=True)
         b.beta = Param(initialize=config.beta, mutable=True)
+
+        def _fresh(base, full):
+            """A segment-unique component name: the local name, or the
+            sanitized full path when two model components share it (the
+            two settlers of a mixer-settler both carry ``_flow_terms``)."""
+            if b.component(base) is None:
+                return base
+            alt = "".join(
+                ch if ch.isalnum() or ch == "_" else "_" for ch in full
+            ).strip("_")
+            while b.component(alt) is not None:
+                alt += "_"
+            return alt
 
         seg = {}
         for comp in list(states) + list(controls):
@@ -708,8 +767,8 @@ class InfiniteHorizonTransformation(Transformation):
                 (i if isinstance(i, tuple) else (i,)) for i in itertools.product(*bsubs)
             ]
 
-        def _bmember(B, lname, o, t):
-            c = getattr(B[t], lname)
+        def _bmember(B, bo, lname, o, t):
+            c = getattr(B[_join_index(bo, t, _bpos(B))], lname)
             if not o:
                 return c
             return c[o if len(o) > 1 else o[0]]
@@ -783,10 +842,10 @@ class InfiniteHorizonTransformation(Transformation):
                 for comp in seg:
                     for o in _combos(comp):
                         mmap[id(_member(comp, o, t_rep))] = _seg_at(comp, o, s)
-                for (B, lname), bsubs in block_alg.items():
+                for (B, bo, lname), bsubs in block_alg.items():
                     for o in _bcombos(bsubs):
-                        mmap[id(_bmember(B, lname, o, t_rep))] = _bseg_at(
-                            (B, lname), o, s
+                        mmap[id(_bmember(B, bo, lname, o, t_rep))] = _bseg_at(
+                            (B, bo, lname), o, s
                         )
                 for dv, dpos, dn in deriv_infos:
                     for idx, dvd in dv.items():
@@ -844,13 +903,19 @@ class InfiniteHorizonTransformation(Transformation):
                 if others
                 else Var(b.tau_i, units=_units_of(comp))
             )
-            b.add_component(comp.local_name, v)
+            b.add_component(_fresh(comp.local_name, comp.name), v)
             seg[comp] = v
-        for (B, lname), bsubs in block_alg.items():
-            u_b = _units_of(getattr(B[t_end], lname))
+        for (B, bo, lname), bsubs in block_alg.items():
+            u_b = _units_of(getattr(B[_join_index(bo, t_end, _bpos(B))], lname))
             v = Var(*bsubs, b.tau_i, units=u_b) if bsubs else Var(b.tau_i, units=u_b)
-            b.add_component(f"{B.local_name}_{lname}", v)
-            bseg[(B, lname)] = v
+            b.add_component(
+                _fresh(
+                    f"{B.local_name}{_bname(bo)}_{lname}",
+                    f"{B.name}{_bname(bo)}_{lname}",
+                ),
+                v,
+            )
+            bseg[(B, bo, lname)] = v
         for pcomp, combos in flat_partial.items():
             u_p = _units_of(pcomp)
             pset = sorted(combos)
@@ -859,7 +924,9 @@ class InfiniteHorizonTransformation(Transformation):
             else:
                 cset = Set(initialize=pset, dimen=len(pset[0]))
                 v = Var(cset, b.tau_i, units=u_p)
-            b.add_component(f"{pcomp.local_name}_members", v)
+            b.add_component(
+                _fresh(f"{pcomp.local_name}_members", f"{pcomp.name}_members"), v
+            )
             pseg[pcomp] = v
 
         # --- dilated dynamics at interior collocation points (eq. 25) ---
@@ -884,12 +951,12 @@ class InfiniteHorizonTransformation(Transformation):
                 return lhs == replace_expressions(rhs, _emap(t_rep, s))
 
             dyn_copies[con] = Constraint(*others, b.tau_i, rule=dyn_rule)
-            b.add_component(con.local_name, dyn_copies[con])
+            b.add_component(_fresh(con.local_name, con.name), dyn_copies[con])
 
         block_rows = {}
         # --- member-internal equations, replicated at the interior
         # collocation points exactly like flat algebraic equations ------
-        for (B, cname), (csubs, entries) in bcons.items():
+        for (B, bo, cname), (csubs, entries) in bcons.items():
 
             def bcon_rule(blk, *idx, _entries=entries):
                 sp = idx[-1]
@@ -899,8 +966,14 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, tr = _entries[o]
                 return replace_expressions(expr, _emap(tr, sp))
 
-            block_rows[(B, cname)] = Constraint(*csubs, b.tau_i, rule=bcon_rule)
-            b.add_component(f"{B.local_name}_{cname}", block_rows[(B, cname)])
+            block_rows[(B, bo, cname)] = Constraint(*csubs, b.tau_i, rule=bcon_rule)
+            b.add_component(
+                _fresh(
+                    f"{B.local_name}{_bname(bo)}_{cname}",
+                    f"{B.name}{_bname(bo)}_{cname}",
+                ),
+                block_rows[(B, bo, cname)],
+            )
 
         alg_rows = {}
         # --- algebraic equations, replicated as written at the interior
@@ -919,7 +992,7 @@ class InfiniteHorizonTransformation(Transformation):
                 return replace_expressions(expr, _emap(t_rep, s))
 
             alg_rows[con] = Constraint(*others, b.tau_i, rule=alg_rule)
-            b.add_component(con.local_name, alg_rows[con])
+            b.add_component(_fresh(con.local_name, con.name), alg_rows[con])
 
         # --- residue rows of the declared dynamics, replicated as written
         # at the interior collocation points like algebraic equations -----
@@ -937,7 +1010,10 @@ class InfiniteHorizonTransformation(Transformation):
                 return replace_expressions(expr, _emap(tr, sp))
 
             residues[con] = Constraint(*others, b.tau_i, rule=res_rule)
-            b.add_component(con.local_name + "_residue", residues[con])
+            b.add_component(
+                _fresh(con.local_name + "_residue", con.name + "_residue"),
+                residues[con],
+            )
 
         # --- gamma: the mesh rule, or the explicit override ---
         tau11 = sorted(b.tau)[1]
@@ -970,11 +1046,11 @@ class InfiniteHorizonTransformation(Transformation):
                     if comp in algebraic and src.fixed:
                         v.fix()
 
-        for (B, lname), bsubs in block_alg.items():
+        for (B, bo, lname), bsubs in block_alg.items():
             for o in _bcombos(bsubs):
-                src = _bmember(B, lname, o, t_end)
-                for sp in _own_pts(bseg[(B, lname)]):
-                    v = _bseg_at((B, lname), o, sp)
+                src = _bmember(B, bo, lname, o, t_end)
+                for sp in _own_pts(bseg[(B, bo, lname)]):
+                    v = _bseg_at((B, bo, lname), o, sp)
                     v.setlb(src.lb)
                     v.setub(src.ub)
                     v.set_value(src.value)
@@ -1151,13 +1227,13 @@ class InfiniteHorizonTransformation(Transformation):
         for comp in list(algebraic) + list(disturbed):
             reg._record_segment("algebraic", comp, copy=seg[comp])
         reg._record_segment("algebraic", cost_var, copy=seg_cost)
-        for (B, lname), v in bseg.items():
+        for (B, _bo, lname), v in bseg.items():
             reg._record_segment("block_member", B, member=lname, copy=v)
         for pcomp, v in pseg.items():
             reg._record_segment("packed_member", pcomp, copy=v)
         for con, row in alg_rows.items():
             reg._record_segment("algebraic_row", con, copy=row)
-        for (B, cname), row in block_rows.items():
+        for (B, _bo, cname), row in block_rows.items():
             reg._record_segment("block_row", B, member=cname, copy=row)
         reg._record_segment("segment", b, gamma=b.gamma)
 
@@ -1179,8 +1255,8 @@ class InfiniteHorizonTransformation(Transformation):
             ),
             **(
                 {
-                    "blocks": f"{len({B for (B, _) in block_alg})} time-indexed"
-                    f" Block(s): {len(block_alg)} components,"
+                    "blocks": f"{len({B for (B, _, _) in block_alg})} "
+                    f"time-indexed Block(s): {len(block_alg)} components,"
                     f" {len(bcons)} equation families replicated"
                 }
                 if block_alg

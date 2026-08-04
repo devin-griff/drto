@@ -1237,3 +1237,193 @@ def test_a_scaled_derivative_side_dilates_like_the_bare_form():
         )
     for a, b in zip(*results):
         assert a == pytest.approx(b, abs=1e-8)
+
+
+def spatial_block_model(flat=False):
+    """The linear model with its gain routed through a Block(t, s) family,
+    two members per time point, the minimal shape of an IDAES
+    multi-element unit (a stage-indexed state block, a spatial node).
+    ``flat=True`` builds the same physics with flat algebra, the twin for
+    the equivalence assertion."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.s = pyo.Set(initialize=[1, 2])
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.cost = pyo.Var(m.t)
+
+    if flat:
+        m.y = pyo.Var(m.t, m.s, initialize=0.4)
+
+        @m.Constraint(m.t, m.s)
+        def gain(mm, t, s):
+            return mm.y[t, s] == (1.0 + s) * mm.z[t]
+
+    else:
+
+        def props_rule(blk, t, s):
+            mm = blk.model()
+            blk.y = pyo.Var(initialize=0.4)
+            blk.gain = pyo.Constraint(expr=blk.y == (1.0 + s) * mm.z[t])
+
+        m.props = pyo.Block(m.t, m.s, rule=props_rule)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        if flat:
+            y1, y2 = mm.y[t, 1], mm.y[t, 2]
+        else:
+            y1, y2 = mm.props[t, 1].y, mm.props[t, 2].y
+        return mm.dz[t] == mm.u[t] - 0.5 * (y1 + y2)
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_multi_index_block_members_replicate_per_coordinate():
+    # a Block(t, s) family is one Block(t)-like family per non-time
+    # coordinate: each gets its own segment copies and replicated rows
+    m = spatial_block_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    assert hasattr(b, "props_1_y") and hasattr(b, "props_2_y")
+    assert hasattr(b, "props_1_gain") and hasattr(b, "props_2_gain")
+    log = drto.info(m)._transformations[-1]["outcome"]
+    assert "1 time-indexed Block(s): 2 components" in log["blocks"]
+
+
+@needs_ipopt
+def test_multi_index_blocks_solve_like_the_flat_twin():
+    sols = []
+    for flat in (False, True):
+        m = spatial_block_model(flat=flat)
+        pyo.TransformationFactory(IH).apply_to(m)
+        pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+        res = pyo.SolverFactory("ipopt").solve(m)
+        assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+        sols.append([pyo.value(m.z[t]) for t in sorted(m.t)])
+    for za, zb in zip(*sols):
+        assert za == pytest.approx(zb, abs=1e-8)
+
+
+def test_a_spatial_discretization_row_replicates_as_algebra():
+    # a DerivativeVar over a spatial ContinuousSet is ordinary algebra:
+    # its members copy to the segment and its discretization equation,
+    # despite the '_disc_eq' name, replicates with them. Dropping either
+    # half leaves free variables on the tail, which the guard rejects
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.x = ContinuousSet(initialize=[0, 1])
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.cost = pyo.Var(m.t)
+    m.w = pyo.Var(m.t, m.x, initialize=0.2)
+    m.dwdx = DerivativeVar(m.w, wrt=m.x)
+
+    @m.Constraint(m.t, m.x)
+    def w_def(mm, t, x):
+        return mm.w[t, x] == (1.0 + x) * mm.z[t]
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.u[t] - mm.z[t] - 0.1 * mm.dwdx[t, 1]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("dae.finite_difference").apply_to(
+        m, wrt=m.x, nfe=1, scheme="BACKWARD"
+    )
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    assert b.component("dwdx_members") is not None
+    assert b.component("dwdx_disc_eq") is not None
+
+
+def test_same_named_components_get_fresh_segment_names():
+    # two sub-units both carrying a Var and a row named 'y'/'close': the
+    # segment keeps one copy per component under distinct names instead
+    # of colliding (the two settlers of a mixer-settler)
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.2)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.cost = pyo.Var(m.t)
+    m.left = pyo.Block()
+    m.right = pyo.Block()
+    for unit, gain in ((m.left, 2.0), (m.right, 3.0)):
+        unit.y = pyo.Var(m.t, initialize=0.4)
+
+        def close_rule(_, t, _g=gain, _u=unit):
+            return _u.y[t] == _g * m.z[t]
+
+        unit.close = pyo.Constraint(m.t, rule=close_rule)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.u[t] - 0.5 * (mm.left.y[t] + mm.right.y[t])
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+
+    @m.Constraint()
+    def z_init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.z_init)
+    drto.steady_state(m.z, m.z_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory(IH).apply_to(m)
+    b = m.drto_ih
+    copies = [v.name for v in b.component_objects(pyo.Var) if v.local_name != "u"]
+    ys = [n for n in copies if "y" in n.split(".")[-1]]
+    assert len(ys) >= 2, ys

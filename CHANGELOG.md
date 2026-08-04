@@ -105,6 +105,24 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The terminal segment replicates spatially distributed models (gh #56).
+  A time-indexed Block family may carry further indices, an IDAES stage
+  element or a spatial node: each non-time combination replicates as its
+  own family, with its own segment copies and rows, and solves
+  identically to the flat twin of the same physics. A derivative over a
+  ContinuousSet other than the declared time set is ordinary algebra,
+  its members copied and its discretization rows replicated despite the
+  pyomo.dae `_disc_eq` naming; only the declared time set's artifacts
+  are rebuilt over tau. Same-named components from different units (the
+  two settlers of a mixer-settler both carry `_flow_terms`) take
+  distinct segment names. The free-copy guard now also covers partially
+  copied containers, so a member whose defining row was dropped is a
+  descriptive error instead of a silent tail freedom; the guard credit
+  includes the replicated residue rows. On the declared PrOMMiS
+  mixer-settler the transform applies in seconds and the assembled
+  problem's freedoms are accounted for: the spatial discretization rows
+  land on the tail, closing the 1860 freedoms their omission left.
+
 - `drto.dynamics` reads the derivative side through its coefficients
   (gh #51): a dynamics row's derivative side may be the DerivativeVar
   multiplied by derivative-free factors, IDAES `ControlVolume1D`'s
