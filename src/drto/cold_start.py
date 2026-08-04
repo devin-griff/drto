@@ -275,7 +275,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     # the per-point solves: everything except the declared dynamics and
     # the initial condition determines the rest, each grid point its own
     # block once the states and controls are held. An undeclared member
-    # of a packed Var comes from its closures, and its derivative from
+    # of an indexed Var comes from its closures, and its derivative from
     # the discretization rows; a variable only a set-aside balance would
     # close keeps its value and is reported underconstrained. With an
     # active scaling_factor suffix the solves run on a scaled clone and

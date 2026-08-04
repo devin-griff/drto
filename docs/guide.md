@@ -41,7 +41,7 @@ The control-side surface, in the order a model usually declares them:
 - `drto.horizon(t)` — the time `ContinuousSet`, declared before
   discretization so the registry keeps the sample grid.
 - `drto.state(z, ...)` — the differential states. A state may be a whole
-  time-indexed Var or a member subset of a packed one (see the IDAES
+  time-indexed Var or a member subset of an indexed one (see the IDAES
   how-to below).
 - `drto.dynamics(ode, ...)` — the constraint families that are the
   differential equations. Everything not declared here is algebra.
@@ -287,7 +287,7 @@ through it.
 drto's transforms are built to leave a flowsheet as IDAES wrote it. Three
 idioms cover most models:
 
-**States as member subsets.** An IDAES material holdup is one packed Var
+**States as member subsets.** An IDAES material holdup is one indexed Var
 over components, but only some members are true states — the water
 holdup of the saponification CSTR is fixed by the property package's
 closure. Declare exactly the true states as slices:

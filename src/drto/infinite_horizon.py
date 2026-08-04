@@ -367,7 +367,7 @@ class InfiniteHorizonTransformation(Transformation):
 
         # declared state members by data-id, with their declared component
         # and other-index: a state may be a Reference over a member subset
-        # of a packed Var (gh #20). A container with any declared member is
+        # of an indexed Var (gh #20). A container with any declared member is
         # covered for the derivative checks, and the undeclared members of
         # a covered container (with their derivatives) copy per member as
         # algebraic equations for the entries never declared as states.

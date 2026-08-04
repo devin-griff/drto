@@ -385,7 +385,7 @@ def horizon(component):
 def _attach_slice_reference(sl, fn):
     """Wrap a member-subset slice as an attached, named Reference.
 
-    A packed Var (an IDAES holdup) can hold members that are not states;
+    An indexed Var (an IDAES holdup) can hold members that are not states;
     a slice like ``holdup[:, "Liq", "NaOH"]`` declares the true state
     member (gh #20). The Reference attaches to the sliced component's
     parent block, named from the component and the constant coordinates.
@@ -418,7 +418,7 @@ def state(*components):
     A state carries a DerivativeVar only in a dynamic model, so no derivative
     is required here: a steady-state model's states qualify as written. Tags
     attached Vars, wraps one fresh Var, or wraps member-subset slices
-    (``holdup[:, "Liq", "NaOH"]``) as attached References, so a packed
+    (``holdup[:, "Liq", "NaOH"]``) as attached References, so an indexed
     Var's algebraic member stays undeclared.
     """
     fn = "state"

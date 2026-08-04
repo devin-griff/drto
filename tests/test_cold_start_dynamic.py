@@ -245,7 +245,7 @@ def test_segment_algebra_solves_at_the_tail():
 
 
 def test_residue_algebra_solves_in_the_point_solves():
-    # a packed Var's undeclared member: its closure determines it and
+    # an indexed Var's undeclared member: its closure determines it and
     # the discretization rows its derivative
     m = packed_model()
     m.u_ss = pyo.Param(initialize=0.3, mutable=True)

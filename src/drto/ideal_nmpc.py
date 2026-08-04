@@ -288,7 +288,7 @@ def ideal_nmpc(
         )
 
     # a declared state may be a Reference over a member subset of a
-    # packed Var (gh #20), so a pinned member matches its declared owner
+    # indexed Var (gh #20), so a pinned member matches its declared owner
     # by data identity, the package convention
     t0 = time.first()
     owner = {}

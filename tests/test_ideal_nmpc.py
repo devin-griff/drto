@@ -181,7 +181,7 @@ def test_hicks_settles_to_the_declared_targets():
 
 @needs_pounce
 def test_member_subset_states_label_by_their_reference():
-    """A state declared as a slice of a packed Var (gh #20)."""
+    """A state declared as a slice of an indexed Var (gh #20)."""
 
     def packed_model(N=5):
         m = pyo.ConcreteModel()

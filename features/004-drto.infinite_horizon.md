@@ -166,7 +166,7 @@ move.
 - It works through both `apply_to` (in place) and `create_using` (a
   transformed clone).
 - The segment's algebraic copies (the flat algebra, the Block members,
-  the packed Vars' entries never declared as states) are indexed over
+  the indexed Vars' entries never declared as states) are indexed over
   the interior collocation
   points only: every point that exists is a point some replicated
   equation determines. The state copies keep the full tau set for their

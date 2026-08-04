@@ -101,7 +101,7 @@ All notable changes to this project are documented here. The format is based on
   pyomo-pounce the per-point solves are skipped and the report says so.
   The IDAES CSTR notebook (`examples/cstr_cold_start.ipynb`) shows
   the model before and after, the per-point solves working the outlet
-  stream, the reaction cascade, and the packed holdup's water member.
+  stream, the reaction cascade, and the indexed holdup's water member.
 
 ### Changed
 
@@ -179,7 +179,7 @@ All notable changes to this project are documented here. The format is based on
   (degraded-environment measurements, to be re-verified).
 
 - The terminal segment's algebraic copies (the flat algebra, the Block
-  members, the packed residue members) are indexed over the interior
+  members, the indexed residue members) are indexed over the interior
   collocation points only (gh #32): every point that exists is one a
   replicated equation determines, so no dead boundary member exists to
   hold a stale value for a reader to find. State copies keep the full
@@ -226,7 +226,7 @@ All notable changes to this project are documented here. The format is based on
   saponification CSTR taken straight from `idaes.models.unit_models`,
   declared through the drto surface with no changes to the flowsheet and
   driven in two solves. The true states declare as member-subset slices of
-  the packed holdup, the water member staying algebraic (#20); the
+  the indexed holdup, the water member staying algebraic (#20); the
   manipulated variables are the jacket duty and the feed flow, the flow
   declared on the inlet Port's time-indexed Reference; the setpoint comes
   from the declarations, `drto.steady_state_simulation` collapsing the
@@ -290,9 +290,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- A state may be declared as a member subset of a packed Var (#20). A
+- A state may be declared as a member subset of an indexed Var (#20). A
   slice like `holdup[:, "Liq", "NaOH"]` passed to `drto.state` wraps as an
-  attached time-indexed Reference, so a packed Var's algebraic member (an
+  attached time-indexed Reference, so an indexed Var's algebraic member (an
   IDAES water holdup, constant by the property package's closure) stays
   undeclared and the declared surface matches the true state dimension.
   Classification resolves by data identity everywhere: the dynamics and

@@ -1066,7 +1066,7 @@ def test_reference_control_solves_through_the_tail():
 
 
 def packed_model():
-    """A packed Var with an algebraic member: the true state is declared
+    """An indexed Var with an algebraic member: the true state is declared
     as a member-subset slice, and the W member (constant by closure) stays
     undeclared with its balance row as the residue (gh #20)."""
     m = pyo.ConcreteModel()

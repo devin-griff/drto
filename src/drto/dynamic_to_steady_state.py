@@ -98,7 +98,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 )
 
         states_set = ComponentSet(reg.components("state"))
-        # a state may be a Reference over a member subset of a packed Var
+        # a state may be a Reference over a member subset of an indexed Var
         # (gh #20): a container with any declared member is covered, its
         # dynamics rows accepted and every one of its accumulations pinned
         # at zero, including the entries never declared as states (the

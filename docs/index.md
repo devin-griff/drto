@@ -10,7 +10,7 @@ carries, so one set of declarations drives every mode, and displaying the
 registry shows the model in its own physical terms.
 
 Nothing about the model changes to make this work: the examples run
-unmodified IDAES flowsheets, with states declared as slices of packed
+unmodified IDAES flowsheets, with states declared as slices of indexed
 holdups and controls declared on inlet ports.
 
 ## The shape of a session
