@@ -127,9 +127,12 @@ def _wrap_form(components, fn):
 def _defer(component, register, fn):
     """Wrap a fresh component: run ``register`` when Pyomo attaches it.
 
-    Attachment (``m.x = component``) constructs the component, so the deferred registration
-    shadows ``construct``, runs the original, removes itself, and registers,
-    at which point the component has its model and name.
+    A component handed to a declaration before attachment has no model
+    and no name yet, so validation and recording cannot run at the call.
+    The assignment ``m.x = component`` is what constructs it, so this
+    wrapper shadows ``construct``: when the assignment runs, it calls the
+    original ``construct``, removes itself, and then registers, at which
+    point the component has its model and name.
     """
     if "construct" in component.__dict__:
         raise ValueError(
@@ -142,9 +145,10 @@ def _defer(component, register, fn):
     def construct(data=None):
         model = component.model()
         if type(model).__name__ == "AbstractModel":
-            # attachment to an AbstractModel does not construct, so the deferred registration
-            # survives into create_instance's clone, where it would construct
-            # and register the original component instead of the instance's
+            # attachment to an AbstractModel does not construct, so the
+            # wrapper would still be waiting when create_instance clones
+            # the model, and would then construct and register the
+            # original component instead of the instance's
             raise ValueError(
                 f"drto: {fn}: wrapping registers at attachment to a concrete "
                 f"model, and "
