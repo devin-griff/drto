@@ -18,13 +18,19 @@ All notable changes to this project are documented here. The format is based on
   The organic metals follow the aqueous side through the transfer
   equilibria, the solvents close by density, and the extents are
   first-instant-inert algebra of the equilibrium formulation, fixed
-  the way PrOMMiS's own dynamic driver fixes them. The setpoint comes
-  from PrOMMiS's steady flowsheet, read back through the dynamic
-  model's holdup rows, and the solvent flow carries its operating
-  limits as bounds. Eight samples of closed loop run in 13 s, driving
-  half again the rare earth inventory back onto the operating point; a
-  second run holds every inventory in a band under seeded feed-flow
-  noise. Needs prommis installed (which brings idaes-pse 2.12).
+  the way PrOMMiS's own dynamic driver fixes them. Both feed flows are
+  the manipulated inputs, carrying their operating limits as bounds,
+  and the declared disturbances are additive zero-mean noise terms in
+  the state balances. The plant has two timescales, twelve seconds of
+  mixer hydraulics under inventory dynamics of tens of minutes (the
+  organic phase buffers the metals at fifty to a hundred times the
+  aqueous concentration), so the loop samples at fifteen minutes. The
+  setpoint comes from PrOMMiS's steady flowsheet, read back through
+  the dynamic model's holdup rows. Eight samples of closed loop run in
+  45 s, driving half again the rare earth inventory back toward the
+  operating point; a second run holds every inventory in a band under
+  seeded rare-earth grade noise. Needs prommis installed (which brings
+  idaes-pse 2.12).
 
 - The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
   runs the closed loop the declarations describe from the declared,
