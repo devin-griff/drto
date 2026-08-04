@@ -166,7 +166,8 @@ move.
 - It works through both `apply_to` (in place) and `create_using` (a
   transformed clone).
 - The segment's algebraic copies (the flat algebra, the Block members,
-  the packed residue members) are indexed over the interior collocation
+  the packed Vars' entries never declared as states) are indexed over
+  the interior collocation
   points only: every point that exists is a point some replicated
   equation determines. The state copies keep the full tau set for their
   continuity and discretization rows, as the tail cost's quadrature
@@ -176,7 +177,8 @@ move.
   segment component belongs to which declaration: each declared state's
   copy, tau derivative, discretization and continuity rows, link, and
   endpoint pin (equation and slacks); each declared control's copy; and
-  each declared dynamics family's copy and residue rows. The registry
+  each declared dynamics family's copy, with the balances of entries
+  never declared as states. The registry
   view renders nothing new for it, and the pairing follows a clone with
   its references remapped. drto's own consumers (cold start, plotting)
   read the recorded pairing instead of reconstructing component names

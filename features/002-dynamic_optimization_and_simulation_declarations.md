@@ -35,7 +35,7 @@ m.z_ss = pyo.Param(initialize=0.5, mutable=True)   # tracking targets
 drto.steady_state(m.z, m.z_ss)
 m.u_ss = pyo.Param(initialize=0.5, mutable=True)  # = z_ss: dz/dt = 0 needs z = u
 drto.steady_state_control(m.u, m.u_ss)
-m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
+m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # overwritten by a loop's measurements
 
 m.cost = pyo.Var(m.t)
 
@@ -72,7 +72,7 @@ m.u = drto.control(pyo.Var(m.t, bounds=(0, 1)), profile="piecewise_constant")
 
 m.z_ss = drto.steady_state(m.z, pyo.Param(initialize=0.5, mutable=True))
 m.u_ss = drto.steady_state_control(m.u, pyo.Param(initialize=0.5, mutable=True))
-m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
+m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # overwritten by a loop's measurements
 
 m.cost = pyo.Var(m.t)
 
@@ -204,7 +204,8 @@ declarations rather than re-deriving them.
   left-hand side is the scalar terminal-cost variable.
 - `initial_condition(m.con, ...)` tags one or more equality Constraints
   whose left-hand sides are declared states at the first time point and whose
-  right-hand sides are mutable Params, the feedback hook.
+  right-hand sides are mutable Params, which a loop overwrites with
+  each measurement.
 - `terminal_constraint(m.con)` tags a single Constraint that references
   only states at the final time point.
 - `steady_state(m.z, m.z_ss)` pairs a declared state with the mutable Param

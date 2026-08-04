@@ -55,8 +55,8 @@ The control-side surface, in the order a model usually declares them:
   `drto.tracking_terminal_cost(term)` — cost rows, written as equality
   constraints defining cost variables in the model's own units.
 - `drto.initial_condition(ic, ...)` — rows pinning states at the first
-  point to mutable Params, the feedback hooks a receding-horizon loop
-  updates.
+  point to mutable Params, which a receding-horizon loop overwrites
+  with each measurement.
 - `drto.steady_state(z, z_ss)` / `drto.steady_state_control(u, u_ss)` —
   pair each state and control with the mutable Param holding its target.
   The transforms and initializers read these as the setpoint.
@@ -137,14 +137,15 @@ are no coupling options.
 
 **The advanced-step correction** (`drto.advanced_step_controller`)
 turns the solved horizon into a between-samples controller: solve at a
-predicted state with pounce (the assembly declared the feedback hooks as
-sensitivity parameters, inert metadata for every other solver), write
-the measured state into the hooks when it arrives, and ask for the
+predicted state with pounce (the assembly declared the initial-condition
+Params as sensitivity parameters, inert metadata for every other
+solver), write the measured state into those Params when it arrives,
+and ask for the
 corrected solution — a backsolve on the kept factorization, not a
 re-solve. The returned map holds every variable's corrected value; the
 model itself is untouched, so the prediction stays in place as the next
 solve's warm start. `gradient=True` returns the controls' sensitivities
-to the hooks instead.
+to those Params instead.
 
 **Warm start** (`drto.warm_start_dynamic`) is the closed loop's
 initializer: every variable takes the value the previous solution had
@@ -199,7 +200,7 @@ realization, simulates one sample, and feeds the end state back as both
 models' initial condition.
 
 `initial_condition` maps declared state names to the values written into
-the feedback-hook Params before the first step; omitted, the Params'
+the initial-condition Params before the first step; omitted, the Params'
 current values are the first state.
 
 Each declared disturbance's `disturbances` entry is either a sequence,

@@ -18,8 +18,8 @@ import drto
 history = drto.asnmpc(
     m,
     steps=50,                          # loop length, in samples
-    initial_condition={"z": 0.2},      # written into the hooks; omitted,
-                                       # the hooks' current values
+    initial_condition={"z": 0.2},      # written into the initial-condition
+                                       # Params; omitted, their current values
     dynamic_optimization={},           # options through to the transform
     advanced_step={},                  # options through to
                                        # drto.advanced_step_controller
