@@ -9,10 +9,12 @@ organic phase, and two single-phase settlers carrying the effluents out.
 The declared states are the inventories with memory: the mixer's aqueous
 holdups (all but bisulfate, which rides its dissociation equilibrium;
 the water member carries the phase split), the mixer's free extractant
-holdup, and the settlers' species holdups at the outlet node (solvents
-and bisulfate excluded, closed by density and equilibrium). The organic
-metal holdups follow the aqueous side instantaneously through the
-equilibria, so they are algebra, not states.
+holdup, and the settlers' species holdups at every node of the backward
+finite-difference cascade, four tanks in series per settler, PrOMMiS's
+own mesh (solvents and bisulfate excluded, closed by density and
+equilibrium). The organic metal holdups follow the aqueous side
+instantaneously through the equilibria, so they are algebra, not
+states.
 
 The manipulated inputs are the two feed flows. The declared
 disturbances are additive zero-mean noise terms, one in every state's
@@ -93,7 +95,7 @@ def build(N=8, h=1, ncp=3, noise=True):
         has_holdup=True,
         settler_transformation_method="dae.finite_difference",
         settler_transformation_scheme="BACKWARD",
-        settler_finite_elements=1,
+        settler_finite_elements=4,
     )
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
@@ -103,7 +105,9 @@ def build(N=8, h=1, ncp=3, noise=True):
     ms = m.fs.ms
     msc = ms.mixer[1].unit.mscontactor
     aq, og = ms.aqueous_settler[1].unit, ms.organic_settler[1].unit
-    xn = aq.length_domain.last()
+    # every node past the inlet boundary is a tank of the backward
+    # finite-difference cascade, one inventory per species per tank
+    xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
 
     # the feed streams: compositions fixed; the organic flow is the
     # manipulated input (initialized, not fixed); the aqueous flow is
@@ -134,15 +138,17 @@ def build(N=8, h=1, ncp=3, noise=True):
 
     # the states: inventories with memory. Mixer aqueous holdups (water
     # carries the phase split, bisulfate rides its equilibrium), the free
-    # extractant holdup, and the settler holdups at the outlet node
+    # extractant holdup, and the settler holdups at every cascade node
     # (solvents closed by density, the settlers running full)
     maq = [j for j in m.fs.leach_soln.component_list if j != "HSO4"]
     saq = [j for j in maq if j != "H2O"]
     sog = [j for j in m.fs.prop_o.component_list if j != "Kerosene"]
     drto.state(*(msc.aqueous_material_holdup[:, 1, "liquid", j] for j in maq))
     drto.state(msc.organic_material_holdup[:, 1, "organic", "DEHPA"])
-    drto.state(*(aq.material_holdup[:, xn, "liquid", j] for j in saq))
-    drto.state(*(og.material_holdup[:, xn, "organic", j] for j in sog))
+    drto.state(*(aq.material_holdup[:, x, "liquid", j]
+                 for x in xs for j in saq))
+    drto.state(*(og.material_holdup[:, x, "organic", j]
+                 for x in xs for j in sog))
     drto.dynamics(
         msc.aqueous_material_balance, msc.organic_material_balance,
         aq.material_balances, og.material_balances)
@@ -164,18 +170,21 @@ def build(N=8, h=1, ncp=3, noise=True):
         for j in maq:
             terms.append(_noise(f"w_m_{j}", msc.aqueous_material_balance, (1, j)))
         terms.append(_noise("w_m_DEHPA", msc.organic_material_balance, (1, "DEHPA")))
-        for j in saq:
-            terms.append(_noise(f"w_sa_{j}", aq.material_balances, (xn, j)))
-        for j in sog:
-            terms.append(_noise(f"w_so_{j}", og.material_balances, (xn, j)))
+        for i, x in enumerate(xs, 1):
+            for j in saq:
+                terms.append(_noise(f"w_sa{i}_{j}", aq.material_balances, (x, j)))
+            for j in sog:
+                terms.append(_noise(f"w_so{i}_{j}", og.material_balances, (x, j)))
         drto.disturbance(*terms)
 
     # feedback hooks: one Param per state, filled by the caller
     t0 = m.fs.time.first()
     m.ic_maq = pyo.Param(maq, initialize=1.0, mutable=True, units=U.mol)
     m.ic_dehpa = pyo.Param(initialize=1.0, mutable=True, units=U.mol)
-    m.ic_saq = pyo.Param(saq, initialize=1.0, mutable=True, units=U.mol / U.m)
-    m.ic_sog = pyo.Param(sog, initialize=1.0, mutable=True, units=U.mol / U.m)
+    m.ic_saq = pyo.Param(xs, saq, initialize=1.0, mutable=True,
+                         units=U.mol / U.m)
+    m.ic_sog = pyo.Param(xs, sog, initialize=1.0, mutable=True,
+                         units=U.mol / U.m)
 
     @m.Constraint(maq)
     def ic_mixer_aq(mm, j):
@@ -185,13 +194,13 @@ def build(N=8, h=1, ncp=3, noise=True):
     def ic_mixer_dehpa(mm):
         return msc.organic_material_holdup[t0, 1, "organic", "DEHPA"] == mm.ic_dehpa
 
-    @m.Constraint(saq)
-    def ic_settler_aq(mm, j):
-        return aq.material_holdup[t0, xn, "liquid", j] == mm.ic_saq[j]
+    @m.Constraint(xs, saq)
+    def ic_settler_aq(mm, x, j):
+        return aq.material_holdup[t0, x, "liquid", j] == mm.ic_saq[x, j]
 
-    @m.Constraint(sog)
-    def ic_settler_og(mm, j):
-        return og.material_holdup[t0, xn, "organic", j] == mm.ic_sog[j]
+    @m.Constraint(xs, sog)
+    def ic_settler_og(mm, x, j):
+        return og.material_holdup[t0, x, "organic", j] == mm.ic_sog[x, j]
 
     drto.initial_condition(m.ic_mixer_aq, m.ic_mixer_dehpa,
                            m.ic_settler_aq, m.ic_settler_og)
@@ -200,11 +209,12 @@ def build(N=8, h=1, ncp=3, noise=True):
     # no rate law determines the extents or flows at t0
     msc.aqueous_inherent_reaction_extent[t0, :, "Ka2"].fix(0.0)
     msc.heterogeneous_reaction_extent[t0, :, :].fix(0.0)
-    aq.inherent_reaction_extent[t0, xn, "Ka2"].fix(0.0)
     msc.aqueous[t0, 1].flow_vol.fix(F_AQ)
     msc.organic[t0, 1].flow_vol.fix(F_OG)
-    aq.properties[t0, xn].flow_vol.fix(F_AQ)
-    og.properties[t0, xn].flow_vol.fix(F_OG)
+    for x in xs:
+        aq.inherent_reaction_extent[t0, x, "Ka2"].fix(0.0)
+        aq.properties[t0, x].flow_vol.fix(F_AQ)
+        og.properties[t0, x].flow_vol.fix(F_OG)
 
     # steady-state targets, one scalar Param per state (the pairing takes
     # one component per call), filled after the steady solve
@@ -214,8 +224,6 @@ def build(N=8, h=1, ncp=3, noise=True):
         return p
 
     ss_maq = {j: target(f"ss_maq_{j}", U.mol) for j in maq}
-    ss_saq = {j: target(f"ss_saq_{j}", U.mol / U.m) for j in saq}
-    ss_sog = {j: target(f"ss_sog_{j}", U.mol / U.m) for j in sog}
     m.ss_dehpa = pyo.Param(initialize=1.0, mutable=True, units=U.mol)
     m.ss_fog = pyo.Param(initialize=F_OG, mutable=True, units=U.m**3 / U.hour)
     for j in maq:
@@ -223,10 +231,13 @@ def build(N=8, h=1, ncp=3, noise=True):
                           ss_maq[j])
     drto.steady_state(msc.organic_material_holdup[:, 1, "organic", "DEHPA"],
                       m.ss_dehpa)
-    for j in saq:
-        drto.steady_state(aq.material_holdup[:, xn, "liquid", j], ss_saq[j])
-    for j in sog:
-        drto.steady_state(og.material_holdup[:, xn, "organic", j], ss_sog[j])
+    for i, x in enumerate(xs, 1):
+        for j in saq:
+            drto.steady_state(aq.material_holdup[:, x, "liquid", j],
+                              target(f"ss_saq{i}_{j}", U.mol / U.m))
+        for j in sog:
+            drto.steady_state(og.material_holdup[:, x, "organic", j],
+                              target(f"ss_sog{i}_{j}", U.mol / U.m))
     drto.steady_state_control(m.fs.og_feed, m.ss_fog)
     m.ss_faq = pyo.Param(initialize=F_AQ, mutable=True, units=U.m**3 / U.hour)
     drto.steady_state_control(m.fs.aq_feed, m.ss_faq)
@@ -294,7 +305,11 @@ def steady_targets(m, tee=False):
     msc = ms.mixer[1].unit.mscontactor
     aq, og = ms.aqueous_settler[1].unit, ms.organic_settler[1].unit
     t0 = m.fs.time.first()
-    xn = aq.length_domain.last()
+    xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
+    if list(taq.length_domain) != list(aq.length_domain):
+        raise ValueError(
+            "drto example: the steady flowsheet's settler mesh does not "
+            "match this model's; build both with the same element count.")
     maq = [j for j in m.fs.leach_soln.component_list if j != "HSO4"]
     saq = [j for j in maq if j != "H2O"]
     sog = [j for j in m.fs.prop_o.component_list if j != "Kerosene"]
@@ -304,13 +319,15 @@ def steady_targets(m, tee=False):
     for j in m.fs.leach_soln.component_list:
         msc.aqueous[t0, 1].conc_mass_comp[j].set_value(
             pyo.value(tmsc.aqueous[ts, 1].conc_mass_comp[j]))
-        aq.properties[t0, xn].conc_mass_comp[j].set_value(
-            pyo.value(taq.properties[ts, txn].conc_mass_comp[j]))
+        for x in xs:
+            aq.properties[t0, x].conc_mass_comp[j].set_value(
+                pyo.value(taq.properties[ts, x].conc_mass_comp[j]))
     for j in m.fs.prop_o.component_list:
         msc.organic[t0, 1].conc_mass_comp[j].set_value(
             pyo.value(tmsc.organic[ts, 1].conc_mass_comp[j]))
-        og.properties[t0, xn].conc_mass_comp[j].set_value(
-            pyo.value(tog.properties[ts, txn].conc_mass_comp[j]))
+        for x in xs:
+            og.properties[t0, x].conc_mass_comp[j].set_value(
+                pyo.value(tog.properties[ts, x].conc_mass_comp[j]))
     for p in ("aqueous", "organic"):
         msc.volume_frac_stream[t0, 1, p].set_value(
             pyo.value(tmsc.volume_frac_stream[ts, 1, p]))
@@ -325,14 +342,15 @@ def steady_targets(m, tee=False):
     v = rhs(msc.organic_material_holdup_constraint[t0, 1, "organic", "DEHPA"])
     m.ic_dehpa = v
     m.ss_dehpa = v
-    for j in saq:
-        v = rhs(aq.material_holdup_calculation[t0, xn, "liquid", j])
-        m.ic_saq[j] = v
-        m.component(f"ss_saq_{j}").set_value(v)
-    for j in sog:
-        v = rhs(og.material_holdup_calculation[t0, xn, "organic", j])
-        m.ic_sog[j] = v
-        m.component(f"ss_sog_{j}").set_value(v)
+    for i, x in enumerate(xs, 1):
+        for j in saq:
+            v = rhs(aq.material_holdup_calculation[t0, x, "liquid", j])
+            m.ic_saq[x, j] = v
+            m.component(f"ss_saq{i}_{j}").set_value(v)
+        for j in sog:
+            v = rhs(og.material_holdup_calculation[t0, x, "organic", j])
+            m.ic_sog[x, j] = v
+            m.component(f"ss_sog{i}_{j}").set_value(v)
 
     # the extents: refixed at the steady values at the first instant,
     # and set there everywhere else as the initial guess (they are the
@@ -342,15 +360,18 @@ def steady_targets(m, tee=False):
     ka2 = pyo.value(tmsc.aqueous_inherent_reaction_extent[ts, 1, "Ka2"])
     het = {r: pyo.value(tmsc.heterogeneous_reaction_extent[ts, 1, r])
            for r in m.fs.reaxn.reaction_idx}
-    ska2 = pyo.value(taq.inherent_reaction_extent[ts, txn, "Ka2"])
+    ska2 = {x: pyo.value(taq.inherent_reaction_extent[ts, x, "Ka2"])
+            for x in xs}
     for t in m.fs.time:
         msc.aqueous_inherent_reaction_extent[t, 1, "Ka2"].set_value(ka2)
         for r, v in het.items():
             msc.heterogeneous_reaction_extent[t, 1, r].set_value(v)
-        aq.inherent_reaction_extent[t, xn, "Ka2"].set_value(ska2)
+        for x in xs:
+            aq.inherent_reaction_extent[t, x, "Ka2"].set_value(ska2[x])
     msc.aqueous_inherent_reaction_extent[t0, 1, "Ka2"].fix()
     msc.heterogeneous_reaction_extent[t0, 1, :].fix()
-    aq.inherent_reaction_extent[t0, xn, "Ka2"].fix()
+    for x in xs:
+        aq.inherent_reaction_extent[t0, x, "Ka2"].fix()
     return sm
 
 
