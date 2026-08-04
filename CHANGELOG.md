@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The PrOMMiS mixer-settler example (`examples/sx_ideal_nmpc.ipynb`,
+  `examples/models/prommis_sx.py`). Rare earth solvent extraction under
+  closed-loop control: one stage of PrOMMiS's `MixerSettlerExtraction`
+  declared as PrOMMiS wrote it, with the states identified physically
+  as the inventories with memory: the mixer's aqueous holdups (water
+  carrying the phase split, bisulfate riding its dissociation), the
+  free extractant holdup, and the settler holdups at the outlet nodes.
+  The organic metals follow the aqueous side through the transfer
+  equilibria, the solvents close by density, and the extents are
+  first-instant-inert algebra of the equilibrium formulation, fixed
+  the way PrOMMiS's own dynamic driver fixes them. The setpoint comes
+  from PrOMMiS's steady flowsheet, read back through the dynamic
+  model's holdup rows, and the solvent flow carries its operating
+  limits as bounds. Eight samples of closed loop run in 13 s, driving
+  half again the rare earth inventory back onto the operating point; a
+  second run holds every inventory in a band under seeded feed-flow
+  noise. Needs prommis installed (which brings idaes-pse 2.12).
+
 - The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
   runs the closed loop the declarations describe from the declared,
   discretized model: a clone becomes the process through
