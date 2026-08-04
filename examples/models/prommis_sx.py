@@ -14,8 +14,10 @@ and bisulfate excluded, closed by density and equilibrium). The organic
 metal holdups follow the aqueous side instantaneously through the
 equilibria, so they are algebra, not states.
 
-The manipulated input is the organic feed flow; the aqueous feed carries
-a declared zero-mean flow disturbance. The transfer extents and the
+The manipulated inputs are the two feed flows. The declared
+disturbances are additive zero-mean noise terms, one in every state's
+balance, appended to the rows since MSContactor carries no custom-term
+hooks; they are zero nominally, so the noise-free model is untouched. The transfer extents and the
 stage flows at the first time point are inert data of the high-index
 equilibrium formulation (no rate law determines them there) and are
 fixed, the same choice PrOMMiS's own dynamic driver makes.
@@ -23,7 +25,7 @@ fixed, the same choice PrOMMiS's own dynamic driver makes.
 Usage from a notebook in ``examples/``::
 
     from models.prommis_sx import build, F_AQ, F_OG
-    m = build(N=8, h=1, ncp=2)
+    m = build(N=8, h=1)
 """
 import math
 
@@ -62,7 +64,7 @@ VOLUME, AREA, LENGTH = 0.4, 1.0, 0.4    # m3 mixer, m2 and m per settler
 TEMPERATURE = 305.15                    # K
 
 
-def build(N=8, h=1, ncp=2):
+def build(N=8, h=1, ncp=3, noise=True):
     """One declared stage on an ``N``-sample horizon of ``h`` hours."""
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(
@@ -113,20 +115,14 @@ def build(N=8, h=1, ncp=2):
     ms.organic_inlet.conc_mass_comp[:, "DEHPA"].fix(975.8e3 * DOSAGE / 100)
     m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
     m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
-    for t in m.fs.og_feed:
-        m.fs.og_feed[t].set_value(F_OG)
-        # MV limits: the plant's phase-split algebra is solved reliably
-        # inside this envelope; the controller respects it as bounds
-        m.fs.og_feed[t].setlb(35.0)
-        m.fs.og_feed[t].setub(75.0)
-
-    # additive zero-mean disturbance in the aqueous feed flow
-    m.fs.w_feed = pyo.Var(m.fs.time, initialize=0.0, units=U.m**3 / U.hour)
+    for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
+        for t in ref:
+            ref[t].set_value(nominal)
+            # MV limits: the plant's phase-split algebra is solved
+            # reliably inside this envelope; the controller respects it
+            ref[t].setlb(45.0)
+            ref[t].setub(75.0)
     m.fs.aq_feed[:].unfix()
-
-    @m.fs.Constraint(m.fs.time)
-    def feed_flow(fs, t):
-        return fs.aq_feed[t] == F_AQ * U.m**3 / U.hour + fs.w_feed[t]
 
     # geometry and temperatures, PrOMMiS's dynamic flowsheet values
     msc.volume[:].fix(VOLUME * U.m**3)
@@ -150,8 +146,29 @@ def build(N=8, h=1, ncp=2):
     drto.dynamics(
         msc.aqueous_material_balance, msc.organic_material_balance,
         aq.material_balances, og.material_balances)
-    drto.control(m.fs.og_feed, profile="piecewise_constant")
-    drto.disturbance(m.fs.w_feed)
+    drto.control(m.fs.og_feed, m.fs.aq_feed, profile="piecewise_constant")
+
+    # additive process noise, one zero-mean term per state's balance
+    # (mol/hr), appended to the rows since MSContactor has no custom-term
+    # hooks; zero nominally, so the noise-free model is untouched
+    def _noise(name, con, index):
+        w = pyo.Var(m.fs.time, initialize=0.0, units=U.mol / U.hour)
+        m.fs.add_component(name, w)
+        for t in m.fs.time:
+            cd = con[(t,) + index]
+            cd.set_value(cd.expr.args[0] == cd.expr.args[1] + w[t])
+        return w
+
+    if noise:
+        terms = []
+        for j in maq:
+            terms.append(_noise(f"w_m_{j}", msc.aqueous_material_balance, (1, j)))
+        terms.append(_noise("w_m_DEHPA", msc.organic_material_balance, (1, "DEHPA")))
+        for j in saq:
+            terms.append(_noise(f"w_sa_{j}", aq.material_balances, (xn, j)))
+        for j in sog:
+            terms.append(_noise(f"w_so_{j}", og.material_balances, (xn, j)))
+        drto.disturbance(*terms)
 
     # feedback hooks: one Param per state, filled by the caller
     t0 = m.fs.time.first()
@@ -211,13 +228,15 @@ def build(N=8, h=1, ncp=2):
     for j in sog:
         drto.steady_state(og.material_holdup[:, xn, "organic", j], ss_sog[j])
     drto.steady_state_control(m.fs.og_feed, m.ss_fog)
+    m.ss_faq = pyo.Param(initialize=F_AQ, mutable=True, units=U.m**3 / U.hour)
+    drto.steady_state_control(m.fs.aq_feed, m.ss_faq)
 
     # the tracking cost: hold the rare earth inventories in the mixer's
     # aqueous phase at their targets (what is not extracted), spend the
     # organic flow gently. Unit-carrying scales keep it dimensionless
     ree = ["Sc", "Y", "La", "Ce", "Pr", "Nd", "Sm", "Gd", "Dy"]
     m.scale_n = pyo.Param(initialize=1e-4, mutable=True, units=U.mol)
-    m.scale_F = pyo.Param(initialize=5.0, mutable=True, units=U.m**3 / U.hour)
+    m.scale_F = pyo.Param(initialize=2.0, mutable=True, units=U.m**3 / U.hour)
     samples = sorted(m.fs.time.get_finite_elements() if False else [i * h for i in range(N + 1)])
     stages = samples[:-1]
     m.cost = pyo.Var(stages, initialize=0.0)
@@ -228,7 +247,8 @@ def build(N=8, h=1, ncp=2):
         return mm.cost[t] == (
             sum(((msc.aqueous_material_holdup[t, 1, "liquid", j]
                   - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
-            + ((m.fs.og_feed[t] - mm.ss_fog) / mm.scale_F) ** 2)
+            + ((m.fs.og_feed[t] - mm.ss_fog) / mm.scale_F) ** 2
+            + ((m.fs.aq_feed[t] - mm.ss_faq) / mm.scale_F) ** 2)
 
     tN = m.fs.time.last()
 
@@ -355,3 +375,21 @@ def tag_scaling(model):
         if 1e-2 <= mag <= 1e2:
             continue
         model.scaling_factor[v] = 10.0 ** (-round(math.log10(mag)))
+
+
+def noise_sigmas(m, frac=0.3):
+    """Per-channel standard deviations for the rare earth noise, mol/hr.
+
+    The nine rare earth channels in the mixer, each drawing with a
+    standard deviation of ``frac`` times its steady inventory per hour:
+    the grade of the incoming leachate wandering. The solvent, acid,
+    impurity, and settler channels stay at zero by default; their
+    inventories are tied into the closure algebra tightly enough that
+    comparable forcing defeats the plant solves rather than perturbing
+    the process.
+    """
+    ree = ("Sc", "Y", "La", "Ce", "Pr", "Nd", "Sm", "Gd", "Dy")
+    return {
+        f"w_m_{j}": frac * abs(pyo.value(m.component(f"ss_maq_{j}")))
+        for j in ree
+    }
