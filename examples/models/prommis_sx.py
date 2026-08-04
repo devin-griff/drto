@@ -314,23 +314,43 @@ def steady_targets(m, tee=False):
     saq = [j for j in maq if j != "H2O"]
     sog = [j for j in m.fs.prop_o.component_list if j != "Kerosene"]
 
-    # the steady point, written into this model's t0 algebra so the
-    # holdup rows can be evaluated in the model's own units
-    for j in m.fs.leach_soln.component_list:
-        msc.aqueous[t0, 1].conc_mass_comp[j].set_value(
-            pyo.value(tmsc.aqueous[ts, 1].conc_mass_comp[j]))
-        for x in xs:
-            aq.properties[t0, x].conc_mass_comp[j].set_value(
-                pyo.value(taq.properties[ts, x].conc_mass_comp[j]))
-    for j in m.fs.prop_o.component_list:
-        msc.organic[t0, 1].conc_mass_comp[j].set_value(
-            pyo.value(tmsc.organic[ts, 1].conc_mass_comp[j]))
-        for x in xs:
-            og.properties[t0, x].conc_mass_comp[j].set_value(
-                pyo.value(tog.properties[ts, x].conc_mass_comp[j]))
-    for p in ("aqueous", "organic"):
-        msc.volume_frac_stream[t0, 1, p].set_value(
-            pyo.value(tmsc.volume_frac_stream[ts, 1, p]))
+    # the steady point, written into this model's algebra at every time
+    # point: the t0 values anchor the holdup evaluations below, and the
+    # rest are initial values for the algebra that is determined only
+    # jointly with the dynamics (the stage and settler flows, like the
+    # extents), which the pointwise cold-start solves cannot reach
+    for t in m.fs.time:
+        for j in m.fs.leach_soln.component_list:
+            msc.aqueous[t, 1].conc_mass_comp[j].set_value(
+                pyo.value(tmsc.aqueous[ts, 1].conc_mass_comp[j]))
+            for x in aq.length_domain:
+                aq.properties[t, x].conc_mass_comp[j].set_value(
+                    pyo.value(taq.properties[ts, x].conc_mass_comp[j]))
+        for j in m.fs.prop_o.component_list:
+            msc.organic[t, 1].conc_mass_comp[j].set_value(
+                pyo.value(tmsc.organic[ts, 1].conc_mass_comp[j]))
+            for x in og.length_domain:
+                og.properties[t, x].conc_mass_comp[j].set_value(
+                    pyo.value(tog.properties[ts, x].conc_mass_comp[j]))
+        for p in ("aqueous", "organic"):
+            msc.volume_frac_stream[t, 1, p].set_value(
+                pyo.value(tmsc.volume_frac_stream[ts, 1, p]))
+        msc.aqueous[t, 1].flow_vol.set_value(
+            pyo.value(tmsc.aqueous[ts, 1].flow_vol))
+        msc.organic[t, 1].flow_vol.set_value(
+            pyo.value(tmsc.organic[ts, 1].flow_vol))
+        for x in aq.length_domain:
+            aq.properties[t, x].flow_vol.set_value(
+                pyo.value(taq.properties[ts, x].flow_vol))
+            og.properties[t, x].flow_vol.set_value(
+                pyo.value(tog.properties[ts, x].flow_vol))
+        for mine, theirs in ((aq, taq), (og, tog)):
+            for idx, v in theirs._flow_terms.items():
+                mine._flow_terms[(t,) + idx[1:]].set_value(pyo.value(v))
+            for idx, v in theirs.material_flow_dx.items():
+                if v.value is not None:
+                    mine.material_flow_dx[(t,) + idx[1:]].set_value(
+                        pyo.value(v))
 
     def rhs(cd):
         return pyo.value(cd.expr.args[1])
