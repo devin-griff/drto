@@ -285,3 +285,14 @@ def test_block_reduction_reaches_the_fixed_point():
     assert pyo.value(m.u) == pytest.approx(1.0, abs=1e-6)
     assert pyo.value(m.props[0].y) == pytest.approx(1.0, abs=1e-6)
     assert pyo.value(m.z) == pytest.approx(0.35, abs=1e-6)
+
+
+def test_a_scaled_derivative_side_reduces_like_the_bare_form():
+    # ``2*dz/dt == u - z``: the derivative is recognized through the fixed
+    # coefficient (gh #51), the reduction pins it at zero as usual
+    from test_infinite_horizon import _first_order
+
+    m = _first_order(scaled=True)
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert not m.z.is_indexed()
+    assert m.dzdt.fixed and pyo.value(m.dzdt) == 0

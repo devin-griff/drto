@@ -175,8 +175,17 @@ declarations rather than re-deriving them.
   declared horizon (a steady-state model), the control registers without a
   profile: there is no time to parameterize over, and the steady modes fix
   the control instead.
-- `dynamics(m.ode, ...)` tags one or more equality
-  Constraints whose left-hand sides are the DerivativeVars of declared states.
+- `dynamics(m.ode, ...)` tags one or more equality Constraints with the
+  DerivativeVar of a declared state on one side, bare or multiplied by
+  derivative-free factors: an IDAES `ControlVolume1D` writes
+  `length * accumulation`, a variable-volume balance writes `V * dc/dt`,
+  and both are that state's differential equation. A side differentiated
+  along the declared time set wins over one differentiated along a
+  spatial axis, so a 1D balance carrying the space derivative on its
+  other side reads correctly in either orientation. The transforms
+  consume the same shape: the steady reduction pins the derivative
+  through the coefficient, and the terminal segment carries the
+  coefficient onto the dilated tail dynamics.
 - `tracking_stage_cost(m.con)` and `economic_stage_cost(m.con)`
   each tag a per-time-point equality Constraint whose left-hand side is the
   scalar running-cost variable; the right-hand side defines the cost. The

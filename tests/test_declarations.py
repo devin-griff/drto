@@ -209,6 +209,83 @@ def test_dynamics_accepts_either_orientation():
     assert drto.info(m).components("dynamics") == (m.ode_flipped,)
 
 
+def test_dynamics_accepts_a_fixed_coefficient_on_the_derivative():
+    # IDAES's ControlVolume1D writes ``length * accumulation == fluxes``: a
+    # Param, a fixed Var, or their product may multiply the derivative side
+    m = base_model()
+    drto.horizon(m.t)
+    drto.state(m.z)
+    m.L = pyo.Param(initialize=2.0, mutable=True)
+    m.area = pyo.Var(initialize=3.0)
+    m.area.fix()
+
+    @m.Constraint(m.t)
+    def ode_scaled(m, t):
+        return m.L * m.area * m.dzdt[t] == -m.z[t] + m.u[t]
+
+    drto.dynamics(m.ode_scaled)
+    assert drto.info(m).components("dynamics") == (m.ode_scaled,)
+
+
+def test_dynamics_accepts_an_algebraic_coefficient_on_the_derivative():
+    # a variable-volume balance writes ``V * dc/dt == rhs``, and IDAES
+    # fixes geometry after construction, so the coefficient need not be
+    # fixed at declaration time
+    m = base_model()
+    drto.horizon(m.t)
+    drto.state(m.z)
+    m.k = pyo.Var(initialize=2.0)
+
+    @m.Constraint(m.t)
+    def ode_vol(m, t):
+        return m.k * m.dzdt[t] == -m.z[t] + m.u[t]
+
+    drto.dynamics(m.ode_vol)
+    assert drto.info(m).components("dynamics") == (m.ode_vol,)
+
+
+def test_dynamics_prefers_the_time_derivative_side():
+    # a 1D balance carries the space derivative on its other side (an
+    # IDAES settler writes the flux side first for a backward stream):
+    # the time-set preference picks the accumulation side regardless of
+    # the written orientation
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1, 2])
+    m.x = ContinuousSet(initialize=[0.0, 1.0])
+    m.z = pyo.Var(m.t, m.x)
+    m.F = pyo.Var(m.t, m.x)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.dFdx = DerivativeVar(m.F, wrt=m.x)
+    m.L = pyo.Var(initialize=0.4)
+    drto.horizon(m.t)
+    drto.state(m.z)
+
+    @m.Constraint(m.t, m.x)
+    def bal(mm, t, x):
+        if x == 0:
+            return pyo.Constraint.Skip
+        return -mm.dFdx[t, x] == mm.L * mm.dzdt[t, x]
+
+    drto.dynamics(m.bal)
+    assert drto.info(m).components("dynamics") == (m.bal,)
+
+
+def test_dynamics_rejects_a_derivative_in_the_coefficient():
+    # a product of two derivatives is no state's differential equation
+    m = base_model()
+    drto.horizon(m.t)
+    drto.state(m.z)
+    m.z2 = pyo.Var(m.t)
+    m.dz2dt = DerivativeVar(m.z2, wrt=m.t)
+
+    @m.Constraint(m.t)
+    def ode_pair(m, t):
+        return m.dzdt[t] * m.dz2dt[t] == -m.z[t] + m.u[t]
+
+    with pytest.raises(ValueError, match="derivative-free"):
+        drto.dynamics(m.ode_pair)
+
+
 def test_dynamics_state_must_be_declared():
     m = base_model()
     m.w = pyo.Var(m.t)

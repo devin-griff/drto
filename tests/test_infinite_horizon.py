@@ -1165,3 +1165,75 @@ def test_block_model_solves_through_the_tail():
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
     res = pyo.SolverFactory("ipopt").solve(m)
     assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+
+
+def _first_order(scaled):
+    """``2*dz/dt == u - z`` or the algebraically identical bare form.
+
+    Two samples of horizon against a time constant of two: the tail
+    carries a live transient, so its dilated dynamics are load-bearing
+    and a dropped coefficient changes the solution.
+    """
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 2, 1))
+    m.z = pyo.Var(m.t, initialize=0.4)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.5)
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.u_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.4, mutable=True)
+    m.L = pyo.Param(initialize=2.0, mutable=True)
+    m.cost = pyo.Var(m.t)
+
+    if scaled:
+
+        @m.Constraint(m.t)
+        def ode(mm, t):
+            return mm.L * mm.dzdt[t] == mm.u[t] - mm.z[t]
+
+    else:
+
+        @m.Constraint(m.t)
+        def ode(mm, t):
+            return mm.dzdt[t] == (mm.u[t] - mm.z[t]) / mm.L
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == 10 * (mm.z[t] - mm.z_ss) ** 2 + (mm.u[t] - mm.u_ss) ** 2
+
+    @m.Constraint()
+    def init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.init)
+    drto.steady_state(m.z, m.z_ss)
+    drto.steady_state_control(m.u, m.u_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=2, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+@needs_ipopt
+def test_a_scaled_derivative_side_dilates_like_the_bare_form():
+    # ``2*dz/dt == u - z`` and ``dz/dt == (u - z)/2`` are the same
+    # dynamics, so the coefficient must ride the dilated tail derivative
+    # too (gh #51): both forms solve to the same trajectory, tail included
+    results = []
+    for scaled in (True, False):
+        m = _first_order(scaled)
+        pyo.TransformationFactory(IH).apply_to(m)
+        pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
+        res = pyo.SolverFactory("ipopt").solve(m)
+        assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+        results.append(
+            [pyo.value(m.z[t]) for t in m.t]
+            + [pyo.value(m.drto_ih.z[s]) for s in sorted(m.drto_ih.tau)]
+        )
+    for a, b in zip(*results):
+        assert a == pytest.approx(b, abs=1e-8)

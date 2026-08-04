@@ -41,6 +41,7 @@ from pyomo.core import Constraint, Reference
 from pyomo.core.base.block import BlockData
 from pyomo.core.base.indexed_component_slice import IndexedComponent_slice
 from pyomo.core.expr import identify_variables
+from pyomo.core.expr.numeric_expr import MonomialTermExpression, ProductExpression
 from pyomo.core.expr.relational_expr import EqualityExpression
 from pyomo.dae import ContinuousSet, DerivativeVar
 
@@ -260,6 +261,63 @@ def _side_matching(condata, predicate, fn, expected):
     raise ValueError(f"drto: {fn}: neither side of '{condata.name}' is {expected}.")
 
 
+def _mult_factors(node):
+    """Yield the multiplicative factors of a product expression tree."""
+    if isinstance(node, (ProductExpression, MonomialTermExpression)):
+        for a in node.args:
+            yield from _mult_factors(a)
+    else:
+        yield node
+
+
+def _dynamics_sides(condata, time, fn):
+    """Return ``(derivative, coefficient, other)`` for a dynamics equality.
+
+    One written side must be a DerivativeVar member, bare or multiplied by
+    derivative-free factors (an IDAES ``ControlVolume1D`` writes
+    ``length * accumulation``; a variable-volume balance writes
+    ``V * dc/dt``); ``coefficient`` is the product of those factors, None
+    for the bare side. A side differentiated with respect to ``time`` wins
+    over one differentiated along another axis, so a 1D balance carrying
+    the space derivative on its other side reads correctly in either
+    orientation; with no time-side at all the first structural match
+    returns, for the caller's wrt check to reject descriptively.
+    """
+    lhs, rhs = _equality_sides(condata, fn)
+    fallback = None
+    for side, other in ((lhs, rhs), (rhs, lhs)):
+        factors = list(_mult_factors(side))
+        derivs = [
+            f
+            for f in factors
+            if _is_var_member(f) and isinstance(f.parent_component(), DerivativeVar)
+        ]
+        if len(derivs) != 1:
+            continue
+        rest = [f for f in factors if f is not derivs[0]]
+        if any(
+            isinstance(v.parent_component(), DerivativeVar)
+            for f in rest
+            for v in identify_variables(f, include_fixed=True)
+        ):
+            continue
+        coeff = None
+        for f in rest:
+            coeff = f if coeff is None else coeff * f
+        candidate = (derivs[0], coeff, other)
+        sets = derivs[0].parent_component().get_continuousset_list()
+        if _declared_in(time, sets):
+            return candidate
+        if fallback is None:
+            fallback = candidate
+    if fallback is not None:
+        return fallback
+    raise ValueError(
+        f"drto: {fn}: neither side of '{condata.name}' is a DerivativeVar "
+        f"(dz/dt), bare or multiplied by derivative-free factors."
+    )
+
+
 def _time_coord(vardata, time):
     """Return the time coordinate of a Var member, or None.
 
@@ -380,9 +438,11 @@ def dynamics(*components, **kwargs):
     """Declare one or more dynamics equality Constraints.
 
     Currently continuous-time: one side of each member is the DerivativeVar
-    of a declared state, taken with respect to the declared time set.
-    Requires ``horizon`` and ``state`` first. Tags attached Constraints,
-    wraps a fresh one, or builds one as a decorator:
+    of a declared state, taken with respect to the declared time set, bare
+    or multiplied by derivative-free factors (an IDAES ``ControlVolume1D``
+    writes ``length * accumulation``; a variable-volume balance writes
+    ``V * dc/dt``). Requires ``horizon`` and ``state`` first. Tags attached
+    Constraints, wraps a fresh one, or builds one as a decorator:
     ``@drto.dynamics(m, m.t)``.
     """
     fn = "dynamics"
@@ -422,14 +482,7 @@ def _register_dynamics(components):
             covered.add(id(vd.parent_component()))
     for comp in components:
         for cd in _members(comp):
-            deriv, _ = _side_matching(
-                cd,
-                lambda s: isinstance(
-                    getattr(s, "parent_component", lambda: None)(), DerivativeVar
-                ),
-                fn,
-                "a DerivativeVar (dz/dt)",
-            )
+            deriv, _coeff, _ = _dynamics_sides(cd, time, fn)
             dv = deriv.parent_component()
             state = dv.get_state_var()
             if id(state) not in covered:

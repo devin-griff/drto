@@ -63,6 +63,7 @@ from pyomo.core.expr import identify_variables, replace_expressions
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 from drto.declarations import (
+    _dynamics_sides,
     _is_var_member,
     _side_matching,
     pyomo_cvp,
@@ -100,12 +101,6 @@ def _gauss_weights(nodes):
     a = numpy.array([[x**p for x in nodes] for p in range(k)], dtype=float)
     b = numpy.array([1.0 / (p + 1) for p in range(k)])
     return numpy.linalg.solve(a, b)
-
-
-def _is_derivative(node):
-    """Return whether ``node`` is a DerivativeVar member."""
-    parent = getattr(node, "parent_component", lambda: None)()
-    return isinstance(parent, DerivativeVar)
 
 
 def _time_index(comp, time):
@@ -563,9 +558,7 @@ class InfiniteHorizonTransformation(Transformation):
             entries = {}
             residue = {}
             for o, (t_rep, cd) in _representatives(con).items():
-                deriv_side, rhs = _side_matching(
-                    cd, _is_derivative, "infinite_horizon", "a DerivativeVar"
-                )
+                deriv_side, coeff, rhs = _dynamics_sides(cd, time, "infinite_horizon")
                 zvd = deriv_side.parent_component().get_state_var()[deriv_side.index()]
                 hit = state_member.get(id(zvd))
                 if hit is None:
@@ -577,7 +570,9 @@ class InfiniteHorizonTransformation(Transformation):
                     continue
                 z, zo = hit
                 _scan(rhs, t_rep, cd.name)
-                entries[o] = (z, zo, rhs, t_rep)
+                if coeff is not None:
+                    _scan(coeff, t_rep, cd.name)
+                entries[o] = (z, zo, rhs, t_rep, coeff)
             dyn_reps[con] = entries
             if residue:
                 dyn_residue[con] = residue
@@ -661,8 +656,10 @@ class InfiniteHorizonTransformation(Transformation):
         # appearing ONLY in the dynamics is a free input the solver would
         # exploit, which is the smell it exists to catch.
         for entries in dyn_reps.values():
-            for _, _, rhs, _ in entries.values():
+            for _, _, rhs, _, coeff in entries.values():
                 _note_defined(rhs, flat_too=False)
+                if coeff is not None:
+                    _note_defined(coeff, flat_too=False)
         _note_defined(psi, flat_too=False)
         for key in block_alg:
             if key not in bdefined:
@@ -876,12 +873,15 @@ class InfiniteHorizonTransformation(Transformation):
                 o = tuple(idx[:-1])
                 if s in blk.tau.get_finite_elements() or o not in _entries:
                     return Constraint.Skip
-                z, zo, rhs, t_rep = _entries[o]
+                z, zo, rhs, t_rep, coeff = _entries[o]
                 dv = derivs[z]
                 deriv = dv[tuple(zo) + (s,)] if zo else dv[s]
-                return blk.gamma * (1 - s**2) * deriv == replace_expressions(
-                    rhs, _emap(t_rep, s)
-                )
+                lhs = blk.gamma * (1 - s**2) * deriv
+                if coeff is not None:
+                    # the written side's fixed coefficient (an IDAES CV1D's
+                    # length) rides the dilated derivative unchanged
+                    lhs = replace_expressions(coeff, _emap(t_rep, s)) * lhs
+                return lhs == replace_expressions(rhs, _emap(t_rep, s))
 
             dyn_copies[con] = Constraint(*others, b.tau_i, rule=dyn_rule)
             b.add_component(con.local_name, dyn_copies[con])
