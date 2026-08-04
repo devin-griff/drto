@@ -48,6 +48,20 @@ The feature is the discovery fix, with everything downstream unchanged:
   otherwise, mirroring `drto.dynamic_simulation`.
 - Time-invariant components, including Params and parameter blocks, are
   shared as-is, which is current behavior.
+- A Block family may carry index sets besides time (an IDAES stage element,
+  a spatial node: `Block(t, s)`). Each non-time combination is its own
+  family: its members get their own segment copies and its equations
+  replicate per combination, the same treatment a partially declared
+  container's members already get. The segment's copy names carry the
+  combination.
+- A derivative over a ContinuousSet other than the declared time set (a
+  spatial axis) is ordinary algebra: its referenced members copy to the
+  segment and its discretization equations, despite the pyomo.dae naming,
+  replicate with them. Only the declared time set's discretization and
+  continuity rows are the artifacts the segment rebuilds over tau.
+- Two model components sharing a local name (the two settlers of a
+  mixer-settler both carry `_flow_terms`) get distinct segment names, the
+  sanitized full path breaking the tie.
 
 Out of scope, rejected with a descriptive error: a time-indexed Block nested
 inside another time-indexed Block.
@@ -81,3 +95,11 @@ machinery that is already tested.
   the disturbance's segment copy fixed at the `disturbances` value (default
   zero), on a model with no Blocks at all: the hole is closed for the flat
   case too, and tested there.
+- A `Block(t, s)` family replicates per non-time combination and solves
+  identically to the flat twin of the same physics; a spatial
+  discretization row replicates as algebra with its derivative members
+  copied; same-named components take distinct segment names; and the
+  free-copy guard covers partially copied containers, so a member left
+  without a replicated defining equation is the descriptive error, not a
+  silent freedom. The declared PrOMMiS mixer-settler goes through the
+  transform with its degrees of freedom accounted for.
