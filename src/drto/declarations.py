@@ -127,7 +127,7 @@ def _wrap_form(components, fn):
 def _defer(component, register, fn):
     """Wrap a fresh component: run ``register`` when Pyomo attaches it.
 
-    Attachment (``m.x = component``) constructs the component, so the hook
+    Attachment (``m.x = component``) constructs the component, so the deferred registration
     shadows ``construct``, runs the original, removes itself, and registers,
     at which point the component has its model and name.
     """
@@ -142,7 +142,7 @@ def _defer(component, register, fn):
     def construct(data=None):
         model = component.model()
         if type(model).__name__ == "AbstractModel":
-            # attachment to an AbstractModel does not construct, so the hook
+            # attachment to an AbstractModel does not construct, so the deferred registration
             # survives into create_instance's clone, where it would construct
             # and register the original component instead of the instance's
             raise ValueError(
@@ -473,9 +473,10 @@ def _register_dynamics(components):
     if not states:
         raise ValueError(f"drto: {fn} requires drto.state first.")
     # a container with any declared member is covered: a state may be a
-    # Reference over a member subset (gh #20); the rows differentiating
-    # the undeclared members stay algebraic, and the transforms
-    # replicate them as written
+    # Reference over a member subset (gh #20): an indexed Var with only
+    # some entries declared as states, the IDAES holdup with water left
+    # out. The left-out entries' balance equations are treated as
+    # ordinary algebraic equations and replicated as written
     covered = {id(s) for s in states}
     for s in states:
         for vd in s.values() if s.is_indexed() else (s,):
@@ -681,7 +682,7 @@ def initial_condition(*components, **kwargs):
     """Declare one or more initial-condition equality Constraints.
 
     One side of each is a declared state at the first time point; the other
-    is a mutable Param, the state feedback hook the loop writes measurements
+    is a mutable Param, which a loop overwrites with each measurement
     into. Tags attached Constraints, wraps a fresh one, or builds one as a
     decorator: ``@drto.initial_condition(m)``.
     """
@@ -736,7 +737,7 @@ def _register_initial_condition(components):
             if param is None or param.ctype.__name__ != "Param":
                 raise ValueError(
                     f"drto: {fn}: the other side of '{cd.name}' must be a "
-                    f"mutable Param, the state feedback hook."
+                    f"mutable Param a loop can overwrite."
                 )
             if not param.mutable:
                 raise ValueError(
@@ -971,7 +972,7 @@ def measurement(*components):
     """Declare one or more measurement Params.
 
     The measured values over the window, mutable Params drto refreshes each
-    step like the state feedback hook. They appear in the estimation cost
+    step like the initial-condition Params. They appear in the estimation cost
     residuals; the measurement map ``h(z)`` is written inline in the cost, so
     there is nothing else to tag. Indexed by the declared time set when a
     horizon is declared. Tags attached Params or wraps one fresh Param.

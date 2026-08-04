@@ -15,7 +15,7 @@ needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
 def seeded():
-    """ready_model with the hook away from the target: a real ramp."""
+    """ready_model with the initial condition away from the target: a real ramp."""
     m = ready_model()
     m.z_hat.set_value(0.1)  # target z_ss = 0.5
     for vd in m.u.values():

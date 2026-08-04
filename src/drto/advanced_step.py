@@ -4,15 +4,15 @@
 (feature 012).
 
 Solve the horizon at a predicted state between samples with pounce, write
-the measured state into the feedback hooks the moment it arrives, and ask
+the measured state into the initial-condition Params the moment it arrives, and ask
 for the corrected solution without re-solving: the converged
 factorization is kept by the solve, and the correction is a backsolve.
-``drto.dynamic_optimization`` declares the hooks as pounce sensitivity
+``drto.dynamic_optimization`` declares those Params as pounce sensitivity
 parameters whenever pyomo-pounce is importable, so the only requirements
 here are that transform and a pounce solve.
 
 The model is not touched: the solution at the predicted state stays in
-place as the next solve's warm start, and the hooks keep the measured
+place as the next solve's warm start, and the Params keep the measured
 values the loop wrote.
 """
 import pyomo.environ as pyo
@@ -25,7 +25,7 @@ from drto.info import info
 def advanced_step_controller(m, gradient=False, **kwargs):
     """Return the correction of ``m``'s solution to the measured state.
 
-    The perturbation is read from the feedback hooks' current values, the
+    The perturbation is read from the initial-condition Params' current values, the
     difference between the measured state the loop wrote and the
     predicted state the model was solved at (the solve point is the
     baseline, so writing the measurement first is the expected pattern).
@@ -33,8 +33,8 @@ def advanced_step_controller(m, gradient=False, **kwargs):
     corrected value, clamped to bounds. The model itself is not modified.
 
     With ``gradient=True`` it returns ``pyomo_pounce.gradient()`` of the
-    declared controls with respect to the hooks instead, as nested
-    ComponentMaps: ``result[control][hook]``. Unrecognized keyword
+    declared controls with respect to those Params instead, as nested
+    ComponentMaps: ``result[control][param]``. Unrecognized keyword
     arguments pass through to the pounce call, so options pounce grows
     need no change here.
 
@@ -54,7 +54,7 @@ def advanced_step_controller(m, gradient=False, **kwargs):
     reg = info(m)
     if not reg.has_declaration("initial_condition"):
         raise ValueError(
-            f"drto: {fn} reads the perturbation from the feedback hooks, "
+            f"drto: {fn} reads the perturbation from the initial-condition Params, "
             f"the initial-condition Params; declare the initial condition "
             f"first (drto.initial_condition)."
         )

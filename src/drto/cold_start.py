@@ -154,7 +154,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     horizon = tN - t0
 
     # the declared initial condition: each row pins a state member at t0
-    # to a mutable Param, the feedback hook; the values are the line's
+    # to a mutable Param the loop overwrites; the values are the line's
     # start, keyed by the pinned member's data id
     z0 = {}
     for con in reg.components("initial_condition"):
@@ -309,8 +309,8 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
                 con.deactivate()
     # the terminal segment mirrors the finite horizon: its state and
     # control copies are held at the values set above, and set aside are
-    # its copies of the declared dynamics (the undeclared members'
-    # rows included)
+    # its copies of the declared dynamics, including the balance
+    # equations of entries never declared as states (the water holdup)
     # plus the rows those values satisfy by construction (the link, the
     # continuity, the pin), which would otherwise re-solve held copies.
     # The pin slacks then sit in no active row and stay at zero, and a

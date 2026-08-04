@@ -24,7 +24,7 @@ laid over the documented default.
 An active ``scaling_factor`` suffix is honored the way the initializers
 honor it: the loop builds each side's scaled clone once, runs every
 solve and warm start on those clones for the whole loop, and reads the
-history back in the model's own units. The feedback hooks are Params
+history back in the model's own units. The initial-condition Params are the write points
 and stay physical.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
@@ -101,7 +101,7 @@ class NmpcHistory:
 
 
 def _pinned(reg, fn):
-    """The initial-condition rows' (pinned state member, hook Param) pairs.
+    """The initial-condition rows' (pinned state member, Param) pairs.
 
     Row order is declaration order, so the controller's and the process
     clone's lists line up positionally.
@@ -208,8 +208,8 @@ def ideal_nmpc(
         The loop length, in samples.
     initial_condition : mapping, optional
         Declared state (the component, or its name) to the value written
-        into its feedback hooks before the first step: a constant for
-        every pinned member, or one value each. Omitted, the hooks'
+        into its initial-condition Params before the first step: a constant for
+        every pinned member, or one value each. Omitted, the Params'
         current values are the first actual state.
     dynamic_optimization : mapping, optional
         Options through to the ``drto.dynamic_optimization`` transform.
@@ -299,7 +299,7 @@ def ideal_nmpc(
             if t == t0:
                 owner[id(z[idx])] = (z, o)
 
-    # the initial condition lands in the hooks on the input, so the
+    # the initial condition lands in the input's Params, so the
     # process clone inherits it with everything else
     pins = _pinned(reg, fn)
     hooks_of = {}
@@ -415,7 +415,7 @@ def ideal_nmpc(
         ctrl, plant, fmap, pmap = m, process, None, None
 
     # the pinned rows parse on the physical pair; a scaled clone's
-    # rewritten rows do not, so the hooks and the read points are found
+    # rewritten rows do not, so the Params and the read points are found
     # here and mapped onto the solve models by name (rename=False keeps
     # the names identical)
     reg_m, reg_p = info(m), info(process)
@@ -515,7 +515,7 @@ def ideal_nmpc(
             for vd in _members(w):
                 vd.set_value(val * _factor(vd, pmap))
 
-        # simulate one sample and feed the state back into both hooks
+        # simulate one sample and write the state into both models' Params
         _solve(plant, "process", k)
         for c_hook, p_hook, src, label in zip(c_hooks, p_hooks, p_read, labels):
             val = pyo.value(src) / _factor(src, pmap)
