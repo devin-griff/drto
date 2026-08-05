@@ -70,9 +70,6 @@ html_static_path = ["_static"]
 html_css_files = ["drto-registry.css"]
 html_title = "drto"
 html_baseurl = "https://docs.drto.io/"
-html_static_path = ["_static"]
-html_css_files = ["theme-toggle.css"]
-html_js_files = ["theme-toggle.js"]
 
 html_theme_options = {
     "repository_url": "https://github.com/devin-griff/drto",
