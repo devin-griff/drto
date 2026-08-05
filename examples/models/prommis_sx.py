@@ -377,6 +377,31 @@ def steady_targets(m, tee=False):
     # one algebra the pointwise cold-start solves cannot reach, since
     # the equilibrium formulation determines them only jointly with the
     # dynamics)
+    # the generation variables and the accumulations: the point solves
+    # leave the generations underdetermined (they close only jointly
+    # with the dynamics), and nothing values the algebraic entries'
+    # accumulations at all. At steady, every accumulation is zero and
+    # the generations come off the solved flowsheet
+    for t in m.fs.time:
+        for var, tvar in (
+            (msc.aqueous_inherent_reaction_generation,
+             tmsc.aqueous_inherent_reaction_generation),
+            (msc.aqueous_heterogeneous_reactions_generation,
+             tmsc.aqueous_heterogeneous_reactions_generation),
+            (msc.organic_heterogeneous_reactions_generation,
+             tmsc.organic_heterogeneous_reactions_generation),
+            (aq.inherent_reaction_generation, taq.inherent_reaction_generation),
+        ):
+            for idx, tv in tvar.items():
+                if tv.value is not None:
+                    var[(t,) + idx[1:]].set_value(pyo.value(tv))
+        for acc in (msc.aqueous_material_accumulation,
+                    msc.organic_material_accumulation,
+                    aq.material_accumulation, og.material_accumulation):
+            for idx in acc:
+                if idx[0] == t:
+                    acc[idx].set_value(0.0)
+
     ka2 = pyo.value(tmsc.aqueous_inherent_reaction_extent[ts, 1, "Ka2"])
     het = {r: pyo.value(tmsc.heterogeneous_reaction_extent[ts, 1, r])
            for r in m.fs.reaxn.reaction_idx}
