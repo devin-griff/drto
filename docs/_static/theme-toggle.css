@@ -1,0 +1,16 @@
+/* Backstop for the script's inline hide of the stock switcher. */
+button.theme-switch-button {
+  display: none !important;
+}
+
+/* The moon shows in light mode, the sun in dark mode; the html
+   data-theme attribute picks which. */
+#drto-theme-toggle .fa-sun {
+  display: none;
+}
+html[data-theme="dark"] #drto-theme-toggle .fa-sun {
+  display: inline-block;
+}
+html[data-theme="dark"] #drto-theme-toggle .fa-moon {
+  display: none;
+}
