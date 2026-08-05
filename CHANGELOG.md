@@ -101,30 +101,35 @@ All notable changes to this project are documented here. The format is based on
   pyomo-pounce the per-point solves are skipped and the report says so.
   The IDAES CSTR notebook (`examples/cstr_cold_start.ipynb`) shows
   the model before and after, the per-point solves working the outlet
-  stream, the reaction cascade, and the packed holdup's water member.
+  stream, the reaction cascade, and the indexed holdup's water member.
 
 ### Changed
+
+- The terminal segment's copies of a dynamics family's algebraic
+  members are named `<family>_algebraic` instead of
+  `<family>_residue`, and the registry records them under `algebraic`.
+  They are algebraic constraints and the name now says so.
 
 - The terminal segment replicates spatially distributed models (gh #56).
   A time-indexed Block family may carry further indices, an IDAES stage
   element or a spatial node: each non-time combination replicates as its
-  own family, with its own segment copies and rows, and solves
+  own family, with its own segment copies and constraints, and solves
   identically to the flat twin of the same physics. A derivative over a
   ContinuousSet other than the declared time set is ordinary algebra,
-  its members copied and its discretization rows replicated despite the
+  its members copied and its discretization equations replicated despite the
   pyomo.dae `_disc_eq` naming; only the declared time set's artifacts
   are rebuilt over tau. Same-named components from different units (the
   two settlers of a mixer-settler both carry `_flow_terms`) take
   distinct segment names. The free-copy guard now also covers partially
-  copied containers, so a member whose defining row was dropped is a
+  copied containers, so a member whose defining constraint was dropped is a
   descriptive error instead of a silent tail freedom; the guard credit
-  includes the replicated residue rows. On the declared PrOMMiS
+  includes the replicated algebraic balances. On the declared PrOMMiS
   mixer-settler the transform applies in seconds and the assembled
-  problem's freedoms are accounted for: the spatial discretization rows
+  problem's freedoms are accounted for: the spatial discretization equations
   land on the tail, closing the 1860 freedoms their omission left.
 
 - `drto.dynamics` reads the derivative side through its coefficients
-  (gh #51): a dynamics row's derivative side may be the DerivativeVar
+  (gh #51): a dynamics constraint's derivative side may be the DerivativeVar
   multiplied by derivative-free factors, IDAES `ControlVolume1D`'s
   `length * accumulation` idiom, with a side differentiated along the
   declared time set winning over a spatial-derivative side in either
@@ -179,11 +184,11 @@ All notable changes to this project are documented here. The format is based on
   (degraded-environment measurements, to be re-verified).
 
 - The terminal segment's algebraic copies (the flat algebra, the Block
-  members, the packed residue members) are indexed over the interior
+  members, the indexed residue members) are indexed over the interior
   collocation points only (gh #32): every point that exists is one a
   replicated equation determines, so no dead boundary member exists to
   hold a stale value for a reader to find. State copies keep the full
-  tau set for their continuity and discretization rows, as the tail
+  tau set for their continuity and discretization equations, as the tail
   cost's quadrature always has. The transform also records these copies
   and the segment itself (with gamma) in the registry pairing (gh #27),
   which the warm start reads. On the IDAES CSTR, the warm-started
@@ -226,7 +231,7 @@ All notable changes to this project are documented here. The format is based on
   saponification CSTR taken straight from `idaes.models.unit_models`,
   declared through the drto surface with no changes to the flowsheet and
   driven in two solves. The true states declare as member-subset slices of
-  the packed holdup, the water member staying algebraic (#20); the
+  the indexed holdup, the water member staying algebraic (#20); the
   manipulated variables are the jacket duty and the feed flow, the flow
   declared on the inlet Port's time-indexed Reference; the setpoint comes
   from the declarations, `drto.steady_state_simulation` collapsing the
@@ -290,19 +295,19 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- A state may be declared as a member subset of a packed Var (#20). A
+- A state may be declared as a member subset of an indexed Var (#20). A
   slice like `holdup[:, "Liq", "NaOH"]` passed to `drto.state` wraps as an
-  attached time-indexed Reference, so a packed Var's algebraic member (an
+  attached time-indexed Reference, so an indexed Var's algebraic member (an
   IDAES water holdup, constant by the property package's closure) stays
   undeclared and the declared surface matches the true state dimension.
   Classification resolves by data identity everywhere: the dynamics and
-  initial-condition declarations accept rows on covered containers, the
+  initial-condition declarations accept constraints on covered containers, the
   steady-state pairing takes the same slice, the reduction pins every
   accumulation of a covered container at zero (steady state is steady for
-  the residue, which closes its row at the point), and the terminal
+  the residue, which closes its constraint at the point), and the terminal
   segment builds one family per declared state, copies the residue
   members per member over just the referenced combos, and replicates the
-  residue balance rows as written. Family-level declarations are
+  algebraic balances as written. Family-level declarations are
   unchanged.
 - A Reference-declared control gets one segment family (#18). The terminal
   segment classified Block members against declared controls by component
@@ -310,7 +315,7 @@ All notable changes to this project are documented here. The format is based on
   declared as a time-indexed Reference into Block members (the IDAES inlet
   idiom) split in two on the segment: an algebraic member copy carrying
   the replicated equations and the cost, and a vestigial control copy
-  connected to nothing but its own profile rows, parked wherever the
+  connected to nothing but its own profile constraints, parked wherever the
   solver left it. Members now route to their declared control by data
   identity, the map feature 020 built for disturbances, so the control's
   own copy carries the tail and the shadow family is gone: 15 activated
@@ -460,7 +465,7 @@ All notable changes to this project are documented here. The format is based on
   `build_objective` assembles. The derivative is fixed rather than
   eliminated, so the declared dynamics and any derivative-carrying algebraic
   equation keep their form as written, with `dz/dt` pinned; there are still
-  no `dz/dt == 0` rows, and the solver folds a fixed Var in as a constant.
+  no `dz/dt == 0` constraints, and the solver folds a fixed Var in as a constant.
   Pyomo cannot hold a DerivativeVar outside a ContinuousSet, so the
   collapsed derivative is a plain scalar Var of the same name. Applies to
   the declared or discretized model, before any drto transformation (the

@@ -196,7 +196,7 @@ def test_segment_pairing_recorded_on_the_registry():
     assert urec["of"] is m.u and urec["copy"] is b.u
     (drec,) = reg._segment_records("dynamics")
     assert drec["of"] is m.ode and drec["copy"] is b.ode
-    assert drec["residue"] is None  # a flat state has no residue rows
+    assert drec["algebraic"] is None  # a flat state has no algebraic members
 
     # a clone carries the pairing with its references remapped
     m2 = m.clone()
@@ -1066,9 +1066,9 @@ def test_reference_control_solves_through_the_tail():
 
 
 def packed_model():
-    """A packed Var with an algebraic member: the true state is declared
+    """An indexed Var with an algebraic member: the true state is declared
     as a member-subset slice, and the W member (constant by closure) stays
-    undeclared with its balance row as the residue (gh #20)."""
+    undeclared, its balance an algebraic constraint (gh #20)."""
     m = pyo.ConcreteModel()
     m.t = ContinuousSet(initialize=pyo.RangeSet(0, 5, 1))
     m.z_ss = pyo.Param(initialize=0.5, mutable=True)
@@ -1123,9 +1123,9 @@ def test_member_subset_state_segment_structure():
     m = packed_model()
     pyo.TransformationFactory(IH).apply_to(m)
     b = m.drto_ih
-    # one family per declared state; the residue members copy per member
+    # one family per declared state; the algebraic entries copy per entry
     assert b.component("x_A") is not None
-    assert b.component("bal_residue") is not None
+    assert b.component("bal_algebraic") is not None
     xm = b.component("x_members")
     assert {k[0] for k in xm.keys()} == {"W"}
     assert {k[0] for k in b.component("dx_members").keys()} == {"W"}

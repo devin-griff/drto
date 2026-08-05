@@ -127,7 +127,7 @@ problem from the same model.
   set, checked at the declaration.
 - `measurement(m.y_meas, ...)` tags one or more mutable Params holding the
   measured values over the window, which drto refreshes each step like the state
-  feedback hook. They appear in the estimation cost residuals
+  initial-condition Params. They appear in the estimation cost residuals
   `||y_meas - h(z)||`; `h(z)` is written inline in the cost, so there is no
   output Var or defining constraint to tag. With a
   horizon declared, each measurement is indexed by the declared time set.

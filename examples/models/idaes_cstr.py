@@ -4,7 +4,7 @@
 
 The flowsheet is ``idaes.models.unit_models.CSTR`` with the saponification
 property and reaction packages, taken as IDAES wrote it: the true states
-declare as member-subset slices of the packed material holdup (the water
+declare as member-subset slices of the indexed material holdup (the water
 member stays algebraic, closed by the property package), the energy holdup
 is the fifth state, and the manipulated inputs are the jacket duty and the
 feed flow, the flow declared on the inlet Port's time-indexed Reference.

@@ -28,7 +28,7 @@ def controller(z_hat=0.1):
 def test_dynamic_optimization_declares_the_hooks():
     m = controller()
     assert pyomo_pounce.sens.has_declarations(m)
-    assert "1 feedback hooks declared" in repr(drto.info(m))
+    assert "1 initial-condition Params declared" in repr(drto.info(m))
 
 
 @needs_ipopt
@@ -61,7 +61,7 @@ def test_estimate_agrees_with_a_resolve_and_leaves_the_model_alone():
     est = drto.advanced_step_controller(m)
 
     # the model is untouched: the solution at the prediction stays as the
-    # next solve's warm start, and the hook keeps the measured value
+    # next solve's warm start, and the Param keeps the measured value
     after = {v.name: v.value for v in m.component_data_objects(pyo.Var)}
     assert after == before
     assert pyo.value(m.z_hat) == 0.12

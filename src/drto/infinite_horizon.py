@@ -30,15 +30,15 @@ freedoms allow). A pin requires a declared ``drto.steady_state`` target for
 every state.
 
 States may carry index sets besides time; copies, linking, and replication
-run per member. Algebraic variables and equations ride along without being
-declared: any time-indexed variable the replicated equations reference that
+run per member. Algebraic variables and equations need no declarations:
+any time-indexed variable the replicated equations reference that
 is not a declared state or control gets a segment copy, and every active
 time-indexed constraint not declared as something else (and not a
 discretization artifact of the declared time set) is replicated at the
 interior collocation points. A time-indexed Block family may carry further
 indices (an IDAES stage element, a spatial node): each non-time combination
 replicates as its own family. A derivative over another ContinuousSet (a
-spatial axis) is ordinary algebra, its discretization rows replicating with
+spatial axis) is ordinary algebra, its discretization equations replicating with
 it, and same-named components from different units take distinct segment
 names.
 A replicated equation may reference a declared state's derivative (the
@@ -367,10 +367,10 @@ class InfiniteHorizonTransformation(Transformation):
 
         # declared state members by data-id, with their declared component
         # and other-index: a state may be a Reference over a member subset
-        # of a packed Var (gh #20). A container with any declared member is
+        # of an indexed Var (gh #20). A container with any declared member is
         # covered for the derivative checks, and the undeclared members of
         # a covered container (with their derivatives) copy per member as
-        # the algebraic residue.
+        # algebraic equations like any other.
         state_member = {}
         for z in states:
             zpos, zsubs = _time_index(z, time)
@@ -381,7 +381,7 @@ class InfiniteHorizonTransformation(Transformation):
         for z in states:
             for vd in z.values():
                 covered.add(id(vd.parent_component()))
-        flat_partial = {}  # container -> set of residue combos referenced
+        flat_partial = {}  # indexed Var -> its referenced algebraic entries
 
         # --- index layout helpers -------------------------------------
         layout = {}
@@ -432,7 +432,7 @@ class InfiniteHorizonTransformation(Transformation):
             derivative is taken with respect to it; one over another
             ContinuousSet (a spatial axis) is real algebra the segment
             must replicate (a settler's ``material_flow_dx_disc_eq``).
-            Continuity rows carry no derivative and arise from the
+            Continuity equations carry no derivative and arise from the
             declared-time collocation in the meshes drto supports."""
             cd = next(iter(con.values())) if con.is_indexed() else con
             for v in identify_variables(cd.body, include_fixed=True):
@@ -565,35 +565,36 @@ class InfiniteHorizonTransformation(Transformation):
                 elif id(v) in state_member or id(v) in control_data:
                     pass  # routed to the declared component's copy
                 elif isinstance(comp, DerivativeVar):
-                    # a residue member's derivative copies per member; a
-                    # declared member's maps to the dilated segment deriv
+                    # an algebraic entry's derivative copies entry by
+                    # entry; a declared state's derivative maps to the
+                    # dilated segment derivative
                     xvd = comp.get_state_var()[v.index()]
                     if id(xvd) not in state_member:
                         o2, _t2 = _split_index(v.index(), pos, len(subs))
                         flat_partial.setdefault(comp, set()).add(o2)
                 elif id(comp) in covered:
-                    # a partially declared container: the residue member
-                    # copies per member, not the container wholesale
+                    # only some entries of this Var are states: the
+                    # algebraic entry copies alone, not the whole Var
                     o2, _t2 = _split_index(v.index(), pos, len(subs))
                     flat_partial.setdefault(comp, set()).add(o2)
                 elif comp not in states_set and comp not in controls_set:
                     algebraic.add(comp)
 
         dyn_reps = {}
-        dyn_residue = {}
+        dyn_algebraic = {}
         for con in dynamics:
             entries = {}
-            residue = {}
+            alg_members = {}
             for o, (t_rep, cd) in _representatives(con).items():
                 deriv_side, coeff, rhs = _dynamics_sides(cd, time, "infinite_horizon")
                 zvd = deriv_side.parent_component().get_state_var()[deriv_side.index()]
                 hit = state_member.get(id(zvd))
                 if hit is None:
-                    # a row differentiating an undeclared member is the
-                    # residue: replicated as written, an algebraic equation
-                    # determining the member's derivative copy
+                    # a balance differentiating an entry that is not a
+                    # declared state is replicated as written, an algebraic
+                    # equation determining that entry's derivative copy
                     _scan(cd.expr, t_rep, cd.name)
-                    residue[o] = (cd.expr, t_rep)
+                    alg_members[o] = (cd.expr, t_rep)
                     continue
                 z, zo = hit
                 _scan(rhs, t_rep, cd.name)
@@ -601,8 +602,8 @@ class InfiniteHorizonTransformation(Transformation):
                     _scan(coeff, t_rep, cd.name)
                 entries[o] = (z, zo, rhs, t_rep, coeff)
             dyn_reps[con] = entries
-            if residue:
-                dyn_residue[con] = residue
+            if alg_members:
+                dyn_algebraic[con] = alg_members
 
         alg_reps = {}
         for con in alg_cons:
@@ -687,10 +688,10 @@ class InfiniteHorizonTransformation(Transformation):
                 _note_defined(rhs, flat_too=False)
                 if coeff is not None:
                     _note_defined(coeff, flat_too=False)
-        # a residue row replicated as written is the defining equation of
-        # the residue member's derivative copy
-        for residue in dyn_residue.values():
-            for expr, _t in residue.values():
+        # an algebraic entry's balance, replicated as written, defines
+        # that entry's derivative copy
+        for members in dyn_algebraic.values():
+            for expr, _t in members.values():
                 _note_defined(expr)
         _note_defined(psi, flat_too=False)
         for key in block_alg:
@@ -714,7 +715,7 @@ class InfiniteHorizonTransformation(Transformation):
         # the same strictness for partially copied containers: their
         # members appearing only in the dilated dynamics would be free
         # inputs on the tail (a spatial flow derivative whose
-        # discretization row was mistaken for a time artifact)
+        # discretization equation was mistaken for a time artifact)
         for pcomp in flat_partial:
             if pcomp not in defined:
                 raise ValueError(
@@ -777,7 +778,7 @@ class InfiniteHorizonTransformation(Transformation):
             v = bseg[key]
             return v[tuple(o) + (s,)] if o else v[s]
 
-        # residue members of partially declared containers copy per member,
+        # algebraic entries of partly declared Vars copy entry by entry,
         # over a set of the referenced combos, not the container wholesale
         pseg = {}
 
@@ -854,7 +855,7 @@ class InfiniteHorizonTransformation(Transformation):
                             continue
                         hit = state_member.get(id(dv.get_state_var()[idx]))
                         if hit is None:
-                            continue  # residue: the partial loop maps it
+                            continue  # not a state: its entry loop maps it
                         z, zo = hit
                         dseg = derivs[z]
                         seg_deriv = dseg[tuple(zo) + (s,)] if zo else dseg[s]
@@ -946,7 +947,7 @@ class InfiniteHorizonTransformation(Transformation):
                 lhs = blk.gamma * (1 - s**2) * deriv
                 if coeff is not None:
                     # the written side's fixed coefficient (an IDAES CV1D's
-                    # length) rides the dilated derivative unchanged
+                    # length) multiplies the dilated derivative unchanged
                     lhs = replace_expressions(coeff, _emap(t_rep, s)) * lhs
                 return lhs == replace_expressions(rhs, _emap(t_rep, s))
 
@@ -994,14 +995,14 @@ class InfiniteHorizonTransformation(Transformation):
             alg_rows[con] = Constraint(*others, b.tau_i, rule=alg_rule)
             b.add_component(_fresh(con.local_name, con.name), alg_rows[con])
 
-        # --- residue rows of the declared dynamics, replicated as written
+        # --- the algebraic entries' balances, replicated as written
         # at the interior collocation points like algebraic equations -----
-        residues = {}
-        for con, residue in dyn_residue.items():
+        alg_copies = {}
+        for con, members in dyn_algebraic.items():
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
 
-            def res_rule(blk, *idx, _entries=residue):
+            def alg_member_rule(blk, *idx, _entries=members):
                 sp = idx[-1]
                 o = tuple(idx[:-1])
                 if sp in blk.tau.get_finite_elements() or o not in _entries:
@@ -1009,10 +1010,10 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, tr = _entries[o]
                 return replace_expressions(expr, _emap(tr, sp))
 
-            residues[con] = Constraint(*others, b.tau_i, rule=res_rule)
+            alg_copies[con] = Constraint(*others, b.tau_i, rule=alg_member_rule)
             b.add_component(
-                _fresh(con.local_name + "_residue", con.name + "_residue"),
-                residues[con],
+                _fresh(con.local_name + "_algebraic", con.name + "_algebraic"),
+                alg_copies[con],
             )
 
         # --- gamma: the mesh rule, or the explicit override ---
@@ -1222,7 +1223,7 @@ class InfiniteHorizonTransformation(Transformation):
             reg._record_segment("control", u, copy=seg[u])
         for con in dynamics:
             reg._record_segment(
-                "dynamics", con, copy=dyn_copies[con], residue=residues.get(con)
+                "dynamics", con, copy=dyn_copies[con], algebraic=alg_copies.get(con)
             )
         for comp in list(algebraic) + list(disturbed):
             reg._record_segment("algebraic", comp, copy=seg[comp])

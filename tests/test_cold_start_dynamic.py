@@ -15,7 +15,7 @@ needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
 def seeded():
-    """ready_model with the hook away from the target: a real ramp."""
+    """ready_model with the initial condition away from the target: a real ramp."""
     m = ready_model()
     m.z_hat.set_value(0.1)  # target z_ss = 0.5
     for vd in m.u.values():
@@ -244,8 +244,8 @@ def test_segment_algebra_solves_at_the_tail():
     assert checked > 0
 
 
-def test_residue_algebra_solves_in_the_point_solves():
-    # a packed Var's undeclared member: its closure determines it and
+def test_undeclared_entries_algebra_solves_in_the_point_solves():
+    # an indexed Var's undeclared member: its closure determines it and
     # the discretization rows its derivative
     m = packed_model()
     m.u_ss = pyo.Param(initialize=0.3, mutable=True)
@@ -254,7 +254,7 @@ def test_residue_algebra_solves_in_the_point_solves():
     drto.cold_start_dynamic(m)
     for t in m.t:
         assert pyo.value(m.x[t, "W"]) == pytest.approx(55.0)
-    # the discretization rows determine the residue derivative at the
+    # the discretization equations determine its derivative at the
     # collocation points; the first point has no such row and stays put
     for t in sorted(m.t)[1:]:
         assert pyo.value(m.dx[t, "W"]) == pytest.approx(0, abs=1e-6)

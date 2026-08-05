@@ -127,9 +127,12 @@ def _wrap_form(components, fn):
 def _defer(component, register, fn):
     """Wrap a fresh component: run ``register`` when Pyomo attaches it.
 
-    Attachment (``m.x = component``) constructs the component, so the hook
-    shadows ``construct``, runs the original, removes itself, and registers,
-    at which point the component has its model and name.
+    A component handed to a declaration before attachment has no model
+    and no name yet, so validation and recording cannot run at the call.
+    The assignment ``m.x = component`` is what constructs it, so this
+    wrapper shadows ``construct``: when the assignment runs, it calls the
+    original ``construct``, removes itself, and then registers, at which
+    point the component has its model and name.
     """
     if "construct" in component.__dict__:
         raise ValueError(
@@ -142,9 +145,10 @@ def _defer(component, register, fn):
     def construct(data=None):
         model = component.model()
         if type(model).__name__ == "AbstractModel":
-            # attachment to an AbstractModel does not construct, so the hook
-            # survives into create_instance's clone, where it would construct
-            # and register the original component instead of the instance's
+            # attachment to an AbstractModel does not construct, so the
+            # wrapper would still be waiting when create_instance clones
+            # the model, and would then construct and register the
+            # original component instead of the instance's
             raise ValueError(
                 f"drto: {fn}: wrapping registers at attachment to a concrete "
                 f"model, and "
@@ -381,7 +385,7 @@ def horizon(component):
 def _attach_slice_reference(sl, fn):
     """Wrap a member-subset slice as an attached, named Reference.
 
-    A packed Var (an IDAES holdup) can hold members that are not states;
+    An indexed Var (an IDAES holdup) can hold members that are not states;
     a slice like ``holdup[:, "Liq", "NaOH"]`` declares the true state
     member (gh #20). The Reference attaches to the sliced component's
     parent block, named from the component and the constant coordinates.
@@ -414,7 +418,7 @@ def state(*components):
     A state carries a DerivativeVar only in a dynamic model, so no derivative
     is required here: a steady-state model's states qualify as written. Tags
     attached Vars, wraps one fresh Var, or wraps member-subset slices
-    (``holdup[:, "Liq", "NaOH"]``) as attached References, so a packed
+    (``holdup[:, "Liq", "NaOH"]``) as attached References, so an indexed
     Var's algebraic member stays undeclared.
     """
     fn = "state"
@@ -473,9 +477,10 @@ def _register_dynamics(components):
     if not states:
         raise ValueError(f"drto: {fn} requires drto.state first.")
     # a container with any declared member is covered: a state may be a
-    # Reference over a member subset (gh #20), and the rows differentiating
-    # the undeclared members are the algebraic residue the transforms
-    # replicate as written
+    # Reference over a member subset (gh #20): an indexed Var with only
+    # some entries declared as states, the IDAES holdup with water left
+    # out. The left-out entries' balance equations are treated as
+    # ordinary algebraic equations and replicated as written
     covered = {id(s) for s in states}
     for s in states:
         for vd in s.values() if s.is_indexed() else (s,):
@@ -681,7 +686,7 @@ def initial_condition(*components, **kwargs):
     """Declare one or more initial-condition equality Constraints.
 
     One side of each is a declared state at the first time point; the other
-    is a mutable Param, the state feedback hook the loop writes measurements
+    is a mutable Param, which a loop overwrites with each measurement
     into. Tags attached Constraints, wraps a fresh one, or builds one as a
     decorator: ``@drto.initial_condition(m)``.
     """
@@ -736,7 +741,7 @@ def _register_initial_condition(components):
             if param is None or param.ctype.__name__ != "Param":
                 raise ValueError(
                     f"drto: {fn}: the other side of '{cd.name}' must be a "
-                    f"mutable Param, the state feedback hook."
+                    f"mutable Param a loop can overwrite."
                 )
             if not param.mutable:
                 raise ValueError(
@@ -971,7 +976,7 @@ def measurement(*components):
     """Declare one or more measurement Params.
 
     The measured values over the window, mutable Params drto refreshes each
-    step like the state feedback hook. They appear in the estimation cost
+    step like the initial-condition Params. They appear in the estimation cost
     residuals; the measurement map ``h(z)`` is written inline in the cost, so
     there is nothing else to tag. Indexed by the declared time set when a
     horizon is declared. Tags attached Params or wraps one fresh Param.

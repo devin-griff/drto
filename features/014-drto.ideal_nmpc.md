@@ -18,8 +18,8 @@ import drto
 history = drto.ideal_nmpc(
     m,
     steps=50,                          # loop length, in samples
-    initial_condition={"z": 0.2},      # written into the hooks; omitted,
-                                       # the hooks' current values
+    initial_condition={"z": 0.2},      # written into the initial-condition
+                                       # Params; omitted, their current values
     dynamic_optimization={},           # options through to the transform
     disturbances={"w": 0.05},          # per declared disturbance: a
                                        # number is a std dev of zero-mean
@@ -111,7 +111,7 @@ An active `scaling_factor` suffix is honored the way the initializers
 honor it: the loop runs every solve and warm start on one persistent
 scaled clone per side for the whole loop, adopting the cold start's own
 clone when it left one and building it otherwise, and reads the history
-back in the model's own units. The feedback hooks are Params and stay
+back in the model's own units. The initial-condition Params stay
 physical.
 
 The returned history holds the actual trajectory: the times, each
@@ -125,7 +125,7 @@ the staircase they physically are.
 
 A hand-written closed loop is a page of code whose every line touches an
 internal detail: which container holds a control's first move after
-parameterization, which Params are the feedback hooks, how to shift the
+parameterization, which Params take each measurement, how to shift the
 previous solution, how to keep the process model consistent
 with the controller's, how to seed reproducible noise, how to collect the
 results in a plottable form. Each user re-derives those details, and a
@@ -145,7 +145,7 @@ single call on the declared model.
   the controller with `drto.dynamic_optimization`, its options passed
   through as given. The process is cut to the first sample straight
   after the simulation transform, before its cold start: no active
-  plant member or row lies past one sampling time, the terminal
+  plant member or constraint lies past one sampling time, the terminal
   segment is gone, and the cold start, the scaled clone, and each
   plant solve are one element's worth.
 - `initial_condition` writes the given state values into the

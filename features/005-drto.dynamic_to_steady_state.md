@@ -42,7 +42,7 @@ many modes" promise.
   profiles error clearly. The steady reduction and the dynamic transforms
   are sibling branches of the same declarations, not a pipeline. On a
   discretized model the discretization
-  artifacts (the collocation equations and continuity rows pyomo.dae adds)
+  artifacts (the collocation equations and continuity equations pyomo.dae adds)
   are discarded, grid machinery rather than model content, and the
   reduction gives the same steady system as reducing before
   discretization.
@@ -58,7 +58,7 @@ many modes" promise.
   other time-indexed Var and is fixed at zero, not eliminated: `dz/dt = 0` is
   what steady state means, so the declared dynamics and any algebraic equation
   carrying a derivative keep their form as the user wrote them, with the
-  derivative pinned. There are still no `dz/dt == 0` rows; the Var is fixed,
+  derivative pinned. There are still no `dz/dt == 0` constraints; the Var is fixed,
   not constrained, and the solver folds it in as a constant. Pyomo cannot hold
   a DerivativeVar that is not indexed by a ContinuousSet, and the time set
   leaves the model, so the collapsed derivative is a plain scalar Var of the

@@ -18,8 +18,8 @@ import drto
 history = drto.nonideal_nmpc(
     m,
     steps=50,                          # loop length, in samples
-    initial_condition={"z": 0.2},      # written into the hooks; omitted,
-                                       # the hooks' current values
+    initial_condition={"z": 0.2},      # written into the initial-condition
+                                       # Params; omitted, their current values
     dynamic_optimization={},           # options through to the transform
     delay=None,                        # None takes each solve's time as
                                        # the solver reports it; a number

@@ -41,7 +41,7 @@ The control-side surface, in the order a model usually declares them:
 - `drto.horizon(t)` — the time `ContinuousSet`, declared before
   discretization so the registry keeps the sample grid.
 - `drto.state(z, ...)` — the differential states. A state may be a whole
-  time-indexed Var or a member subset of a packed one (see the IDAES
+  time-indexed Var or a member subset of an indexed one (see the IDAES
   how-to below).
 - `drto.dynamics(ode, ...)` — the constraint families that are the
   differential equations. Everything not declared here is algebra.
@@ -52,11 +52,11 @@ The control-side surface, in the order a model usually declares them:
 - `drto.disturbance(w, ...)` — declared zero-mean inputs a simulation or
   the terminal segment can hold at given values.
 - `drto.tracking_stage_cost(stage)` / `drto.economic_stage_cost(econ)` /
-  `drto.tracking_terminal_cost(term)` — cost rows, written as equality
-  constraints defining cost variables in the model's own units.
-- `drto.initial_condition(ic, ...)` — rows pinning states at the first
-  point to mutable Params, the feedback hooks a receding-horizon loop
-  updates.
+  `drto.tracking_terminal_cost(term)` — cost constraints: equalities
+  defining cost variables in the model's own units.
+- `drto.initial_condition(ic, ...)` — constraints pinning states at
+  the first point to mutable Params, which a receding-horizon loop overwrites
+  with each measurement.
 - `drto.steady_state(z, z_ss)` / `drto.steady_state_control(u, u_ss)` —
   pair each state and control with the mutable Param holding its target.
   The transforms and initializers read these as the setpoint.
@@ -132,19 +132,20 @@ state; use cold start when it is not.
 profiles (through `drto.parameterize` and pyomo-cvp) and builds the
 objective from every live cost term — the finite-horizon stage cost, the
 tail's quadrature group, and the pin penalties — via
-`drto.build_objective`. Deactivating a cost row removes its term; there
+`drto.build_objective`. Deactivating a cost constraint removes its term; there
 are no coupling options.
 
 **The advanced-step correction** (`drto.advanced_step_controller`)
 turns the solved horizon into a between-samples controller: solve at a
-predicted state with pounce (the assembly declared the feedback hooks as
-sensitivity parameters, inert metadata for every other solver), write
-the measured state into the hooks when it arrives, and ask for the
+predicted state with pounce (the assembly declared the initial-condition
+Params as sensitivity parameters, inert metadata for every other
+solver), write the measured state into those Params when it arrives,
+and ask for the
 corrected solution — a backsolve on the kept factorization, not a
 re-solve. The returned map holds every variable's corrected value; the
 model itself is untouched, so the prediction stays in place as the next
 solve's warm start. `gradient=True` returns the controls' sensitivities
-to the hooks instead.
+to those Params instead.
 
 **Warm start** (`drto.warm_start_dynamic`) is the closed loop's
 initializer: every variable takes the value the previous solution had
@@ -199,7 +200,7 @@ realization, simulates one sample, and feeds the end state back as both
 models' initial condition.
 
 `initial_condition` maps declared state names to the values written into
-the feedback-hook Params before the first step; omitted, the Params'
+the initial-condition Params before the first step; omitted, the Params'
 current values are the first state.
 
 Each declared disturbance's `disturbances` entry is either a sequence,
@@ -263,7 +264,7 @@ before any dynamic transform:
 Badly scaled models (an energy holdup at 1e8 J next to mole fractions)
 are the rule in process systems. The drto contract is one-sided: **tag
 the model once, and every internal solve honors it**. Attach the standard
-Pyomo suffix with a factor per badly scaled variable and row:
+Pyomo suffix with a factor per badly scaled variable and constraint:
 
 ```python
 m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
@@ -286,7 +287,7 @@ through it.
 drto's transforms are built to leave a flowsheet as IDAES wrote it. Three
 idioms cover most models:
 
-**States as member subsets.** An IDAES material holdup is one packed Var
+**States as member subsets.** An IDAES material holdup is one indexed Var
 over components, but only some members are true states — the water
 holdup of the saponification CSTR is fixed by the property package's
 closure. Declare exactly the true states as slices:

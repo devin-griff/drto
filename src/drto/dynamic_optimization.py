@@ -62,10 +62,10 @@ def _spread(val, n_free, name, fn):
 def _feedback_hooks(reg, fn):
     """The initial-condition Params, one ParamData per pinned member.
 
-    Each declared initial-condition row pins a state member to a bare
-    mutable Param, the feedback hook; ``drto.initial_condition`` enforces
+    Each declared initial-condition constraint pins a state member to a bare
+    mutable Param; ``drto.initial_condition`` enforces
     that shape at declaration time, so the non-variable side here is
-    always the hook itself.
+    always that Param itself.
     """
     hooks, seen = [], set()
     for con in reg.components("initial_condition"):
@@ -78,7 +78,7 @@ def _feedback_hooks(reg, fn):
 
 
 def _declare_sens_hooks(reg, fn):
-    """Declare the feedback hooks as pounce sensitivity parameters.
+    """Declare the initial-condition Params as pounce sensitivity parameters.
 
     Runs only when pyomo-pounce is importable; the declaration is inert
     metadata that every other solver ignores, while a pounce solve keeps
@@ -251,7 +251,7 @@ class DynamicOptimizationTransformation(Transformation):
             ),
             **({"disturbances": ", ".join(noise)} if noise else {}),
             **(
-                {"sensitivity": f"{n_hooks} feedback hooks declared"}
+                {"sensitivity": f"{n_hooks} initial-condition Params declared"}
                 if n_hooks is not None
                 else {}
             ),
