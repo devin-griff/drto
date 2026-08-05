@@ -66,6 +66,8 @@ nb_execution_mode = "off"
 myst_enable_extensions = ["colon_fence", "deflist", "dollarmath"]
 
 html_theme = "sphinx_book_theme"
+html_static_path = ["_static"]
+html_css_files = ["drto-registry.css"]
 html_title = "drto"
 html_baseurl = "https://docs.drto.io/"
 html_theme_options = {

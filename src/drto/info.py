@@ -318,7 +318,7 @@ class Info:
             for t in self._transformation_lines()
         )
         return (
-            "<div><b>drto registry</b>"
+            '<div class="drto-registry"><b>drto registry</b>'
             f"<table><tbody>{rows}</tbody></table>"
             "<b>transformations</b>"
             + (f"<ol>{titems}</ol>" if titems else " (none)")
