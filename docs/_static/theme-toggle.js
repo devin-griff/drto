@@ -1,19 +1,12 @@
-/* A two-state light/dark button: sun or moon, tooltip, one click
-   toggles. Writes the same localStorage keys and <html> attributes
-   the theme itself uses, so everything styled by data-theme follows. */
+/* A two-state light/dark button: the moon shows in light mode, the
+   sun in dark mode (CSS on html[data-theme] picks the icon), and one
+   click toggles. Writes the same localStorage keys and <html>
+   attributes the theme itself uses, so everything styled by
+   data-theme follows. */
 document.addEventListener("DOMContentLoaded", function () {
   var stock = document.querySelector("button.theme-switch-button");
   if (!stock || !stock.parentNode) {
     return;
-  }
-
-  function resolved() {
-    var t = document.documentElement.dataset.theme;
-    if (t === "dark" || t === "light") {
-      return t;
-    }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark" : "light";
   }
 
   function apply(theme) {
@@ -26,25 +19,24 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   var btn = document.createElement("button");
+  btn.id = "drto-theme-toggle";
   btn.className = "btn btn-sm nav-link pst-navbar-icon";
-  var icon = document.createElement("i");
-  icon.className = "fa-solid fa-lg";
-  btn.appendChild(icon);
+  btn.innerHTML =
+    '<i class="fa-solid fa-moon fa-lg"></i>' +
+    '<i class="fa-solid fa-sun fa-lg"></i>';
 
-  function paint() {
-    var dark = resolved() === "dark";
-    icon.classList.toggle("fa-moon", !dark);
-    icon.classList.toggle("fa-sun", dark);
-    var next = dark ? "light" : "dark";
-    btn.title = "Switch to " + next + " mode";
+  function tooltip() {
+    var dark = document.documentElement.dataset.theme === "dark";
+    btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
     btn.setAttribute("aria-label", btn.title);
   }
 
   btn.addEventListener("click", function () {
-    apply(resolved() === "dark" ? "light" : "dark");
-    paint();
+    var dark = document.documentElement.dataset.theme === "dark";
+    apply(dark ? "light" : "dark");
+    tooltip();
   });
 
-  paint();
+  tooltip();
   stock.parentNode.insertBefore(btn, stock);
 });
