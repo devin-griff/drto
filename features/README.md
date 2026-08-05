@@ -36,6 +36,7 @@ alongside the CHANGELOG section rename.
 | [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [023 drto.scale](023-drto.scale.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
