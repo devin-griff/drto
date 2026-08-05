@@ -1,4 +1,5 @@
-/* A two-state light/dark button with a tooltip: the moon shows in
+/* A two-state light/dark button with one tooltip, Color mode: the
+   moon shows in
    light mode, the sun in dark mode (CSS on html[data-theme] picks
    the icon), and one click toggles. Writes the same localStorage
    keys and <html> attributes the theme itself uses. The stock
@@ -30,23 +31,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var btn = document.createElement("button");
   btn.id = "drto-theme-toggle";
   btn.className = "btn btn-sm nav-link pst-navbar-icon";
+  btn.title = "Color mode";
+  btn.setAttribute("aria-label", "Color mode");
   btn.innerHTML =
     '<i class="fa-solid fa-moon fa-lg"></i>' +
     '<i class="fa-solid fa-sun fa-lg"></i>';
 
-  function tooltip() {
-    var dark = document.documentElement.dataset.theme === "dark";
-    btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
-    btn.setAttribute("aria-label", btn.title);
-  }
-
   btn.addEventListener("click", function () {
     var dark = document.documentElement.dataset.theme === "dark";
     apply(dark ? "light" : "dark");
-    tooltip();
   });
-
-  tooltip();
   var first = stocks[0];
   first.parentNode.insertBefore(btn, first);
 });
