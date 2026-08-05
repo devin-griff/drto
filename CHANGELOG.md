@@ -105,6 +105,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The terminal segment's copies of a dynamics family's algebraic
+  members are named `<family>_algebraic` instead of
+  `<family>_residue`, and the registry records them under `algebraic`.
+  They are algebraic constraints and the name now says so.
+
 - The terminal segment replicates spatially distributed models (gh #56).
   A time-indexed Block family may carry further indices, an IDAES stage
   element or a spatial node: each non-time combination replicates as its

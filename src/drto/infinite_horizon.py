@@ -581,10 +581,10 @@ class InfiniteHorizonTransformation(Transformation):
                     algebraic.add(comp)
 
         dyn_reps = {}
-        dyn_residue = {}
+        dyn_algebraic = {}
         for con in dynamics:
             entries = {}
-            residue = {}
+            alg_members = {}
             for o, (t_rep, cd) in _representatives(con).items():
                 deriv_side, coeff, rhs = _dynamics_sides(cd, time, "infinite_horizon")
                 zvd = deriv_side.parent_component().get_state_var()[deriv_side.index()]
@@ -594,7 +594,7 @@ class InfiniteHorizonTransformation(Transformation):
                     # declared state is replicated as written, an algebraic
                     # equation determining that entry's derivative copy
                     _scan(cd.expr, t_rep, cd.name)
-                    residue[o] = (cd.expr, t_rep)
+                    alg_members[o] = (cd.expr, t_rep)
                     continue
                 z, zo = hit
                 _scan(rhs, t_rep, cd.name)
@@ -602,8 +602,8 @@ class InfiniteHorizonTransformation(Transformation):
                     _scan(coeff, t_rep, cd.name)
                 entries[o] = (z, zo, rhs, t_rep, coeff)
             dyn_reps[con] = entries
-            if residue:
-                dyn_residue[con] = residue
+            if alg_members:
+                dyn_algebraic[con] = alg_members
 
         alg_reps = {}
         for con in alg_cons:
@@ -690,8 +690,8 @@ class InfiniteHorizonTransformation(Transformation):
                     _note_defined(coeff, flat_too=False)
         # an algebraic entry's balance, replicated as written, defines
         # that entry's derivative copy
-        for residue in dyn_residue.values():
-            for expr, _t in residue.values():
+        for members in dyn_algebraic.values():
+            for expr, _t in members.values():
                 _note_defined(expr)
         _note_defined(psi, flat_too=False)
         for key in block_alg:
@@ -997,12 +997,12 @@ class InfiniteHorizonTransformation(Transformation):
 
         # --- the algebraic entries' balances, replicated as written
         # at the interior collocation points like algebraic equations -----
-        residues = {}
-        for con, residue in dyn_residue.items():
+        alg_copies = {}
+        for con, members in dyn_algebraic.items():
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
 
-            def res_rule(blk, *idx, _entries=residue):
+            def alg_member_rule(blk, *idx, _entries=members):
                 sp = idx[-1]
                 o = tuple(idx[:-1])
                 if sp in blk.tau.get_finite_elements() or o not in _entries:
@@ -1010,10 +1010,10 @@ class InfiniteHorizonTransformation(Transformation):
                 expr, tr = _entries[o]
                 return replace_expressions(expr, _emap(tr, sp))
 
-            residues[con] = Constraint(*others, b.tau_i, rule=res_rule)
+            alg_copies[con] = Constraint(*others, b.tau_i, rule=alg_member_rule)
             b.add_component(
-                _fresh(con.local_name + "_residue", con.name + "_residue"),
-                residues[con],
+                _fresh(con.local_name + "_algebraic", con.name + "_algebraic"),
+                alg_copies[con],
             )
 
         # --- gamma: the mesh rule, or the explicit override ---
@@ -1223,7 +1223,7 @@ class InfiniteHorizonTransformation(Transformation):
             reg._record_segment("control", u, copy=seg[u])
         for con in dynamics:
             reg._record_segment(
-                "dynamics", con, copy=dyn_copies[con], residue=residues.get(con)
+                "dynamics", con, copy=dyn_copies[con], algebraic=alg_copies.get(con)
             )
         for comp in list(algebraic) + list(disturbed):
             reg._record_segment("algebraic", comp, copy=seg[comp])

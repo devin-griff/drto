@@ -322,7 +322,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
         if rec["kind"] in ("state", "control") and rec["copy"] is not None:
             held.extend(vd for vd in rec["copy"].values() if not vd.fixed)
         if rec["kind"] == "dynamics":
-            set_aside += [rec["copy"], rec["residue"]]
+            set_aside += [rec["copy"], rec["algebraic"]]
         elif rec["kind"] == "state":
             set_aside += [rec["link"], rec["continuity"], rec["pin"]]
     for con in set_aside:

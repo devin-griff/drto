@@ -244,7 +244,7 @@ def test_segment_algebra_solves_at_the_tail():
     assert checked > 0
 
 
-def test_residue_algebra_solves_in_the_point_solves():
+def test_undeclared_entries_algebra_solves_in_the_point_solves():
     # an indexed Var's undeclared member: its closure determines it and
     # the discretization rows its derivative
     m = packed_model()
@@ -254,7 +254,7 @@ def test_residue_algebra_solves_in_the_point_solves():
     drto.cold_start_dynamic(m)
     for t in m.t:
         assert pyo.value(m.x[t, "W"]) == pytest.approx(55.0)
-    # the discretization rows determine the residue derivative at the
+    # the discretization equations determine its derivative at the
     # collocation points; the first point has no such row and stays put
     for t in sorted(m.t)[1:]:
         assert pyo.value(m.dx[t, "W"]) == pytest.approx(0, abs=1e-6)

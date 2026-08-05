@@ -250,7 +250,7 @@ def test_block_under_a_plain_container_collapses():
 
 def test_member_subset_state_derivatives_all_rest():
     # gh #20: every accumulation of a covered container is fixed at zero,
-    # the residue member's too. Steady state is steady for the residue,
+    # the algebraic entry's too. Steady state is steady for it,
     # which is what closes its row at the point (the water balance
     # determining the outlet flow on the IDAES CSTR).
     m = packed_model()
