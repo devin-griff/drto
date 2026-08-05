@@ -39,6 +39,12 @@ current point (PyNumero), and each constraint whose largest entry in the
 scaled variables falls outside [1e-2, 1e2] gets the power of ten
 bringing that entry to order one.
 
+The infinite horizon endpoint pins are skipped completely: the pin
+slacks get no variable factors and the pin constraints get no
+constraint factors. The pin's penalty weight is defined in each state's
+own units, and a factor on the slack or its constraint changes the
+pin's effective weight against the objective.
+
 `drto.scaled_solve(m, solver=..., tee=..., options=...)` applies the
 factors and solves. For a solver whose interface passes the Suffix
 through and honors user scaling (ipopt, pounce), it solves the model
@@ -79,6 +85,10 @@ hand-written units-driven factors demonstrate.
   every constraint whose unscaled row was outside.
 - A model without values raises a descriptive error saying to
   initialize first.
+- On a model carrying a terminal segment, the endpoint pin slacks and
+  the pin constraints have no entries in the Suffix, so the pin's
+  effective weight against the objective is the declared one, unchanged
+  by scaling.
 - `drto.scaled_solve` with ipopt or pounce solves the model directly
   under `nlp_scaling_method=user-scaling`, no clone built, and returns
   the solution in the model's own units. With a solver that does not
