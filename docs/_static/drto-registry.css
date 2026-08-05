@@ -1,0 +1,43 @@
+/* The drto registry render (Info._repr_html_). The second selector in
+   each rule matches the committed notebook outputs of its earlier
+   markup, a <b> heading followed by a bare table, which carries no
+   class. Without these rules the bare table takes the theme's
+   full-width Bootstrap treatment and its code color, which is
+   low-contrast in the dark palette; the theme's own palette variables
+   keep both light and dark mode readable. */
+/* In dark mode the theme paints every text_html output that is not a
+   dataframe with a light panel (background-color:
+   var(--pst-color-text-base)), expecting the content to bring its own
+   dark text. The registry brings none, so its text lands light on
+   light. Clear the panel for the registry alone, at the theme rule's
+   own specificity, and let the theme's text color read against the
+   page. */
+html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div.drto-registry),
+html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div > b:first-child + table),
+.cell_output .output.text_html:has(> div.drto-registry),
+.cell_output .output.text_html:has(> div > b:first-child + table) {
+  background-color: transparent;
+}
+
+div.drto-registry table,
+.cell_output .text_html > div > b:first-child + table {
+  width: auto;
+  border-collapse: collapse;
+  margin: 0.4em 0 0.8em;
+  background-color: transparent;
+}
+
+div.drto-registry td,
+.cell_output .text_html > div > b:first-child + table td {
+  border: 1px solid var(--pst-color-border, #888);
+  padding: 0.15em 0.6em;
+  color: var(--pst-color-text-base, inherit);
+  background-color: transparent;
+}
+
+div.drto-registry code,
+.cell_output .text_html td > code,
+.cell_output .text_html li > code {
+  color: var(--pst-color-text-base, inherit);
+  background: transparent;
+}

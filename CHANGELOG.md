@@ -304,6 +304,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- The registry render is readable in the docs' dark mode (#62).
+  `Info._repr_html_` marks its outer div with the `drto-registry` class,
+  and the docs carry a small stylesheet: it clears the light panel the
+  theme paints under non-dataframe HTML outputs in dark mode, and
+  styles the table with the theme's palette variables so both palettes
+  read well. The stylesheet also matches the committed notebooks'
+  earlier markup, so existing pages are covered without re-execution;
+  the Jupyter-side appearance is unchanged.
 - A state may be declared as a member subset of an indexed Var (#20). A
   slice like `holdup[:, "Liq", "NaOH"]` passed to `drto.state` wraps as an
   attached time-indexed Reference, so an indexed Var's algebraic member (an
