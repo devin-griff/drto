@@ -42,7 +42,7 @@ and everything else comes out of the per-point solves. The initialization:
   the profile's slope: the line's constant `(z_ss - z0) / T`, or the
   decay's pointwise slope, zero for a state on its target. Any other
   DerivativeVar member (an indexed Var's undeclared members) comes out of
-  the per-point solves through the discretization rows.
+  the per-point solves through the discretization equations.
 - **Controls**: held constant at their declared steady-state targets. A
   parameterized control's move variables hold the same target; a fixed
   control (a simulation's) keeps the value it holds.
@@ -53,7 +53,7 @@ and everything else comes out of the per-point solves. The initialization:
   point, the block pipeline feature 010 uses. When the model carries an
   active `scaling_factor` suffix, the per-point solves run on a scaled
   clone (`core.scale_model`) and the solved values propagate back, so
-  the solves see well-scaled rows while the model and its declarations
+  the solves see well-scaled constraints while the model and its declarations
   stay in their own units. Without pyomo-pounce the per-point solves are
   skipped, the algebraic variables keep their values, and the report
   says so; everything else needs no solver.
@@ -65,7 +65,7 @@ and everything else comes out of the per-point solves. The initialization:
 With the per-point solves run, the guess satisfies every equation at
 every grid point except the declared dynamics: the initial condition
 holds at the first point, the algebra is consistent pointwise, and the
-discretization rows hold, exactly for the line and through the
+discretization equations hold, exactly for the line and through the
 per-point solves for the decay. The declared dynamics carry the
 mismatch between the profile and the true transient, which is the
 optimizer's job to resolve.

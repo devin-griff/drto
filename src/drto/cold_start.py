@@ -153,7 +153,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     t0, tN = grid[0], grid[-1]
     horizon = tN - t0
 
-    # the declared initial condition: each row pins a state member at t0
+    # the declared initial condition: each constraint pins a state member at t0
     # to a mutable Param the loop overwrites; the values are the line's
     # start, keyed by the pinned member's data id
     z0 = {}
@@ -276,7 +276,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     # the initial condition determines the rest, each grid point its own
     # block once the states and controls are held. An undeclared member
     # of an indexed Var comes from its closures, and its derivative from
-    # the discretization rows; a variable only a set-aside balance would
+    # the discretization equations; a variable only a set-aside balance would
     # close keeps its value and is reported underconstrained. With an
     # active scaling_factor suffix the solves run on a scaled clone and
     # the values propagate back; the model stays in its own units.
@@ -311,9 +311,9 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     # control copies are held at the values set above, and set aside are
     # its copies of the declared dynamics, including the algebraic
     # entries' balances (the water holdup)
-    # plus the rows those values satisfy by construction (the link, the
+    # plus the constraints those values satisfy by construction (the link, the
     # continuity, the pin), which would otherwise re-solve held copies.
-    # The pin slacks then sit in no active row and stay at zero, and a
+    # The pin slacks then sit in no active constraint and stay at zero, and a
     # variable only the dynamics would close keeps its value, as on the
     # finite side. The pairing comes from the transform's records, which
     # a clone carries with its references remapped (gh #27)

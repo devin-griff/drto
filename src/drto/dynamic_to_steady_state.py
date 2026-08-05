@@ -24,12 +24,12 @@ means, so pinning it keeps the user's equations readable instead of leaving a
 side missing, and the solver folds a fixed Var in as a constant. Pyomo cannot
 hold a DerivativeVar that is not indexed by a ContinuousSet, and the time set
 leaves the model, so the collapsed derivative is a plain scalar Var of the same
-name. There are still no ``dz/dt == 0`` rows: the Var is fixed, not constrained.
+name. There are still no ``dz/dt == 0`` constraints: the Var is fixed, not constrained.
 The transform applies to the declared or discretized model,
 before any drto transformation: applied control profiles or an attached
 terminal segment error, the sibling-branch rule. On a discretized model
 the discretization artifacts (the collocation equations and continuity
-rows pyomo.dae adds) are discarded, grid machinery rather than model
+equations pyomo.dae adds) are discarded, grid machinery rather than model
 content, and the reduction gives the same steady system either way.
 Objective assembly is not performed here; an existing objective only has
 its references collapsed.
@@ -100,7 +100,7 @@ class DynamicToSteadyStateTransformation(Transformation):
         states_set = ComponentSet(reg.components("state"))
         # a state may be a Reference over a member subset of an indexed Var
         # (gh #20): a container with any declared member is covered, its
-        # dynamics rows accepted and every one of its accumulations pinned
+        # dynamics constraints accepted and every one of its accumulations pinned
         # at zero, including the algebraic entries (the water holdup),
         # since steady state holds for them as well
         covered = {id(s) for s in states_set}

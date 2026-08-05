@@ -101,7 +101,7 @@ class NmpcHistory:
 
 
 def _pinned(reg, fn):
-    """The initial-condition rows' (pinned state member, Param) pairs.
+    """The initial-condition constraints' (pinned state member, Param) pairs.
 
     Row order is declaration order, so the controller's and the process
     clone's lists line up positionally.
@@ -414,8 +414,8 @@ def ideal_nmpc(
     else:
         ctrl, plant, fmap, pmap = m, process, None, None
 
-    # the pinned rows parse on the physical pair; a scaled clone's
-    # rewritten rows do not, so the Params and the read points are found
+    # the pinned constraints parse on the physical pair; a scaled clone's
+    # rewritten constraints do not, so the Params and the read points are found
     # here and mapped onto the solve models by name (rename=False keeps
     # the names identical)
     reg_m, reg_p = info(m), info(process)

@@ -52,10 +52,10 @@ The control-side surface, in the order a model usually declares them:
 - `drto.disturbance(w, ...)` — declared zero-mean inputs a simulation or
   the terminal segment can hold at given values.
 - `drto.tracking_stage_cost(stage)` / `drto.economic_stage_cost(econ)` /
-  `drto.tracking_terminal_cost(term)` — cost rows, written as equality
-  constraints defining cost variables in the model's own units.
-- `drto.initial_condition(ic, ...)` — rows pinning states at the first
-  point to mutable Params, which a receding-horizon loop overwrites
+  `drto.tracking_terminal_cost(term)` — cost constraints: equalities
+  defining cost variables in the model's own units.
+- `drto.initial_condition(ic, ...)` — constraints pinning states at
+  the first point to mutable Params, which a receding-horizon loop overwrites
   with each measurement.
 - `drto.steady_state(z, z_ss)` / `drto.steady_state_control(u, u_ss)` —
   pair each state and control with the mutable Param holding its target.
@@ -132,7 +132,7 @@ state; use cold start when it is not.
 profiles (through `drto.parameterize` and pyomo-cvp) and builds the
 objective from every live cost term — the finite-horizon stage cost, the
 tail's quadrature group, and the pin penalties — via
-`drto.build_objective`. Deactivating a cost row removes its term; there
+`drto.build_objective`. Deactivating a cost constraint removes its term; there
 are no coupling options.
 
 **The advanced-step correction** (`drto.advanced_step_controller`)
@@ -264,7 +264,7 @@ before any dynamic transform:
 Badly scaled models (an energy holdup at 1e8 J next to mole fractions)
 are the rule in process systems. The drto contract is one-sided: **tag
 the model once, and every internal solve honors it**. Attach the standard
-Pyomo suffix with a factor per badly scaled variable and row:
+Pyomo suffix with a factor per badly scaled variable and constraint:
 
 ```python
 m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)

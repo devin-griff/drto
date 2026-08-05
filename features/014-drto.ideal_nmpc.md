@@ -145,7 +145,7 @@ single call on the declared model.
   the controller with `drto.dynamic_optimization`, its options passed
   through as given. The process is cut to the first sample straight
   after the simulation transform, before its cold start: no active
-  plant member or row lies past one sampling time, the terminal
+  plant member or constraint lies past one sampling time, the terminal
   segment is gone, and the cold start, the scaled clone, and each
   plant solve are one element's worth.
 - `initial_condition` writes the given state values into the

@@ -38,7 +38,7 @@ discretization artifact of the declared time set) is replicated at the
 interior collocation points. A time-indexed Block family may carry further
 indices (an IDAES stage element, a spatial node): each non-time combination
 replicates as its own family. A derivative over another ContinuousSet (a
-spatial axis) is ordinary algebra, its discretization rows replicating with
+spatial axis) is ordinary algebra, its discretization equations replicating with
 it, and same-named components from different units take distinct segment
 names.
 A replicated equation may reference a declared state's derivative (the
@@ -432,7 +432,7 @@ class InfiniteHorizonTransformation(Transformation):
             derivative is taken with respect to it; one over another
             ContinuousSet (a spatial axis) is real algebra the segment
             must replicate (a settler's ``material_flow_dx_disc_eq``).
-            Continuity rows carry no derivative and arise from the
+            Continuity equations carry no derivative and arise from the
             declared-time collocation in the meshes drto supports."""
             cd = next(iter(con.values())) if con.is_indexed() else con
             for v in identify_variables(cd.body, include_fixed=True):
@@ -715,7 +715,7 @@ class InfiniteHorizonTransformation(Transformation):
         # the same strictness for partially copied containers: their
         # members appearing only in the dilated dynamics would be free
         # inputs on the tail (a spatial flow derivative whose
-        # discretization row was mistaken for a time artifact)
+        # discretization equation was mistaken for a time artifact)
         for pcomp in flat_partial:
             if pcomp not in defined:
                 raise ValueError(

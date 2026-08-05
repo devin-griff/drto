@@ -62,7 +62,7 @@ def _spread(val, n_free, name, fn):
 def _feedback_hooks(reg, fn):
     """The initial-condition Params, one ParamData per pinned member.
 
-    Each declared initial-condition row pins a state member to a bare
+    Each declared initial-condition constraint pins a state member to a bare
     mutable Param; ``drto.initial_condition`` enforces
     that shape at declaration time, so the non-variable side here is
     always that Param itself.

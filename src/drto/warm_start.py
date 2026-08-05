@@ -286,7 +286,7 @@ def warm_start_dynamic(m):
                 )
                 ctrl_cover[id(vd)] = (u, o)
 
-    # cost vars from the declared cost rows join the shifted set even on
+    # cost vars from the declared cost constraints join the shifted set even on
     # a plain numeric index (a stage set)
     from drto.declarations import _is_var_member, _side_matching
 
@@ -298,7 +298,7 @@ def warm_start_dynamic(m):
             try:
                 side, _ = _side_matching(cd, _is_var_member, fn, "the cost variable")
             except ValueError:
-                continue  # a rewritten row (a scaled clone): the cost is
+                continue  # a rewritten constraint (a scaled clone): the cost is
                 # plain algebra there and keeps its values
             if id(side.parent_component()) not in {id(c) for c in cost_vars}:
                 cost_vars.append(side.parent_component())
