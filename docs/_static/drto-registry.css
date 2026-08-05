@@ -9,14 +9,18 @@
    dataframe with a light panel (background-color:
    var(--pst-color-text-base)), expecting the content to bring its own
    dark text. The registry brings none, so its text lands light on
-   light. Clear the panel for the registry alone, at the theme rule's
-   own specificity, and let the theme's text color read against the
-   page. */
+   light. Replace the panel for the registry alone, at the theme
+   rule's own specificity, with the theme's surface color: a distinct
+   panel against the page in both palettes, like a code block's but
+   not the same color, and the theme's text color reads on it. */
 html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div.drto-registry),
 html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div > b:first-child + table),
 .cell_output .output.text_html:has(> div.drto-registry),
 .cell_output .output.text_html:has(> div > b:first-child + table) {
-  background-color: transparent;
+  background-color: var(--pst-color-surface, transparent);
+  border: 1px solid var(--pst-color-border, #888);
+  border-radius: 4px;
+  padding: 0.5em 0.8em;
 }
 
 div.drto-registry table,
