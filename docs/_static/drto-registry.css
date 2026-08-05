@@ -11,6 +11,7 @@ div.drto-registry,
   border-radius: 4px;
   padding: 0.5em 0.8em;
   color: var(--pst-color-text-base, inherit);
+  overflow-x: auto;
 }
 
 /* In dark mode the theme paints every text_html output that is not a
