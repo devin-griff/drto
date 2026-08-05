@@ -1,26 +1,26 @@
-/* The drto registry render (Info._repr_html_). The second selector in
-   each rule matches the committed notebook outputs of its earlier
+/* The drto registry render (Info._repr_html_): a bordered panel on the
+   theme's surface color, distinct from the page and from code blocks
+   in both palettes, with the theme's text color throughout. The second
+   selector of each pair matches the committed notebooks' earlier
    markup, a <b> heading followed by a bare table, which carries no
-   class. Without these rules the bare table takes the theme's
-   full-width Bootstrap treatment and its code color, which is
-   low-contrast in the dark palette; the theme's own palette variables
-   keep both light and dark mode readable. */
-/* In dark mode the theme paints every text_html output that is not a
-   dataframe with a light panel (background-color:
-   var(--pst-color-text-base)), expecting the content to bring its own
-   dark text. The registry brings none, so its text lands light on
-   light. Replace the panel for the registry alone, at the theme
-   rule's own specificity, with the theme's surface color: a distinct
-   panel against the page in both palettes, like a code block's but
-   not the same color, and the theme's text color reads on it. */
-html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div.drto-registry),
-html[data-theme="dark"] .bd-content div.cell_output .output.text_html:has(> div > b:first-child + table),
-.cell_output .output.text_html:has(> div.drto-registry),
-.cell_output .output.text_html:has(> div > b:first-child + table) {
+   class. */
+div.drto-registry,
+.cell_output .text_html > div:has(> b:first-child + table) {
   background-color: var(--pst-color-surface, transparent);
   border: 1px solid var(--pst-color-border, #888);
   border-radius: 4px;
   padding: 0.5em 0.8em;
+  color: var(--pst-color-text-base, inherit);
+}
+
+/* In dark mode the theme paints every text_html output that is not a
+   dataframe with a light panel, expecting the content to bring its own
+   dark text; its corners would show around the registry panel's
+   radius. !important spares the selector from having to outrank the
+   theme rule's specificity. */
+.cell_output .text_html:has(> div.drto-registry),
+.cell_output .text_html:has(> div > b:first-child + table) {
+  background-color: transparent !important;
 }
 
 div.drto-registry table,
@@ -35,13 +35,12 @@ div.drto-registry td,
 .cell_output .text_html > div > b:first-child + table td {
   border: 1px solid var(--pst-color-border, #888);
   padding: 0.15em 0.6em;
-  color: var(--pst-color-text-base, inherit);
   background-color: transparent;
 }
 
 div.drto-registry code,
 .cell_output .text_html td > code,
 .cell_output .text_html li > code {
-  color: var(--pst-color-text-base, inherit);
+  color: inherit;
   background: transparent;
 }
