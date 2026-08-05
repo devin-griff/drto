@@ -1,0 +1,5 @@
+/* Replace the stock three-mode cycler (light/dark/auto) with the
+   two-state button in theme-toggle.js. */
+button.theme-switch-button {
+  display: none !important;
+}
