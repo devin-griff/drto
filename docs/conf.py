@@ -68,7 +68,8 @@ myst_enable_extensions = ["colon_fence", "deflist", "dollarmath"]
 
 html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
-html_css_files = ["drto-registry.css"]
+html_css_files = ["drto-registry.css", "theme-toggle.css"]
+html_js_files = ["theme-toggle.js"]
 html_title = "drto"
 html_baseurl = "https://docs.drto.io/"
 
