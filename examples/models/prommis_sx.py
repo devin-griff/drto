@@ -246,12 +246,31 @@ def build(N=8, h=1, ncp=3, noise=True):
     # aqueous phase at their targets (what is not extracted), spend the
     # organic flow gently. Unit-carrying scales keep it dimensionless
     ree = ["Sc", "Y", "La", "Ce", "Pr", "Nd", "Sm", "Gd", "Dy"]
+    bulk = [j for j in maq if j not in ree]
     m.scale_n = pyo.Param(initialize=1e-4, mutable=True, units=U.mol)
     m.scale_F = pyo.Param(initialize=2.0, mutable=True, units=U.m**3 / U.hour)
+    # loose scales for the remaining inventories: the cost covers every
+    # state, with the rare earth terms still carrying the steering
+    m.scale_naq = pyo.Param(initialize=1e5, mutable=True, units=U.mol)
+    m.scale_sett = pyo.Param(initialize=1e3, mutable=True, units=U.mol / U.m)
     samples = sorted(m.fs.time.get_finite_elements() if False else [i * h for i in range(N + 1)])
     stages = samples[:-1]
     m.cost = pyo.Var(stages, initialize=0.0)
     m.term = pyo.Var(initialize=0.0)
+
+    def _other_inventories(mm, t):
+        return (
+            sum(((msc.aqueous_material_holdup[t, 1, "liquid", j]
+                  - mm.component(f"ss_maq_{j}")) / mm.scale_naq) ** 2
+                for j in bulk)
+            + ((msc.organic_material_holdup[t, 1, "organic", "DEHPA"]
+                - mm.ss_dehpa) / mm.scale_naq) ** 2
+            + sum(((aq.material_holdup[t, x, "liquid", j]
+                    - mm.component(f"ss_saq{i}_{j}")) / mm.scale_sett) ** 2
+                  for i, x in enumerate(xs, 1) for j in saq)
+            + sum(((og.material_holdup[t, x, "organic", j]
+                    - mm.component(f"ss_sog{i}_{j}")) / mm.scale_sett) ** 2
+                  for i, x in enumerate(xs, 1) for j in sog))
 
     @m.Constraint(stages)
     def stage(mm, t):
@@ -259,15 +278,17 @@ def build(N=8, h=1, ncp=3, noise=True):
             sum(((msc.aqueous_material_holdup[t, 1, "liquid", j]
                   - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
             + ((m.fs.og_feed[t] - mm.ss_fog) / mm.scale_F) ** 2
-            + ((m.fs.aq_feed[t] - mm.ss_faq) / mm.scale_F) ** 2)
+            + ((m.fs.aq_feed[t] - mm.ss_faq) / mm.scale_F) ** 2
+            + _other_inventories(mm, t))
 
     tN = m.fs.time.last()
 
-    @m.Constraint()  # the stage cost with the control removed, at tN
+    @m.Constraint()  # the stage cost with the controls removed, at tN
     def terminal(mm):
-        return mm.term == sum(
-            ((msc.aqueous_material_holdup[tN, 1, "liquid", j]
-              - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
+        return mm.term == (
+            sum(((msc.aqueous_material_holdup[tN, 1, "liquid", j]
+                  - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
+            + _other_inventories(mm, tN))
 
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
