@@ -404,10 +404,9 @@ def dae_model():
 
     @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
     def stage(m, t):
-        return (
-            m.cost[t]
-            == (m.z[t] - m.z_ss) ** 2 + (m.w[t] - m.z_ss) ** 2 + (m.u[t] - m.u_ss) ** 2
-        )
+        # the algebraic w stays out of the cost (a tracking cost holds
+        # states and controls only); its discovery is exercised by the ode
+        return m.cost[t] == (m.z[t] - m.z_ss) ** 2 + (m.u[t] - m.u_ss) ** 2
 
     @m.Constraint()
     def init(m):
@@ -735,7 +734,11 @@ def unit_model_ih():
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 / U.mol**2
+        return (
+            mm.cost[t]
+            == (mm.z[t] - mm.z_ss) ** 2 / U.mol**2
+            + 0.01 * (mm.u[t] - 0.5 * U.mol) ** 2 / U.mol**2
+        )
 
     @m.Constraint()
     def z_init(mm):
@@ -797,7 +800,7 @@ def disturbed_model():
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):
@@ -899,7 +902,7 @@ def block_model(nested=False, indirect=False, flat=False):
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):
@@ -1091,7 +1094,7 @@ def packed_model():
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.x[t, "A"] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.x[t, "A"] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):
@@ -1281,7 +1284,7 @@ def spatial_block_model(flat=False):
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):
@@ -1353,7 +1356,7 @@ def test_a_spatial_discretization_row_replicates_as_algebra():
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):
@@ -1406,7 +1409,7 @@ def test_same_named_components_get_fresh_segment_names():
 
     @m.Constraint(sorted(m.t)[:-1])
     def stage(mm, t):
-        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + 0.01 * (mm.u[t] - 0.5) ** 2
 
     @m.Constraint()
     def z_init(mm):

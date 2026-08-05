@@ -56,7 +56,7 @@ All notable changes to this project are documented here. The format is based on
   problem, its active set, and the restarted barrier level at once, so
   it costs more than it saves. The IDAES
   CSTR notebook (`examples/cstr_warm_start.ipynb`) runs one loop
-  iteration on a persistent scaled model: the cold solve takes 17
+  iteration on a persistent scaled model: the cold solve takes 15
   iterations (the endpoint pin's quadratic term conditioning it), and
   the warm-started one, shifted values
   with the solver's warm-start options at the call site, takes 6.
@@ -104,6 +104,15 @@ All notable changes to this project are documented here. The format is based on
   stream, the reaction cascade, and the indexed holdup's water member.
 
 ### Changed
+
+- The tracking costs are checked for coverage at declaration (gh #60):
+  the stage cost must reference every declared state and control and
+  may contain only declared state and control members (targets and
+  scales are Params); the terminal cost the same over the states. A
+  missing or foreign component is a descriptive error naming it. The
+  IDAES CSTR example gains the four material holdup terms its costs
+  were missing, at a loose scale chosen so the controller's behavior
+  is unchanged in substance, and its notebooks re-execute.
 
 - The terminal segment's copies of a dynamics family's algebraic
   members are named `<family>_algebraic` instead of
