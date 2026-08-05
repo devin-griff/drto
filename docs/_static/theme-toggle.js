@@ -2,12 +2,22 @@
    sun in dark mode (CSS on html[data-theme] picks the icon), and one
    click toggles. No tooltip; the aria-label serves screen readers.
    Writes the same localStorage keys and <html> attributes the theme
-   itself uses, so everything styled by data-theme follows. */
+   itself uses, so everything styled by data-theme follows. The stock
+   switchers (a three-mode cycler or a dropdown, depending on theme
+   version) are hidden with inline important styles, which no theme
+   stylesheet can override. */
 document.addEventListener("DOMContentLoaded", function () {
-  var stock = document.querySelector("button.theme-switch-button");
-  if (!stock || !stock.parentNode) {
+  var stocks = document.querySelectorAll(".theme-switch-button");
+  if (!stocks.length) {
     return;
   }
+  stocks.forEach(function (el) {
+    el.style.setProperty("display", "none", "important");
+    var menu = el.nextElementSibling;
+    if (menu && menu.classList.contains("dropdown-menu")) {
+      menu.style.setProperty("display", "none", "important");
+    }
+  });
 
   function apply(theme) {
     document.documentElement.dataset.mode = theme;
@@ -31,5 +41,6 @@ document.addEventListener("DOMContentLoaded", function () {
     apply(dark ? "light" : "dark");
   });
 
-  stock.parentNode.insertBefore(btn, stock);
+  var first = stocks[0];
+  first.parentNode.insertBefore(btn, first);
 });
