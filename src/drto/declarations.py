@@ -552,6 +552,54 @@ def control(*components, profile="piecewise_constant"):
     return components[0] if len(components) == 1 else None
 
 
+def _tracking_cost_coverage(component, fn, controls_too):
+    """The tracking cost covers every state (and control) and nothing else.
+
+    Each member's defining side may reference only declared state members
+    (and, for the stage cost, declared control members), and must reference
+    at least one member of every declared state (and control). Targets and
+    scales are Params, not variables, so they pass untouched; the defining
+    cost variable sits on the other side of the equality.
+    """
+    reg = info(component.model())
+    states = list(reg.components("state"))
+    controls = list(reg.components("control")) if controls_too else []
+    what = "state or control" if controls_too else "state"
+    if not states or (controls_too and not controls):
+        raise ValueError(
+            f"drto: {fn}: declare the states"
+            f"{' and controls' if controls_too else ''} before the tracking "
+            f"cost; it must cover every one of them."
+        )
+    owner_of = {}
+    for comp in states + controls:
+        for vd in comp.values() if comp.is_indexed() else (comp,):
+            owner_of[id(vd)] = comp
+    for cd in _members(component):
+        _, expr = _side_matching(
+            cd, _is_var_member, fn, "the scalar cost variable (the cost term)"
+        )
+        seen = set()
+        for v in identify_variables(expr, include_fixed=True):
+            owner = owner_of.get(id(v))
+            if owner is None:
+                raise ValueError(
+                    f"drto: {fn}: '{cd.name}' references '{v.name}', which "
+                    f"is not a declared {what}. A tracking cost contains "
+                    f"declared {what} members and Params (targets, scales) "
+                    f"only."
+                )
+            seen.add(id(owner))
+        missing = [c.name for c in states + controls if id(c) not in seen]
+        if missing:
+            raise ValueError(
+                f"drto: {fn}: '{cd.name}' does not reference "
+                f"'{missing[0]}'. The tracking cost includes every declared "
+                f"state{' and control' if controls_too else ''}; missing: "
+                f"{', '.join(missing)}."
+            )
+
+
 def _register_stage_cost(kind, component, fn):
     """Validate and record a stage cost (attached and constructed).
 
@@ -592,6 +640,8 @@ def _register_stage_cost(kind, component, fn):
         _side_matching(
             cd, _is_var_member, fn, "the scalar cost variable (the cost term)"
         )
+    if kind == "tracking_stage_cost":
+        _tracking_cost_coverage(component, fn, controls_too=True)
     _declare_single(kind, component, fn)
 
 
@@ -616,9 +666,11 @@ def tracking_stage_cost(*args, **kwargs):
     """Declare the tracking stage cost, a per-time-point equality.
 
     One side of each member is the scalar running-cost variable; the other
-    defines the cost. One per model, indexed over the samples minus the
-    final time (the terminal cost owns it). Tags, wraps, or builds as a
-    decorator: ``@drto.tracking_stage_cost(m, sorted(m.t)[:-1])``.
+    defines the cost, covering every declared state and control and
+    containing nothing else (targets and scales are Params). One per
+    model, indexed over the samples minus the final time (the terminal
+    cost owns it). Declare the states and controls first. Tags, wraps, or
+    builds as a decorator: ``@drto.tracking_stage_cost(m, sorted(m.t)[:-1])``.
     """
     return _declare_stage_cost(
         "tracking_stage_cost", args, "tracking_stage_cost", kwargs
@@ -651,6 +703,8 @@ def _declare_scalar_cost(kind, args, fn, kwargs, scalar_reason, var_desc):
                 f"({scalar_reason})."
             )
         _side_matching(component, _is_var_member, fn, var_desc)
+        if kind == "tracking_terminal_cost":
+            _tracking_cost_coverage(component, fn, controls_too=False)
         _declare_single(kind, component, fn)
 
     if args and _is_block(args[0]):
@@ -669,7 +723,9 @@ def tracking_terminal_cost(*args, **kwargs):
     """Declare the terminal tracking cost, a scalar equality.
 
     One side is the scalar terminal-cost variable; the other defines the
-    cost. One per model. Tags, wraps, or builds as a decorator:
+    cost, covering every declared state and containing nothing else
+    (targets and scales are Params). One per model; declare the states
+    first. Tags, wraps, or builds as a decorator:
     ``@drto.tracking_terminal_cost(m)``.
     """
     return _declare_scalar_cost(

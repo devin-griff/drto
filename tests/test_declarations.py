@@ -438,6 +438,8 @@ def test_terminal_cost_must_be_scalar():
 
 def test_terminal_cost_happy_path():
     m = base_model()
+    drto.horizon(m.t)
+    drto.state(m.z)  # the coverage check needs the states declared first
     m.term = pyo.Var()
 
     @m.Constraint()
@@ -833,3 +835,106 @@ def test_wrapping_a_fresh_constraint():
 
     m.ode4 = drto.dynamics(pyo.Constraint(m.t, rule=ode4_rule))
     assert drto.info(m).components("dynamics") == (m.ode4,)
+
+
+def _coverage_model():
+    """Two states, one control, one algebraic variable, nothing declared."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 10, 1))
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z = pyo.Var(m.t)
+    m.z2 = pyo.Var(m.t)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.dz2 = DerivativeVar(m.z2, wrt=m.t)
+    m.u = pyo.Var(m.t)
+    m.y = pyo.Var(m.t)  # algebraic: never declared
+    m.cost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dz[t] == mm.u[t] - mm.z[t]
+
+    @m.Constraint(m.t)
+    def ode2(mm, t):
+        return mm.dz2[t] == mm.z[t] - mm.z2[t]
+
+    drto.horizon(m.t)
+    drto.state(m.z, m.z2)
+    drto.dynamics(m.ode, m.ode2)
+    drto.control(m.u, profile="piecewise_constant")
+    return m
+
+
+def test_stage_cost_missing_a_state_is_rejected():
+    m = _coverage_model()
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + mm.u[t] ** 2
+
+    with pytest.raises(ValueError, match="does not reference 'z2'"):
+        drto.tracking_stage_cost(m.stage)
+
+
+def test_stage_cost_missing_a_control_is_rejected():
+    m = _coverage_model()
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == (mm.z[t] - mm.z_ss) ** 2 + mm.z2[t] ** 2
+
+    with pytest.raises(ValueError, match="does not reference 'u'"):
+        drto.tracking_stage_cost(m.stage)
+
+
+def test_stage_cost_with_a_foreign_variable_is_rejected():
+    m = _coverage_model()
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return (
+            mm.cost[t]
+            == (mm.z[t] - mm.z_ss) ** 2 + mm.z2[t] ** 2 + mm.u[t] ** 2 + mm.y[t] ** 2
+        )
+
+    with pytest.raises(ValueError, match="'y\[0\]', which is not a declared"):
+        drto.tracking_stage_cost(m.stage)
+
+
+def test_terminal_cost_missing_a_state_is_rejected():
+    m = _coverage_model()
+    m.term = pyo.Var()
+
+    @m.Constraint()
+    def term_def(mm):
+        return mm.term == (mm.z[10] - mm.z_ss) ** 2
+
+    with pytest.raises(ValueError, match="does not reference 'z2'"):
+        drto.tracking_terminal_cost(m.term_def)
+
+
+def test_terminal_cost_with_a_control_is_rejected():
+    m = _coverage_model()
+    m.term = pyo.Var()
+
+    @m.Constraint()
+    def term_def(mm):
+        return mm.term == (mm.z[10] - mm.z_ss) ** 2 + mm.z2[10] ** 2 + mm.u[10] ** 2
+
+    with pytest.raises(ValueError, match="'u\[10\]', which is not a declared state"):
+        drto.tracking_terminal_cost(m.term_def)
+
+
+def test_tracking_cost_requires_the_states_declared_first():
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 10, 1))
+    m.cost = pyo.Var(m.t)
+    m.z = pyo.Var(m.t)
+    drto.horizon(m.t)
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == mm.z[t] ** 2
+
+    with pytest.raises(ValueError, match="declare the states and controls before"):
+        drto.tracking_stage_cost(m.stage)

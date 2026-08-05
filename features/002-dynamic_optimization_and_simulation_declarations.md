@@ -201,7 +201,11 @@ declarations rather than re-deriving them.
   accommodation `control` makes, and the single-point shape the steady-state
   reduction produces from a per-sample cost.
 - `tracking_terminal_cost(m.con)` tags an equality Constraint whose
-  left-hand side is the scalar terminal-cost variable.
+  left-hand side is the scalar terminal-cost variable. Its defining side
+  covers every declared state and contains only declared states (and
+  Params); the stage cost covers and contains the states and controls the
+  same way. A missing or foreign component is a descriptive error naming
+  it.
 - `initial_condition(m.con, ...)` tags one or more equality Constraints
   whose left-hand sides are declared states at the first time point and whose
   right-hand sides are mutable Params, which a loop overwrites with
@@ -223,6 +227,13 @@ declarations rather than re-deriving them.
   are read from the written equality's sides, either orientation, so
   `lhs == rhs` and `rhs == lhs` are equivalent; the constraint must be
   written as an explicit equality.
+- The tracking costs are complete and closed over the declared surface
+  (gh #60): the stage cost's defining side references at least one member
+  of every declared state and every declared control, and nothing that is
+  not a declared state or control member (targets and scales are Params);
+  the terminal cost likewise over the states alone. Violations are
+  descriptive errors at declaration, which is why the states and controls
+  precede the costs in the declaration order.
 - Cost variables are left unbounded. The defining equality fixes the
   value, so a `NonNegativeReals` bound adds no information, and it places
   the optimum exactly on the bound wherever the cost vanishes: settled

@@ -53,7 +53,10 @@ The control-side surface, in the order a model usually declares them:
   the terminal segment can hold at given values.
 - `drto.tracking_stage_cost(stage)` / `drto.economic_stage_cost(econ)` /
   `drto.tracking_terminal_cost(term)` — cost constraints: equalities
-  defining cost variables in the model's own units.
+  defining cost variables in the model's own units. A tracking cost
+  covers every declared state (the stage cost the controls too) and
+  contains nothing else besides Params; a gap or a foreign variable is
+  a declaration-time error.
 - `drto.initial_condition(ic, ...)` — constraints pinning states at
   the first point to mutable Params, which a receding-horizon loop overwrites
   with each measurement.

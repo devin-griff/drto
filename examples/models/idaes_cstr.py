@@ -183,6 +183,10 @@ def build(N=10, h=1, ncp=3, disturbance=False):
     m.eng_ss = pyo.Param(es, initialize=0.0, mutable=True, units=U.J)
     m.duty_ss = pyo.Param(initialize=0.0, mutable=True, units=U.W)
     m.flow_ss = pyo.Param(initialize=F_IN, mutable=True, units=U.m**3 / U.s)
+    m.ss_naoh = pyo.Param(initialize=0.0, mutable=True, units=U.mol)
+    m.ss_ea = pyo.Param(initialize=0.0, mutable=True, units=U.mol)
+    m.ss_sa = pyo.Param(initialize=0.0, mutable=True, units=U.mol)
+    m.ss_etoh = pyo.Param(initialize=0.0, mutable=True, units=U.mol)
 
     # the initial condition pins the true states: the four reacting species
     # and the energy. The water holdup is algebraic, its concentration fixed
@@ -204,10 +208,13 @@ def build(N=10, h=1, ncp=3, disturbance=False):
         return cv.energy_holdup[t0, p] == mm.eng0[p]
 
     # unit-carrying scales make the cost dimensionless, so it renders with
-    # clean units instead of (inc): each term is (quantity/scale)**2
+    # clean units instead of (inc): each term is (quantity/scale)**2. The
+    # material scale is loose: the species terms keep the cost covering
+    # every state without steering it away from the energy tracking
     m.scale_E = pyo.Param(initialize=1.0e6, units=U.J, mutable=True)
     m.scale_Q = pyo.Param(initialize=1.0e6, units=U.W, mutable=True)
     m.scale_F = pyo.Param(initialize=0.1, units=U.m**3 / U.s, mutable=True)
+    m.scale_M = pyo.Param(initialize=100.0, units=U.mol, mutable=True)
     stages = samples[:-1]
     m.cost = pyo.Var(stages, initialize=0.0)
     m.term = pyo.Var(initialize=0.0)
@@ -217,14 +224,22 @@ def build(N=10, h=1, ncp=3, disturbance=False):
         return mm.cost[t] == (
             ((cv.energy_holdup[t, "Liq"] - mm.eng_ss["Liq"]) / mm.scale_E) ** 2
             + ((cv.heat[t] - mm.duty_ss) / mm.scale_Q) ** 2
-            + ((fin[t] - mm.flow_ss) / mm.scale_F) ** 2)
+            + ((fin[t] - mm.flow_ss) / mm.scale_F) ** 2
+            + sum(((cv.material_holdup[t, "Liq", j]
+                    - mm.component(f"ss_{k}")) / mm.scale_M) ** 2
+                  for j, k in (("NaOH", "naoh"), ("EthylAcetate", "ea"),
+                               ("SodiumAcetate", "sa"), ("Ethanol", "etoh"))))
 
     tN = m.fs.time.last()
 
     @m.Constraint()  # the stage cost with the controls removed, at tN
     def terminal(mm):
         return mm.term == (
-            (cv.energy_holdup[tN, "Liq"] - mm.eng_ss["Liq"]) / mm.scale_E) ** 2
+            ((cv.energy_holdup[tN, "Liq"] - mm.eng_ss["Liq"]) / mm.scale_E) ** 2
+            + sum(((cv.material_holdup[tN, "Liq", j]
+                    - mm.component(f"ss_{k}")) / mm.scale_M) ** 2
+                  for j, k in (("NaOH", "naoh"), ("EthylAcetate", "ea"),
+                               ("SodiumAcetate", "sa"), ("Ethanol", "etoh"))))
 
     drto.state(cv.material_holdup[:, "Liq", "NaOH"],
                cv.material_holdup[:, "Liq", "EthylAcetate"],
@@ -239,14 +254,10 @@ def build(N=10, h=1, ncp=3, disturbance=False):
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
     drto.initial_condition(m.ic_mat, m.ic_eng)
-    m.ss_naoh = drto.steady_state(cv.material_holdup[:, "Liq", "NaOH"],
-        pyo.Param(initialize=0.0, mutable=True, units=U.mol))
-    m.ss_ea = drto.steady_state(cv.material_holdup[:, "Liq", "EthylAcetate"],
-        pyo.Param(initialize=0.0, mutable=True, units=U.mol))
-    m.ss_sa = drto.steady_state(cv.material_holdup[:, "Liq", "SodiumAcetate"],
-        pyo.Param(initialize=0.0, mutable=True, units=U.mol))
-    m.ss_etoh = drto.steady_state(cv.material_holdup[:, "Liq", "Ethanol"],
-        pyo.Param(initialize=0.0, mutable=True, units=U.mol))
+    drto.steady_state(cv.material_holdup[:, "Liq", "NaOH"], m.ss_naoh)
+    drto.steady_state(cv.material_holdup[:, "Liq", "EthylAcetate"], m.ss_ea)
+    drto.steady_state(cv.material_holdup[:, "Liq", "SodiumAcetate"], m.ss_sa)
+    drto.steady_state(cv.material_holdup[:, "Liq", "Ethanol"], m.ss_etoh)
     drto.steady_state(cv.energy_holdup, m.eng_ss)
     drto.steady_state_control(cv.heat, m.duty_ss)
     drto.steady_state_control(fin, m.flow_ss)
