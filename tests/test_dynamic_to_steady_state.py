@@ -265,13 +265,6 @@ def test_nested_time_indexed_block_is_rejected():
         pyo.TransformationFactory(SS).apply_to(m)
 
 
-def test_block_indexed_beyond_time_is_rejected():
-    m = block_model()
-    m.extra = pyo.Block(m.t, [1, 2])
-    with pytest.raises(ValueError, match="more than the declared time set"):
-        pyo.TransformationFactory(SS).apply_to(m)
-
-
 @needs_ipopt
 def test_block_reduction_reaches_the_fixed_point():
     m = block_model()
@@ -296,3 +289,204 @@ def test_a_scaled_derivative_side_reduces_like_the_bare_form():
     pyo.TransformationFactory(SS).apply_to(m)
     assert not m.z.is_indexed()
     assert m.dzdt.fixed and pyo.value(m.dzdt) == 0
+
+
+# ----------------------------------------------------------------------
+# spatially distributed models (gh #54)
+# ----------------------------------------------------------------------
+def spatial_model(noise=False):
+    """A 1D transport model with ``Block(t, x)`` members and a spatial
+    derivative: the minimal shape of a 1D control volume. The transport
+    balance is written past the inlet only, so the dynamics container is
+    sparse, and the spatial discretization equations are real algebra
+    the reduction must keep."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 4, 1))
+    m.x = ContinuousSet(bounds=(0, 1))
+    m.z = pyo.Var(m.t, m.x, initialize=0.2)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.dzdx = DerivativeVar(m.z, wrt=m.x)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.3)
+    m.z_hat = pyo.Param(initialize=0.2, mutable=True)
+    if noise:
+        m.w = pyo.Var(m.t, initialize=0.0)
+
+    def props_rule(blk, t, x):
+        blk.y = pyo.Var(initialize=0.4)
+        blk.gain = pyo.Constraint(expr=blk.y == 2.0 * blk.model().z[t, x])
+
+    m.props = pyo.Block(m.t, m.x, rule=props_rule)
+
+    @m.Constraint(m.t, m.x)
+    def transport(mm, t, x):
+        if x == mm.x.first():
+            return pyo.Constraint.Skip
+        rhs = -mm.dzdx[t, x] - mm.props[t, x].y
+        if noise:
+            rhs = rhs + mm.w[t]
+        return mm.dzdt[t, x] == rhs
+
+    @m.Constraint(m.t)
+    def inlet(mm, t):
+        return mm.z[t, mm.x.first()] == mm.u[t]
+
+    interior = [x for x in m.x if x != m.x.first()]
+
+    @m.Constraint(interior)
+    def z_init(mm, x):
+        return mm.z[0, x] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.transport)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.initial_condition(m.z_init)
+    if noise:
+        drto.disturbance(m.w)
+    pyo.TransformationFactory("dae.finite_difference").apply_to(
+        m, wrt=m.x, nfe=4, scheme="BACKWARD"
+    )
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
+def test_a_spatial_block_family_collapses_per_point():
+    m = spatial_model()
+    xs = sorted(m.x)
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert sorted(m.props.keys()) == [(0, x) for x in xs]
+    for x in xs:
+        bd = m.props[0, x]
+        assert bd.gain.active
+    assert not m.z.is_indexed() or set(m.z.index_set()) == set(xs)
+
+
+def test_the_spatial_discretization_equations_survive():
+    m = spatial_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    names = [
+        c.parent_component().local_name
+        for c in m.component_data_objects(pyo.Constraint, active=True)
+    ]
+    assert names.count("dzdx_disc_eq") == 4
+    assert all("dzdt_disc_eq" != n for n in names)
+    assert all(not n.endswith("_cont_eq") for n in names)
+    # every spatial derivative at an interior point stays a live unknown
+    for x in [x for x in m.dzdx.index_set() if x != 0]:
+        assert not m.dzdx[x].fixed
+
+
+def test_a_sparse_dynamics_container_reduces_to_its_members():
+    m = spatial_model()
+    interior = [x for x in m.x if x != m.x.first()]
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert sorted(m.transport.keys()) == interior
+    # the time derivative rests at zero in every surviving member
+    for x in interior:
+        assert m.dzdt[x].fixed and pyo.value(m.dzdt[x]) == 0
+
+
+def test_a_noise_carrying_balance_passes_the_guard():
+    # the derivative side is a sum once the noise term rides the row;
+    # the guard reads the row's variables, not its written shape
+    m = spatial_model(noise=True)
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert sorted(m.transport.keys()) == [x for x in m.x if x != 0]
+
+
+def test_an_undeclared_differentiation_still_errors():
+    m = spatial_model()
+    m.v = pyo.Var(m.t, initialize=0.0)
+    m.dv = DerivativeVar(m.v, wrt=m.t)
+
+    @m.Constraint(m.t)
+    def rogue(mm, t):
+        return mm.dv[t] == -mm.v[t]
+
+    reg = drto.info(m)
+    reg._declarations["dynamics"].append(
+        dict(reg.declarations("dynamics")[0], component=m.rogue)
+    )
+    with pytest.raises(ValueError, match="undeclared state"):
+        pyo.TransformationFactory(SS).apply_to(m)
+
+
+def test_an_empty_var_is_skipped():
+    m = spatial_model()
+    m.none = pyo.Var(m.t, [], initialize=0.0)
+    pyo.TransformationFactory(SS).apply_to(m)
+    assert m.component("none") is not None
+
+
+@needs_ipopt
+def test_the_steady_spatial_profile_solves():
+    m = spatial_model()
+    pyo.TransformationFactory(SS).apply_to(m)
+    for vd in m.u.values() if m.u.is_indexed() else (m.u,):
+        vd.fix(1.0)
+    # the inlet spatial derivative sits in no equation of the reduced
+    # model (backward differences start past the inlet): held for the
+    # square solve
+    m.dzdx[0].fix(0.0)
+    r = pyo.SolverFactory("ipopt").solve(m)
+    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    # steady transport with first-order loss: the profile decays along
+    # the vessel from the held inlet
+    xs = sorted(m.x)
+    vals = [pyo.value(m.z[x]) for x in xs]
+    assert vals[0] == pytest.approx(1.0, abs=1e-6)
+    assert all(a > b for a, b in zip(vals, vals[1:]))
+
+
+def test_the_mixer_settler_stage_reduces_square():
+    pytest.importorskip("prommis")
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "examples"))
+    try:
+        from models import prommis_sx
+    finally:
+        sys.path.pop(0)
+    from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+    from pyomo.core.expr import identify_variables
+
+    m = prommis_sx.build(N=1, h=0.25)
+    sm = pyo.TransformationFactory(SS).create_using(m)
+    reg = drto.info(sm)
+    ms = sm.fs.ms
+    msc = ms.mixer[1].unit.mscontactor
+    aq, og = ms.aqueous_settler[1].unit, ms.organic_settler[1].unit
+    # the dynamic model's inert first-instant data is free at steady state
+    msc.aqueous_inherent_reaction_extent.unfix()
+    msc.heterogeneous_reaction_extent.unfix()
+    aq.inherent_reaction_extent.unfix()
+    for blk in (msc.aqueous, msc.organic):
+        for bd in blk.values():
+            bd.flow_vol.unfix()
+    for st in (aq, og):
+        for bd in st.properties.values():
+            bd.flow_vol.unfix()
+    for kind in ("control", "disturbance"):
+        for comp in reg.components(kind):
+            for vd in comp.values() if comp.is_indexed() else (comp,):
+                vd.fix()
+
+    rows = [c for c in sm.component_data_objects(pyo.Constraint, active=True)]
+    incident = set()
+    for c in rows:
+        for v in identify_variables(c.expr, include_fixed=False):
+            incident.add(id(v))
+    free = [
+        v
+        for v in sm.component_data_objects(pyo.Var)
+        if not v.fixed and id(v) in incident
+    ]
+    assert len(free) == len(rows)
+    igi = IncidenceGraphInterface()
+    matching = igi.maximum_matching(free, rows)
+    assert len(matching) == len(rows)
+    spatial = sum(1 for c in rows if "_disc_eq" in c.name)
+    assert spatial > 0

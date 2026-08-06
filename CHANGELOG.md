@@ -8,6 +8,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The steady-state reduction covers spatially distributed models
+  (gh #54, feature 021 extended). A `Block(t, x)` or
+  `Block(t, element)` family collapses per spatial point — the first
+  time point's member of every combination survives with its internal
+  equations — spatial discretization equations are kept (only the
+  declared time set's collocation and continuity equations are
+  discarded), sparse dynamics containers reduce to their members, and
+  the declared-state guard reads a balance's variables so noise-carrying
+  rows pass. The declared PrOMMiS mixer-settler stage reduces to a
+  square steady system at held controls.
+
 - The DAE index check (feature 024). `drto.check_index(m)` tests
   whether the declared model is an index-one DAE: a maximum matching of
   the pointwise algebraic constraints to the algebraic variables names
