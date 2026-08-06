@@ -1,6 +1,6 @@
 # drto.check_index
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
@@ -44,13 +44,20 @@ in two layers, both deterministic:
 The check assembles the algebra at one time point — the constraints
 that apply pointwise, excluding the declared dynamics, the
 discretization equations, and the initial conditions — the same
-per-point system the cold start solves (feature 011). Unequal counts of
-algebraic constraints and variables at that point are a descriptive
-error naming the surplus side. When the structural layer fails, the
-structural index is computed by Pantelides' algorithm and reported,
-with the caveat stated in the report that the structural index can
-disagree with the differentiation index when cancellation hides a
-dependency.
+per-point system the cold start solves (feature 011). A pointwise
+algebra that is not square is itself a structural failure — an
+index-one DAE determines its algebraic variables pointwise, one
+constraint each — and is reported with the counts and the
+Dulmage-Mendelsohn partition sizes rather than raised. Before the
+condition estimate, the Jacobian is equilibrated — each row, then each
+column, scaled to unit largest entry — so the estimate measures the
+algebra's coupling rather than the spread of the model's units. When
+the structural layer fails, the structural index is computed by
+Pantelides' algorithm and reported, with the caveat stated in the
+report that the structural index can disagree with the differentiation
+index when cancellation hides a dependency; when the pointwise system
+is overdetermined no differentiation depth balances it, and the report
+states the lower bound of two instead.
 
 The check writes nothing: no components added or removed, no values
 changed. It returns a readable report in the feature 010 shape with the
@@ -83,8 +90,13 @@ and the reformulation on the reaction invariants passes.
   Pantelides' algorithm and names the unmatched variables and
   constraints; on numerical failure it names the members of the
   near-singular blocks and the condition estimate.
-- Unequal counts of algebraic constraints and algebraic variables raise
-  a descriptive error naming the surplus side and its members.
+- A non-square pointwise algebra is reported as a structural failure
+  with both counts and the Dulmage-Mendelsohn partition sizes, and the
+  structural index line states the lower bound of two.
+- The pendulum in its index-3, index-2, index-1, and ODE forms checks
+  to structural index 3, structural index 2, index one, and index one
+  with the algebra empty, the cord tension named as the unmatched
+  variable in the failing forms.
 - A model without values gets the structural verdict, and the report
   records that the numerical layer was skipped; filled values enable
   it. `condition_limit` is honored, and a non-positive value is a
