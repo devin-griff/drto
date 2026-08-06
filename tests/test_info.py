@@ -330,3 +330,81 @@ def test_templatize_failure_is_quiet(caplog):
     with caplog.at_level(logging.ERROR, logger="pyomo.core"):
         repr(drto.info(m))
     assert not [rec for rec in caplog.records if rec.levelno >= logging.ERROR]
+
+
+# ----------------------------------------------------------------------
+# the size line (gh #63)
+# ----------------------------------------------------------------------
+def _sized():
+    """A model with two states, one of them a member subset, and one
+    control, so the counts are not all ones."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1, 2])
+    m.J = pyo.Set(initialize=["a", "b", "c"])
+    m.z = pyo.Var(m.t, m.J, initialize=0.0)
+    m.dz = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, initialize=0.0)
+
+    @m.Constraint(m.t, m.J)
+    def ode(mm, t, j):
+        return mm.dz[t, j] == -mm.z[t, j] + mm.u[t]
+
+    drto.horizon(m.t)
+    drto.state(*(m.z[:, j] for j in ["a", "b"]))
+    drto.dynamics(m.ode)
+    drto.control(m.u)
+    return m
+
+
+def test_the_registry_states_the_problem_size():
+    m = _sized()
+    text = repr(drto.info(m))
+    assert text.splitlines()[1] == "states: 2, controls: 1"
+    # before the declaration lines
+    assert text.index("states: 2") < text.index("declarations:")
+
+
+def test_the_size_counts_members_not_grid_points():
+    # three time points, two declared members: the count is the model's
+    # dimension, not the number of variables
+    m = _sized()
+    assert len(m.t) == 3
+    assert drto.info(m)._size_line() == "states: 2, controls: 1"
+
+
+def test_the_size_line_appears_in_the_html_render():
+    m = _sized()
+    html_text = drto.info(m)._repr_html_()
+    assert "states: 2, controls: 1" in html_text
+    assert html_text.index("states: 2") < html_text.index("<code>")
+
+
+def test_an_undeclared_model_has_no_size_line():
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1])
+    drto.horizon(m.t)
+    reg = drto.info(m)
+    assert reg._size_line() is None
+    assert repr(reg).splitlines()[1].startswith("declarations")
+
+
+def test_the_size_survives_the_steady_reduction():
+    # the reduction collapses the time coordinate; the model's dimension
+    # is the same, so the line reads the same
+    m = _sized()
+    before = drto.info(m)._size_line()
+
+    declared = ["a", "b"]
+    m.z_hat = pyo.Param(declared, initialize=0.0, mutable=True)
+
+    @m.Constraint(declared)
+    def z_init(mm, j):
+        return mm.z[0, j] == mm.z_hat[j]
+
+    drto.initial_condition(m.z_init)
+    for j in ("a", "b"):
+        p = pyo.Param(initialize=0.0, mutable=True)
+        m.add_component(f"ss_{j}", p)
+        drto.steady_state(m.z[:, j], p)
+    pyo.TransformationFactory("drto.dynamic_to_steady_state").apply_to(m)
+    assert drto.info(m)._size_line() == before

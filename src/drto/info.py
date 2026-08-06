@@ -295,8 +295,42 @@ class Info:
             notes = ", ".join(f"{k}={v}" for k, v in r["outcome"].items())
             yield f"{r['name']}" + (f": {notes}" if notes else "")
 
+    def _size_line(self):
+        """The problem's size: declared states and controls, counted as
+        members at one time point, or None before either is declared.
+
+        A declared component is counted at its members: a state over a
+        member subset of an indexed Var contributes its own members, and
+        a component carrying further indexes contributes one per
+        combination. The time coordinate is divided out, so the count is
+        the model's dimension rather than its grid's.
+        """
+        if not (self.has_declaration("state") or self.has_declaration("control")):
+            return None
+        time = (
+            self.components("horizon")[0] if self.has_declaration("horizon") else None
+        )
+        counts = {}
+        for kind in ("state", "control"):
+            total = 0
+            for comp in self.components(kind):
+                if not comp.is_indexed():
+                    total += 1
+                    continue
+                n = len(comp)
+                if time is not None:
+                    points = len({_time_of(vd, time) for vd in comp.values()})
+                    if points:
+                        n //= points
+                total += n
+            counts[kind] = total
+        return f"states: {counts['state']}, controls: {counts['control']}"
+
     def __repr__(self):
         lines = ["<drto registry>"]
+        size = self._size_line()
+        if size:
+            lines.append(size)
         decls = list(self._role_lines())
         lines.append("declarations:" if decls else "declarations: (none)")
         for label, text in decls:
@@ -308,7 +342,9 @@ class Info:
         return "\n".join(lines)
 
     def _repr_html_(self):
-        rows = "".join(
+        size = self._size_line()
+        head = f"<tr><td colspan=\"2\">{html.escape(size)}</td></tr>" if size else ""
+        rows = head + "".join(
             f"<tr><td>{html.escape(label)}</td><td><code>{html.escape(text)}"
             "</code></td></tr>"
             for label, text in self._role_lines()
@@ -324,6 +360,17 @@ class Info:
             + (f"<ol>{titems}</ol>" if titems else " (none)")
             + "</div>"
         )
+
+
+def _time_of(vardata, time):
+    """The member's coordinate in ``time``, or None when it carries none."""
+    idx = vardata.index()
+    if not isinstance(idx, tuple):
+        idx = (idx,)
+    for coord in idx:
+        if coord in time:
+            return coord
+    return None
 
 
 def _component_category(comp):
