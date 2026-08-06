@@ -53,11 +53,12 @@ condition estimate, the Jacobian is equilibrated — each row, then each
 column, scaled to unit largest entry — so the estimate measures the
 algebra's coupling rather than the spread of the model's units. When
 the structural layer fails, the structural index is computed by
-Pantelides' algorithm and reported, with the caveat stated in the
-report that the structural index can disagree with the differentiation
-index when cancellation hides a dependency; when the pointwise system
-is overdetermined no differentiation depth balances it, and the report
-states the lower bound of two instead.
+Pantelides' algorithm and reported. It comes from which variables
+appear in which equations, so the report states the qualification in
+plain words: a coefficient that cancels numerically can hide a
+dependency the pattern shows, and the true index can then be higher.
+When the pointwise system is overdetermined no differentiation depth
+balances it, and the report states the lower bound of two instead.
 
 The check writes nothing: no components added or removed, no values
 changed. It returns a readable report in the feature 010 shape with the

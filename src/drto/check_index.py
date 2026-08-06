@@ -68,10 +68,11 @@ class CheckIndexReport:
             lines.extend(f"    {n}" for n in _capped(self.unmatched_constraints))
             if self.structural_index is not None:
                 lines.append(
-                    f"  structural index: {self.structural_index} "
-                    "(Pantelides; the structural index can disagree with "
-                    "the differentiation index when cancellation hides a "
-                    "dependency)"
+                    f"  structural index: {self.structural_index}, "
+                    "computed from which variables appear in which "
+                    "equations (Pantelides' algorithm); a coefficient "
+                    "that cancels numerically can hide a dependency the "
+                    "pattern shows, so the true index can be higher"
                 )
             else:
                 lines.append(
