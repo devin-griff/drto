@@ -45,9 +45,7 @@ def pendulum(index):
         m.time, rule=lambda b, t: MASS * b.dv[t] == -2 * b.x[t] * b.lam[t]
     )
     m.ode_w = pyo.Constraint(
-        m.time,
-        rule=lambda b, t: MASS * b.dw[t]
-        == -MASS * G - 2 * b.y[t] * b.lam[t],
+        m.time, rule=lambda b, t: MASS * b.dw[t] == -MASS * G - 2 * b.y[t] * b.lam[t]
     )
     dyn = [m.ode_x, m.ode_y, m.ode_v, m.ode_w]
     if index == 3:
@@ -56,14 +54,12 @@ def pendulum(index):
         )
     elif index == 2:
         m.alg = pyo.Constraint(
-            m.time,
-            rule=lambda b, t: b.x[t] * b.v[t] + b.y[t] * b.w[t] == 0,
+            m.time, rule=lambda b, t: b.x[t] * b.v[t] + b.y[t] * b.w[t] == 0
         )
     elif index == 1:
         m.alg = pyo.Constraint(
             m.time,
-            rule=lambda b, t: MASS
-            * (b.v[t] ** 2 + b.w[t] ** 2 - G * b.y[t])
+            rule=lambda b, t: MASS * (b.v[t] ** 2 + b.w[t] ** 2 - G * b.y[t])
             - 2 * b.lam[t] * (b.x[t] ** 2 + b.y[t] ** 2)
             == 0,
         )
@@ -118,9 +114,7 @@ def test_the_check_writes_nothing():
     drto.check_index(m)
     after = {id(c) for c in m.component_data_objects(pyo.Constraint)}
     assert before == after
-    assert all(
-        values[id(v)] == v.value for v in m.component_data_objects(pyo.Var)
-    )
+    assert all(values[id(v)] == v.value for v in m.component_data_objects(pyo.Var))
 
 
 def test_missing_values_skip_the_numerical_layer():
@@ -169,9 +163,7 @@ def test_a_numerically_singular_algebra_names_its_block():
         m, wrt=m.time, nfe=2, ncp=2, scheme="LAGRANGE-RADAU"
     )
     m.bal = pyo.Constraint(m.time, rule=lambda b, t: b.dz[t] == -b.z[t])
-    m.g1 = pyo.Constraint(
-        m.time, rule=lambda b, t: b.a[t] + b.b[t] == b.z[t]
-    )
+    m.g1 = pyo.Constraint(m.time, rule=lambda b, t: b.a[t] + b.b[t] == b.z[t])
     m.g2 = pyo.Constraint(
         m.time, rule=lambda b, t: 2 * b.a[t] + 2 * b.b[t] == 2 * b.z[t]
     )
@@ -201,10 +193,7 @@ def test_the_mscontactor_form_fails_with_the_extents_named():
     mod = _example_module("prommis_sx")
     report = drto.check_index(mod.build(N=1, h=0.25))
     assert "not index one" in report.verdict
-    assert any(
-        "heterogeneous_reaction_extent" in n
-        for n in report.unmatched_variables
-    )
+    assert any("heterogeneous_reaction_extent" in n for n in report.unmatched_variables)
     assert any("_reaction_extent" in n for n in report.unmatched_variables)
 
 

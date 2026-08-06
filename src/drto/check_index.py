@@ -108,9 +108,7 @@ def _time_position(comp, time):
         return None, 0
     subsets = list(comp.index_set().subsets())
     for i, s in enumerate(subsets):
-        if s is time or (
-            isinstance(s, ContinuousSet) and s.name == time.name
-        ):
+        if s is time or (isinstance(s, ContinuousSet) and s.name == time.name):
             return i, len(subsets)
     return None, len(subsets)
 
@@ -152,8 +150,11 @@ def check_index(m, condition_limit=1e10):
             f"{condition_limit}."
         )
     reg = info(m)
-    for kind, fn in (("horizon", "drto.horizon"), ("state", "drto.state"),
-                     ("dynamics", "drto.dynamics")):
+    for kind, fn in (
+        ("horizon", "drto.horizon"),
+        ("state", "drto.state"),
+        ("dynamics", "drto.dynamics"),
+    ):
         if not reg.has_declaration(kind):
             raise ValueError(
                 f"drto: check_index requires a declared {kind} ({fn} first)."
@@ -250,12 +251,8 @@ def check_index(m, condition_limit=1e10):
     igi = IncidenceGraphInterface()
     matching = igi.maximum_matching(variables, rows)
     matched = {id(k) for k in matching} | {id(v) for v in matching.values()}
-    report.unmatched_constraints = [
-        c.name for c in rows if id(c) not in matched
-    ]
-    report.unmatched_variables = [
-        v.name for v in variables if id(v) not in matched
-    ]
+    report.unmatched_constraints = [c.name for c in rows if id(c) not in matched]
+    report.unmatched_variables = [v.name for v in variables if id(v) not in matched]
     if len(rows) != len(variables):
         report.notes.append(
             f"the pointwise algebra is not square: {len(rows)} "
@@ -276,12 +273,9 @@ def check_index(m, condition_limit=1e10):
             pass
 
     if report.unmatched_variables or report.unmatched_constraints:
-        report.structural_index = _structural_index(
-            m, reg, time, t, rows, variables
-        )
+        report.structural_index = _structural_index(m, reg, time, t, rows, variables)
         report.verdict = (
-            "not index one: structurally higher index, see the unmatched "
-            "variables"
+            "not index one: structurally higher index, see the unmatched " "variables"
         )
         return report
 
@@ -298,7 +292,9 @@ def check_index(m, condition_limit=1e10):
 
     if not rows:
         report.numerical = "nothing to evaluate"
-        report.verdict = "index zero: the pointwise algebra is empty, the model is an ODE"
+        report.verdict = (
+            "index zero: the pointwise algebra is empty, the model is an ODE"
+        )
         return report
 
     import numpy as np
@@ -308,12 +304,8 @@ def check_index(m, condition_limit=1e10):
     col = {id(v): j for j, v in enumerate(variables)}
     data, ri, ci = [], [], []
     for i, cd in enumerate(rows):
-        incident = [
-            v for v in identify_variables(cd.body) if id(v) in col
-        ]
-        grads = differentiate(
-            cd.body, wrt_list=incident, mode=Modes.reverse_numeric
-        )
+        incident = [v for v in identify_variables(cd.body) if id(v) in col]
+        grads = differentiate(cd.body, wrt_list=incident, mode=Modes.reverse_numeric)
         for v, g in zip(incident, grads):
             if g != 0.0:
                 data.append(float(g))
@@ -337,8 +329,8 @@ def check_index(m, condition_limit=1e10):
         lu = spla.splu(jac)
         norm_a = spla.onenormest(jac) if n > 1 else abs(jac.toarray()[0, 0])
         inv_op = spla.LinearOperator(
-            (n, n), matvec=lu.solve,
-            rmatvec=lambda x: lu.solve(x, trans="T"))
+            (n, n), matvec=lu.solve, rmatvec=lambda x: lu.solve(x, trans="T")
+        )
         norm_inv = spla.onenormest(inv_op) if n > 1 else 1.0 / norm_a
         cond = float(norm_a * norm_inv)
         report.condition_estimate = cond
@@ -361,8 +353,7 @@ def check_index(m, condition_limit=1e10):
             "singular members:" + _sick_blocks(igi, rows, variables, jac)
         )
         report.verdict = (
-            "not index one at this point: the algebra's Jacobian is "
-            "singular"
+            "not index one at this point: the algebra's Jacobian is " "singular"
         )
         return report
 
@@ -398,8 +389,7 @@ def _sick_blocks(igi, rows, variables, jac):
     out = []
     for cond, cnames, vnames in worst[:3]:
         out.append(
-            f"\n    block condition {cond:.2e}: "
-            + ", ".join(_capped(cnames + vnames))
+            f"\n    block condition {cond:.2e}: " + ", ".join(_capped(cnames + vnames))
         )
     return "".join(out) if out else " (block detail unavailable)"
 
@@ -428,9 +418,9 @@ def _structural_index(m, reg, time, t, alg_rows, alg_vars):
 
     # supports of the pointwise rows, over state and algebraic ids
     alg_ids = {id(v) for v in alg_vars}
-    var_order = {}          # id -> current highest derivative order
-    eq_support = []         # list of sets of (id, order)
-    eq_order = []           # differentiation depth per equation
+    var_order = {}  # id -> current highest derivative order
+    eq_support = []  # list of sets of (id, order)
+    eq_order = []  # differentiation depth per equation
 
     def support(cd):
         out = set()
@@ -493,7 +483,7 @@ def _structural_index(m, reg, time, t, alg_rows, alg_vars):
             for (vid, order) in s
             if order == var_order[vid]
         }
-        assign = {}          # highest-order var node -> equation index
+        assign = {}  # highest-order var node -> equation index
 
         def augment(i, seen):
             for node in eq_support[i]:
