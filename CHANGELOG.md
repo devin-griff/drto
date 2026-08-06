@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Removed
 
+- The hand-written initialization script `examples/initialize.py`. The
+  double column, its last user in the repository, calls
+  `drto.cold_start_dynamic` instead and reaches the identical solution
+  in the identical iteration count.
+
 - The binary distillation column example (notebook, model, and data).
   Its infinite-horizon case runs to the iteration limit without
   converging, so the page argued the opposite of its point. The model
