@@ -296,8 +296,8 @@ def check_index(m, condition_limit=1e10):
         return report
 
     if not rows:
-        report.numerical = "the pointwise algebra is empty (an ODE)"
-        report.verdict = "index one"
+        report.numerical = "nothing to evaluate"
+        report.verdict = "index zero: the pointwise algebra is empty, the model is an ODE"
         return report
 
     import numpy as np

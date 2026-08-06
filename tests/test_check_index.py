@@ -90,11 +90,11 @@ def test_the_index_one_pendulum_passes():
     assert report.condition_estimate < 1e10
 
 
-def test_the_ode_pendulum_passes_with_empty_algebra():
+def test_the_ode_pendulum_is_index_zero():
     report = drto.check_index(pendulum(0))
-    assert report.verdict == "index one"
+    assert "index zero" in report.verdict
+    assert "ODE" in report.verdict
     assert report.n_algebraic_constraints == 0
-    assert "empty" in report.numerical
 
 
 def test_the_index_two_pendulum_fails_with_the_tension_named():

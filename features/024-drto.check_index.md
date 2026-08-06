@@ -94,7 +94,7 @@ and the reformulation on the reaction invariants passes.
   with both counts and the Dulmage-Mendelsohn partition sizes, and the
   structural index line states the lower bound of two.
 - The pendulum in its index-3, index-2, index-1, and ODE forms checks
-  to structural index 3, structural index 2, index one, and index one
+  to structural index 3, structural index 2, index one, and index zero
   with the algebra empty, the cord tension named as the unmatched
   variable in the failing forms.
 - A model without values gets the structural verdict, and the report
