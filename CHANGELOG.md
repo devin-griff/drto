@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.info(m)` opens with the problem's size (gh #63): the number of
+  declared states and controls, counted as members at one time point,
+  before the per-declaration lines, in both the plain and HTML
+  renderings. The count is the model's dimension rather than its grid's,
+  so it does not move with the horizon length or under the transforms.
+
 - The steady-state reduction covers spatially distributed models
   (gh #54, feature 021 extended). A `Block(t, x)` or
   `Block(t, element)` family collapses per spatial point — the first
