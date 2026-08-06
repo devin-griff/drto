@@ -36,6 +36,21 @@ the time-varying structure it is:
   keeps pointing at its referent.
 - Time-invariant Blocks, including Params and parameter blocks, are shared
   as-is, which is current behavior.
+- A Block carrying further indexes — a 1D control volume's `Block(t, x)`,
+  an MSContactor's `Block(t, element)` — collapses the same way per
+  spatial point: the `t=0` member of every index combination survives,
+  so the spatial structure is kept and only time goes (gh #54).
+- Spatial discretization equations are algebra, not grid machinery: a
+  discretization equation is discarded only when its derivative is taken
+  with respect to the declared time set, so a settler's
+  `material_flow_dx_disc_eq` survives the reduction.
+- A sparse dynamics container — a balance written past an inlet boundary,
+  a member skipped by its rule — reduces to its members: index
+  combinations with no member anywhere are skipped, not errors, and an
+  empty Var is left alone.
+- The guard that every dynamics row differentiates a declared state reads
+  the row's variables, so a derivative side written as a sum (a balance
+  carrying a noise term) checks the same as a bare one.
 
 Out of scope, rejected with a descriptive error: a time-indexed Block nested
 inside another time-indexed Block, mirroring the terminal-segment rule
@@ -73,3 +88,13 @@ everything downstream reuses machinery that is already tested.
 - The IDAES CSTR example notebook declares the flowsheet once and runs two
   solves total: the reduced model for the setpoint, then the
   infinite-horizon controller.
+- A `Block(t, x)` family keeps one member per spatial point, its internal
+  equations intact, and the spatial discretization equations survive with
+  their derivative variables live; the declared time set's collocation
+  and continuity equations are discarded (gh #54).
+- A sparse dynamics container reduces to its members, and a
+  noise-carrying balance passes the declared-state guard while an
+  undeclared differentiation still errors.
+- The declared mixer-settler stage reduces to a square steady system at
+  held controls, the dynamic model's inert first-instant data freed —
+  gh #54's acceptance criterion.

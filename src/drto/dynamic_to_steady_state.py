@@ -14,7 +14,13 @@ fixed), and a per-sample stage cost becomes the single-point cost that
 A ``Block(time)`` family (the IDAES property-block idiom) collapses to its
 single steady member: the ``t0`` member stays as written, its variables and
 internal equations untouched, and the other members leave the model with
-their contents (feature 021). A time-indexed Reference is a view, not a
+their contents (feature 021). A Block carrying further indexes — a 1D
+control volume's ``Block(t, x)``, an MSContactor's ``Block(t, element)``
+— collapses the same way per spatial point: the ``t0`` member of every
+combination survives, so the spatial structure is kept and only time
+goes. Spatial discretization equations are algebra, not grid machinery,
+and stay; only the declared time set's collocation and continuity
+equations are discarded. A time-indexed Reference is a view, not a
 variable: it collapses to a view of the surviving member (a Port entry) or
 of the collapsed Var (an IDAES ``heat_duty``), never to a fresh independent
 Var, and Ports keep pointing at their referents.
@@ -50,7 +56,7 @@ from pyomo.core.expr import identify_variables, replace_expressions
 from pyomo.dae import DerivativeVar
 from pyomo.network import Port
 
-from drto.declarations import _dynamics_sides, pyomo_cvp_available
+from drto.declarations import pyomo_cvp_available
 from drto.infinite_horizon import _split_index, _time_index
 from drto.info import info
 
@@ -107,10 +113,22 @@ class DynamicToSteadyStateTransformation(Transformation):
         for s in states_set:
             for vd in s.values() if s.is_indexed() else (s,):
                 covered.add(id(vd.parent_component()))
+        # every dynamics row carrying a time derivative must differentiate
+        # a declared state; the scan reads the row's variables directly, so
+        # a derivative side written as a sum (a balance carrying a noise
+        # term) checks the same as a bare one, and a container's algebraic
+        # members with no time derivative pass through
         for con in reg.components("dynamics"):
             for cd in con.values() if con.is_indexed() else (con,):
-                side, _coeff, _ = _dynamics_sides(cd, time, "dynamic_to_steady_state")
-                if id(side.parent_component().get_state_var()) not in covered:
+                tderivs = [
+                    v
+                    for v in identify_variables(cd.expr, include_fixed=True)
+                    if isinstance(v.parent_component(), DerivativeVar)
+                    and time in v.parent_component().get_continuousset_list()
+                ]
+                if tderivs and not any(
+                    id(v.parent_component().get_state_var()) in covered for v in tderivs
+                ):
                     raise ValueError(
                         f"drto: dynamic_to_steady_state: '{cd.name}' "
                         f"differentiates an undeclared state."
@@ -132,9 +150,29 @@ class DynamicToSteadyStateTransformation(Transformation):
         # --- discretization artifacts are grid machinery, not model
         # content: discarded, so a discretized model reduces to the same
         # steady system as the declared one ------------------------------
+        def _time_artifact(con):
+            """Whether a pyomo.dae artifact belongs to the declared time
+            set. A discretization equation is the time set's when its
+            derivative is taken with respect to it; one over another
+            ContinuousSet (a spatial axis) is real algebra the steady
+            model keeps (a settler's ``material_flow_dx_disc_eq``).
+            Continuity equations carry no derivative and arise from the
+            declared-time collocation in the meshes drto supports."""
+            members = con.values() if con.is_indexed() else (con,)
+            cd = next(iter(members), None)
+            if cd is None:
+                return True
+            for v in identify_variables(cd.body, include_fixed=True):
+                dv = v.parent_component()
+                if isinstance(dv, DerivativeVar):
+                    return time in dv.get_continuousset_list()
+            return True
+
         n_artifacts = 0
         for con in list(model.component_objects(Constraint, active=True)):
-            if "_disc_" in con.local_name or con.local_name.endswith("_cont_eq"):
+            if (
+                "_disc_" in con.local_name or con.local_name.endswith("_cont_eq")
+            ) and _time_artifact(con):
                 con.parent_block().del_component(con)
                 n_artifacts += 1
 
@@ -160,18 +198,15 @@ class DynamicToSteadyStateTransformation(Transformation):
                         f"is not supported."
                     )
                 bd = bd.parent_block()
-            if len(_bsubs) != 1:
-                raise ValueError(
-                    f"drto: dynamic_to_steady_state cannot reduce "
-                    f"'{B.name}': it is indexed by more than the declared "
-                    f"time set, which is not supported."
-                )
             tblocks.append(B)
         n_members = 0
         for B in tblocks:
-            for t in [t for t in B.keys() if t != t0]:
-                del B[t]
-                n_members += 1
+            pos, subs = _time_index(B, time)
+            for idx in list(B.keys()):
+                _o, t = _split_index(idx, pos, len(subs))
+                if t != t0:
+                    del B[idx]
+                    n_members += 1
 
         # --- time-indexed References leave the Var collapse ---------------
         # a Reference is a view, not a variable: it collapses to a view of
@@ -250,8 +285,14 @@ class DynamicToSteadyStateTransformation(Transformation):
             for idx, vd in comp.items():
                 o, t = _split_index(idx, pos, len(subs))
                 members[(o, t)] = vd
-                if t == t0:
+                # the t0 representative; a combo with no t0 member (a
+                # sparse Var) falls back to its first
+                if t == t0 or o not in attrs:
                     attrs[o] = (vd.domain, vd.lb, vd.ub, vd.value, vd.fixed)
+            if not members:
+                # an empty container has nothing to collapse (an
+                # MSContactor's material_transfer_term with no members)
+                continue
             parent.del_component(comp)
             any_dom = next(iter(attrs.values()))[0]
             if others:
@@ -323,7 +364,9 @@ class DynamicToSteadyStateTransformation(Transformation):
                 }
                 parent.del_component(con)
                 if others:
-                    new = Constraint(*others, rule=lambda m, *o, _r=reps: _r[o])
+                    new = Constraint(
+                        *others, rule=lambda m, *o, _r=reps: _r.get(o, Constraint.Skip)
+                    )
                 else:
                     new = Constraint(expr=reps[()])
                 parent.add_component(name, new)
