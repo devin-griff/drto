@@ -83,7 +83,7 @@ and the reformulation on the reaction invariants passes.
   matching and a condition estimate below `condition_limit` at the
   current point.
 - The mixer-settler stage posed on the reaction invariants
-  (`examples/models/prommis_sx2.py`) passes. The MSContactor form
+  (`examples/models/prommis_sx_index_one.py`) passes. The MSContactor form
   (`examples/models/prommis_sx.py`) fails structurally, with the
   transfer extents and the dissociation extents among the named
   unmatched variables.

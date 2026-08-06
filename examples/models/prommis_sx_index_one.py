@@ -255,36 +255,36 @@ def build(N=8, h=1, ncp=3, noise=True):
     # mixer balances: one derivative per row, no extents, skipped at the
     # first point where no discretization equations reach
     # ------------------------------------------------------------------
-    def fa(b, t, j):     # aqueous feed inflow minus outflow, mol/hr
+    def flow_aq(b, t, j):     # aqueous feed inflow minus outflow, mol/hr
         return (b.aq_feed[t] * AQ_FEED[j] - b.F_aq[t] * b.c_aq[t, j]) \
             / mw_aq[j]
 
-    def fo(b, t, j):     # organic feed inflow minus outflow, mol/hr
+    def flow_og(b, t, j):     # organic feed inflow minus outflow, mol/hr
         feed = C_DEHPA_FEED if j == "DEHPA" else OG_FEED[j]
         return (b.og_feed[t] * feed - b.F_og[t] * b.c_og[t, j]) / mw_og[j]
 
     m.metal_balance = pyo.Constraint(
         m.time, m.E, rule=lambda b, t, e: pyo.Constraint.Skip if t == t0
         else b.dnt_metal[t, e]
-        == fa(b, t, e) + fo(b, t, f"{e}_o") + b.w_metal[t, e])
+        == flow_aq(b, t, e) + flow_og(b, t, f"{e}_o") + b.w_metal[t, e])
     m.hydrogen_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_h[t] == fa(b, t, "H") + fa(b, t, "HSO4")
-        - sum(z[e] * fo(b, t, f"{e}_o") for e in elements) + b.w_h[t])
+        else b.dnt_h[t] == flow_aq(b, t, "H") + flow_aq(b, t, "HSO4")
+        - sum(z[e] * flow_og(b, t, f"{e}_o") for e in elements) + b.w_h[t])
     m.sulfur_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_s[t] == fa(b, t, "SO4") + fa(b, t, "HSO4") + b.w_s[t])
+        else b.dnt_s[t] == flow_aq(b, t, "SO4") + flow_aq(b, t, "HSO4") + b.w_s[t])
     m.extractant_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_a[t] == fo(b, t, "DEHPA")
-        + sum(z[e] * fo(b, t, f"{e}_o") for e in elements) + b.w_a[t])
+        else b.dnt_a[t] == flow_og(b, t, "DEHPA")
+        + sum(z[e] * flow_og(b, t, f"{e}_o") for e in elements) + b.w_a[t])
     m.chloride_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dn_aq[t, "Cl"] == fa(b, t, "Cl") + b.w_cl[t])
+        else b.dn_aq[t, "Cl"] == flow_aq(b, t, "Cl") + b.w_cl[t])
 
     m.water_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dn_aq[t, "H2O"] == fa(b, t, "H2O") + b.w_h2o[t])
+        else b.dn_aq[t, "H2O"] == flow_aq(b, t, "H2O") + b.w_h2o[t])
 
     # the kerosene balance with its derivative eliminated: both solvent
     # concentrations are constants, so the kerosene and water holdups
@@ -294,8 +294,8 @@ def build(N=8, h=1, ncp=3, noise=True):
     k_sol = (OG_FEED["Kerosene"] / mw_og["Kerosene"])         / (AQ_FEED["H2O"] / mw_aq["H2O"])
     m.kerosene_closure = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else fo(b, t, "Kerosene")
-        + k_sol * (fa(b, t, "H2O") + b.w_h2o[t]) == 0)
+        else flow_og(b, t, "Kerosene")
+        + k_sol * (flow_aq(b, t, "H2O") + b.w_h2o[t]) == 0)
 
     # ------------------------------------------------------------------
     # settlers: four transport tanks per cascade, fed by the mixer; the

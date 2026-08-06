@@ -198,6 +198,6 @@ def test_the_mscontactor_form_fails_with_the_extents_named():
 
 
 def test_the_reaction_invariant_form_passes():
-    mod = _example_module("prommis_sx2")
+    mod = _example_module("prommis_sx_index_one")
     report = drto.check_index(mod.build(N=1, h=0.25))
     assert report.verdict == "index one"

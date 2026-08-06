@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The format is based on
   ladder and the solvent extraction stage posed both ways — the
   MSContactor form with transfer extents fails with the extents named,
   and the reformulation on the reaction invariants
-  (`examples/models/prommis_sx2.py`, new) passes.
+  (`examples/models/prommis_sx_index_one.py`, new) passes.
 
 - The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
   runs the closed loop the declarations describe from the declared,
