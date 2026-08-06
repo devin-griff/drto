@@ -74,6 +74,23 @@ moving-horizon estimation.
 Declarations are checked as they are made, and a bad one raises a
 descriptive error at declaration time, not at solve time.
 
+## Checking the DAE index
+
+Declare first, then check: `drto.check_index(m)` tests whether the
+declared model is an index-one DAE — whether every algebraic variable
+is determined, pointwise, by the algebraic constraints. A model that
+fails is higher-index, and its optimization symptoms are indirect;
+the report names the variables no algebraic constraint determines and
+the constraints left unmatched, states the structural index, and
+estimates the condition of the algebra's Jacobian at the current
+values. The [gallery notebook](notebooks/check_index.ipynb) walks the
+pendulum's index ladder and a flowsheet posed both ways.
+
+```python
+report = drto.check_index(m)
+print(report)
+```
+
 ## Workflow: an infinite-horizon controller
 
 The controller workflow runs declare → discretize → terminal segment →
