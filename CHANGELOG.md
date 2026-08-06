@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The DAE index check (feature 024). `drto.check_index(m)` tests
+  whether the declared model is an index-one DAE: a maximum matching of
+  the pointwise algebraic constraints to the algebraic variables names
+  every variable no constraint determines, Pantelides' algorithm
+  reports the structural index on failure (or the lower bound of two
+  when the pointwise algebra is not square), and a condition estimate
+  of the equilibrated Jacobian at the current point catches the
+  numerically singular case the structure cannot see. The check writes
+  nothing and returns a readable report. The gallery gains
+  [Checking the DAE index](docs/examples.md): the pendulum's index
+  ladder and the solvent extraction stage posed both ways — the
+  MSContactor form with transfer extents fails with the extents named,
+  and the reformulation on the reaction invariants
+  (`examples/models/prommis_sx_index_one.py`, new) passes.
+
 - The ideal NMPC loop (feature 014). `drto.ideal_nmpc(m, steps, ...)`
   runs the closed loop the declarations describe from the declared,
   discretized model: a clone becomes the process through

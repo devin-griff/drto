@@ -1,0 +1,563 @@
+# Copyright (c) 2026 Devin Griffith
+# SPDX-License-Identifier: BSD-3-Clause
+"""The PrOMMiS mixer-settler solvent extraction stage, declared for drto.
+
+One extraction stage of ``prommis.solvent_extraction``'s
+``MixerSettlerExtraction``, taken as PrOMMiS wrote it: a two-phase mixer
+where the DEHPA complexation equilibria move the rare earths into the
+organic phase, and two single-phase settlers carrying the effluents out.
+The declared states are the inventories with memory: the mixer's aqueous
+holdups (all but bisulfate, which rides its dissociation equilibrium;
+the water member carries the phase split), the mixer's free extractant
+holdup, and the settlers' species holdups at every node of the backward
+finite-difference cascade, four tanks in series per settler, PrOMMiS's
+own mesh (solvents and bisulfate excluded, closed by density and
+equilibrium). The organic metal holdups follow the aqueous side
+instantaneously through the equilibria, so they are algebra, not
+states.
+
+The manipulated inputs are the two feed flows. The declared
+disturbances are additive zero-mean noise terms, one in every state's
+balance, appended to the rows since MSContactor carries no custom-term
+hooks; they are zero nominally, so the noise-free model is untouched. The transfer extents and the
+stage flows at the first time point are inert data of the high-index
+equilibrium formulation (no rate law determines them there) and are
+fixed, the same choice PrOMMiS's own dynamic driver makes.
+
+Usage from a notebook in ``examples/``::
+
+    from models.prommis_sx import build, F_AQ, F_OG
+    m = build(N=8, h=1)
+"""
+import math
+
+import pyomo.environ as pyo
+from pyomo.environ import units as U
+from idaes.core import FlowDirection, FlowsheetBlock
+from prommis.properties.sulfuric_acid_leaching_properties import (
+    SulfuricAcidLeachingParameters,
+)
+from prommis.solvent_extraction.mixer_settler_extraction import (
+    MixerSettlerExtraction,
+)
+from prommis.solvent_extraction.ree_og_distribution import REESolExOgParameters
+from prommis.solvent_extraction.solvent_extraction_reaction_package import (
+    SolventExtractionReactions,
+)
+
+import drto
+
+#: Feed composition of the aqueous leachate (mg/L), PrOMMiS's coal-refuse
+#: leachate, and of the organic solvent (kerosene carrying DEHPA).
+AQ_FEED = {
+    "H2O": 1e6, "H": 10.75, "SO4": 100, "HSO4": 1e4, "Al": 422.375,
+    "Ca": 109.542, "Cl": 1e-7, "Fe": 688.266, "Sc": 0.032, "Y": 0.124,
+    "La": 0.986, "Ce": 2.277, "Pr": 0.303, "Nd": 0.946, "Sm": 0.097,
+    "Gd": 0.2584, "Dy": 0.047,
+}
+OG_FEED = {
+    "Kerosene": 820e3, "Al_o": 1.267e-5, "Ca_o": 2.684e-5, "Fe_o": 2.873e-6,
+    "Sc_o": 1.734, "Y_o": 2.179e-5, "La_o": 0.000105, "Ce_o": 0.00031,
+    "Pr_o": 3.711e-5, "Nd_o": 0.000165, "Sm_o": 1.701e-5, "Gd_o": 3.357e-5,
+    "Dy_o": 8.008e-6,
+}
+F_AQ, F_OG, DOSAGE = 62.01, 62.01, 5    # m3/hr, m3/hr, percent DEHPA
+VOLUME, AREA, LENGTH = 0.4, 1.0, 0.4    # m3 mixer, m2 and m per settler
+TEMPERATURE = 305.15                    # K
+
+
+def build(N=8, h=1, ncp=3, noise=True):
+    """One declared stage on an ``N``-sample horizon of ``h`` hours."""
+    m = pyo.ConcreteModel()
+    m.fs = FlowsheetBlock(
+        dynamic=True, time_set=[i * h for i in range(N + 1)],
+        time_units=U.hour,
+    )
+    m.fs.prop_o = REESolExOgParameters()
+    m.fs.leach_soln = SulfuricAcidLeachingParameters()
+    m.fs.reaxn = SolventExtractionReactions()
+    m.fs.reaxn.extractant_dosage = DOSAGE
+    m.fs.ms = MixerSettlerExtraction(
+        number_of_stages=1,
+        aqueous_stream={
+            "property_package": m.fs.leach_soln,
+            "flow_direction": FlowDirection.forward,
+            "has_energy_balance": False,
+            "has_pressure_balance": False,
+        },
+        organic_stream={
+            "property_package": m.fs.prop_o,
+            "flow_direction": FlowDirection.backward,
+            "has_energy_balance": False,
+            "has_pressure_balance": False,
+        },
+        heterogeneous_reaction_package=m.fs.reaxn,
+        has_holdup=True,
+        settler_transformation_method="dae.finite_difference",
+        settler_transformation_scheme="BACKWARD",
+        settler_finite_elements=4,
+    )
+
+    drto.horizon(m.fs.time)             # before discretization: it takes the grid
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.fs.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
+
+    ms = m.fs.ms
+    msc = ms.mixer[1].unit.mscontactor
+    aq, og = ms.aqueous_settler[1].unit, ms.organic_settler[1].unit
+    # every node past the inlet boundary is a tank of the backward
+    # finite-difference cascade, one inventory per species per tank
+    xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
+
+    # the feed streams: compositions fixed; the organic flow is the
+    # manipulated input (initialized, not fixed); the aqueous flow is
+    # closed by the disturbance equation below
+    for j, v in AQ_FEED.items():
+        ms.aqueous_inlet.conc_mass_comp[:, j].fix(v)
+    for j, v in OG_FEED.items():
+        ms.organic_inlet.conc_mass_comp[:, j].fix(v)
+    ms.organic_inlet.conc_mass_comp[:, "DEHPA"].fix(975.8e3 * DOSAGE / 100)
+    m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
+    m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
+    for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
+        for t in ref:
+            ref[t].set_value(nominal)
+            # MV limits: the plant's phase-split algebra is solved
+            # reliably inside this envelope; the controller respects it
+            ref[t].setlb(45.0)
+            ref[t].setub(75.0)
+    m.fs.aq_feed[:].unfix()
+
+    # geometry and temperatures, PrOMMiS's dynamic flowsheet values
+    msc.volume[:].fix(VOLUME * U.m**3)
+    msc.aqueous[:, :].temperature.fix(TEMPERATURE * U.K)
+    msc.organic[:, :].temperature.fix(TEMPERATURE * U.K)
+    for st in (aq, og):
+        st.area.fix(AREA)
+        st.length.fix(LENGTH)
+
+    # the states: inventories with memory. Mixer aqueous holdups (water
+    # carries the phase split, bisulfate rides its equilibrium), the free
+    # extractant holdup, and the settler holdups at every cascade node
+    # (solvents closed by density, the settlers running full)
+    maq = [j for j in m.fs.leach_soln.component_list if j != "HSO4"]
+    saq = [j for j in maq if j != "H2O"]
+    sog = [j for j in m.fs.prop_o.component_list if j != "Kerosene"]
+    drto.state(*(msc.aqueous_material_holdup[:, 1, "liquid", j] for j in maq))
+    drto.state(msc.organic_material_holdup[:, 1, "organic", "DEHPA"])
+    drto.state(*(aq.material_holdup[:, x, "liquid", j]
+                 for x in xs for j in saq))
+    drto.state(*(og.material_holdup[:, x, "organic", j]
+                 for x in xs for j in sog))
+    drto.dynamics(
+        msc.aqueous_material_balance, msc.organic_material_balance,
+        aq.material_balances, og.material_balances)
+    drto.control(m.fs.og_feed, m.fs.aq_feed, profile="piecewise_constant")
+
+    # additive process noise, one zero-mean term per state's balance
+    # (mol/hr), appended to the rows since MSContactor has no custom-term
+    # hooks; zero nominally, so the noise-free model is untouched
+    def _noise(name, con, index):
+        w = pyo.Var(m.fs.time, initialize=0.0, units=U.mol / U.hour)
+        m.fs.add_component(name, w)
+        for t in m.fs.time:
+            cd = con[(t,) + index]
+            cd.set_value(cd.expr.args[0] == cd.expr.args[1] + w[t])
+        return w
+
+    if noise:
+        terms = []
+        for j in maq:
+            terms.append(_noise(f"w_m_{j}", msc.aqueous_material_balance, (1, j)))
+        terms.append(_noise("w_m_DEHPA", msc.organic_material_balance, (1, "DEHPA")))
+        for i, x in enumerate(xs, 1):
+            for j in saq:
+                terms.append(_noise(f"w_sa{i}_{j}", aq.material_balances, (x, j)))
+            for j in sog:
+                terms.append(_noise(f"w_so{i}_{j}", og.material_balances, (x, j)))
+        drto.disturbance(*terms)
+
+    # feedback hooks: one Param per state, filled by the caller
+    t0 = m.fs.time.first()
+    m.ic_maq = pyo.Param(maq, initialize=1.0, mutable=True, units=U.mol)
+    m.ic_dehpa = pyo.Param(initialize=1.0, mutable=True, units=U.mol)
+    m.ic_saq = pyo.Param(xs, saq, initialize=1.0, mutable=True,
+                         units=U.mol / U.m)
+    m.ic_sog = pyo.Param(xs, sog, initialize=1.0, mutable=True,
+                         units=U.mol / U.m)
+
+    @m.Constraint(maq)
+    def ic_mixer_aq(mm, j):
+        return msc.aqueous_material_holdup[t0, 1, "liquid", j] == mm.ic_maq[j]
+
+    @m.Constraint()
+    def ic_mixer_dehpa(mm):
+        return msc.organic_material_holdup[t0, 1, "organic", "DEHPA"] == mm.ic_dehpa
+
+    @m.Constraint(xs, saq)
+    def ic_settler_aq(mm, x, j):
+        return aq.material_holdup[t0, x, "liquid", j] == mm.ic_saq[x, j]
+
+    @m.Constraint(xs, sog)
+    def ic_settler_og(mm, x, j):
+        return og.material_holdup[t0, x, "organic", j] == mm.ic_sog[x, j]
+
+    drto.initial_condition(m.ic_mixer_aq, m.ic_mixer_dehpa,
+                           m.ic_settler_aq, m.ic_settler_og)
+
+    # inert first-instant data of the high-index equilibrium formulation:
+    # no rate law determines the extents or flows at t0
+    msc.aqueous_inherent_reaction_extent[t0, :, "Ka2"].fix(0.0)
+    msc.heterogeneous_reaction_extent[t0, :, :].fix(0.0)
+    msc.aqueous[t0, 1].flow_vol.fix(F_AQ)
+    msc.organic[t0, 1].flow_vol.fix(F_OG)
+    for x in xs:
+        aq.inherent_reaction_extent[t0, x, "Ka2"].fix(0.0)
+        aq.properties[t0, x].flow_vol.fix(F_AQ)
+        og.properties[t0, x].flow_vol.fix(F_OG)
+
+    # steady-state targets, one scalar Param per state (the pairing takes
+    # one component per call), filled after the steady solve
+    def target(name, unit):
+        p = pyo.Param(initialize=1.0, mutable=True, units=unit)
+        m.add_component(name, p)
+        return p
+
+    ss_maq = {j: target(f"ss_maq_{j}", U.mol) for j in maq}
+    m.ss_dehpa = pyo.Param(initialize=1.0, mutable=True, units=U.mol)
+    m.ss_fog = pyo.Param(initialize=F_OG, mutable=True, units=U.m**3 / U.hour)
+    for j in maq:
+        drto.steady_state(msc.aqueous_material_holdup[:, 1, "liquid", j],
+                          ss_maq[j])
+    drto.steady_state(msc.organic_material_holdup[:, 1, "organic", "DEHPA"],
+                      m.ss_dehpa)
+    for i, x in enumerate(xs, 1):
+        for j in saq:
+            drto.steady_state(aq.material_holdup[:, x, "liquid", j],
+                              target(f"ss_saq{i}_{j}", U.mol / U.m))
+        for j in sog:
+            drto.steady_state(og.material_holdup[:, x, "organic", j],
+                              target(f"ss_sog{i}_{j}", U.mol / U.m))
+    drto.steady_state_control(m.fs.og_feed, m.ss_fog)
+    m.ss_faq = pyo.Param(initialize=F_AQ, mutable=True, units=U.m**3 / U.hour)
+    drto.steady_state_control(m.fs.aq_feed, m.ss_faq)
+
+    # the tracking cost: hold the rare earth inventories in the mixer's
+    # aqueous phase at their targets (what is not extracted), spend the
+    # organic flow gently. Unit-carrying scales keep it dimensionless
+    ree = ["Sc", "Y", "La", "Ce", "Pr", "Nd", "Sm", "Gd", "Dy"]
+    bulk = [j for j in maq if j not in ree]
+    m.scale_n = pyo.Param(initialize=1e-4, mutable=True, units=U.mol)
+    m.scale_F = pyo.Param(initialize=2.0, mutable=True, units=U.m**3 / U.hour)
+    # loose scales for the remaining inventories: the cost covers every
+    # state, with the rare earth terms still carrying the steering
+    m.scale_naq = pyo.Param(initialize=1e5, mutable=True, units=U.mol)
+    m.scale_sett = pyo.Param(initialize=1e3, mutable=True, units=U.mol / U.m)
+    samples = sorted(m.fs.time.get_finite_elements() if False else [i * h for i in range(N + 1)])
+    stages = samples[:-1]
+    m.cost = pyo.Var(stages, initialize=0.0)
+    m.term = pyo.Var(initialize=0.0)
+
+    def _other_inventories(mm, t):
+        return (
+            sum(((msc.aqueous_material_holdup[t, 1, "liquid", j]
+                  - mm.component(f"ss_maq_{j}")) / mm.scale_naq) ** 2
+                for j in bulk)
+            + ((msc.organic_material_holdup[t, 1, "organic", "DEHPA"]
+                - mm.ss_dehpa) / mm.scale_naq) ** 2
+            + sum(((aq.material_holdup[t, x, "liquid", j]
+                    - mm.component(f"ss_saq{i}_{j}")) / mm.scale_sett) ** 2
+                  for i, x in enumerate(xs, 1) for j in saq)
+            + sum(((og.material_holdup[t, x, "organic", j]
+                    - mm.component(f"ss_sog{i}_{j}")) / mm.scale_sett) ** 2
+                  for i, x in enumerate(xs, 1) for j in sog))
+
+    @m.Constraint(stages)
+    def stage(mm, t):
+        return mm.cost[t] == (
+            sum(((msc.aqueous_material_holdup[t, 1, "liquid", j]
+                  - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
+            + ((m.fs.og_feed[t] - mm.ss_fog) / mm.scale_F) ** 2
+            + ((m.fs.aq_feed[t] - mm.ss_faq) / mm.scale_F) ** 2
+            + _other_inventories(mm, t))
+
+    tN = m.fs.time.last()
+
+    @m.Constraint()  # the stage cost with the controls removed, at tN
+    def terminal(mm):
+        return mm.term == (
+            sum(((msc.aqueous_material_holdup[tN, 1, "liquid", j]
+                  - mm.component(f"ss_maq_{j}")) / mm.scale_n) ** 2 for j in ree)
+            + _other_inventories(mm, tN))
+
+    drto.tracking_stage_cost(m.stage)
+    drto.tracking_terminal_cost(m.terminal)
+    return m
+
+
+def steady_targets(m, tee=False):
+    """Fill the targets and hooks from PrOMMiS's own steady flowsheet.
+
+    The drto steady branch does not yet reduce spatially distributed
+    Blocks (gh #54), so the setpoint comes from
+    ``mixer_settler_ex_flowsheet_steady``: build it at the same dosage
+    and stage count, solve it, and read the solution back. The holdup
+    values are evaluated through this model's own holdup rows at the
+    steady concentrations and phase split, so every unit conversion is
+    the model's. The first-instant extents are refixed at their steady
+    values. Returns the solved steady flowsheet.
+    """
+    from prommis.solvent_extraction.mixer_settler_ex_flowsheet_steady import (
+        initialize_steady_model, model_buildup_and_set_inputs,
+    )
+    import pyomo_pounce  # noqa: F401  registers the solver
+
+    sm = model_buildup_and_set_inputs(DOSAGE, 1)
+    initialize_steady_model(sm)
+    pyo.SolverFactory("pounce").solve(sm, tee=tee)
+
+    their = sm.fs.mixer_settler_ex
+    tmsc = their.mixer[1].unit.mscontactor
+    taq = their.aqueous_settler[1].unit
+    tog = their.organic_settler[1].unit
+    ts = sm.fs.time.first()
+    txn = taq.length_domain.last()
+
+    ms = m.fs.ms
+    msc = ms.mixer[1].unit.mscontactor
+    aq, og = ms.aqueous_settler[1].unit, ms.organic_settler[1].unit
+    t0 = m.fs.time.first()
+    xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
+    if list(taq.length_domain) != list(aq.length_domain):
+        raise ValueError(
+            "drto example: the steady flowsheet's settler mesh does not "
+            "match this model's; build both with the same element count.")
+    maq = [j for j in m.fs.leach_soln.component_list if j != "HSO4"]
+    saq = [j for j in maq if j != "H2O"]
+    sog = [j for j in m.fs.prop_o.component_list if j != "Kerosene"]
+
+    # the steady point, written into this model's algebra at every time
+    # point: the t0 values anchor the holdup evaluations below, and the
+    # rest are initial values for the algebra that is determined only
+    # jointly with the dynamics (the stage and settler flows, like the
+    # extents), which the pointwise cold-start solves cannot reach
+    for t in m.fs.time:
+        for j in m.fs.leach_soln.component_list:
+            msc.aqueous[t, 1].conc_mass_comp[j].set_value(
+                pyo.value(tmsc.aqueous[ts, 1].conc_mass_comp[j]))
+            for x in aq.length_domain:
+                aq.properties[t, x].conc_mass_comp[j].set_value(
+                    pyo.value(taq.properties[ts, x].conc_mass_comp[j]))
+        for j in m.fs.prop_o.component_list:
+            msc.organic[t, 1].conc_mass_comp[j].set_value(
+                pyo.value(tmsc.organic[ts, 1].conc_mass_comp[j]))
+            for x in og.length_domain:
+                og.properties[t, x].conc_mass_comp[j].set_value(
+                    pyo.value(tog.properties[ts, x].conc_mass_comp[j]))
+        for p in ("aqueous", "organic"):
+            msc.volume_frac_stream[t, 1, p].set_value(
+                pyo.value(tmsc.volume_frac_stream[ts, 1, p]))
+        msc.aqueous[t, 1].flow_vol.set_value(
+            pyo.value(tmsc.aqueous[ts, 1].flow_vol))
+        msc.organic[t, 1].flow_vol.set_value(
+            pyo.value(tmsc.organic[ts, 1].flow_vol))
+        for x in aq.length_domain:
+            aq.properties[t, x].flow_vol.set_value(
+                pyo.value(taq.properties[ts, x].flow_vol))
+            og.properties[t, x].flow_vol.set_value(
+                pyo.value(tog.properties[ts, x].flow_vol))
+        for mine, theirs in ((aq, taq), (og, tog)):
+            for idx, v in theirs._flow_terms.items():
+                mine._flow_terms[(t,) + idx[1:]].set_value(pyo.value(v))
+            for idx, v in theirs.material_flow_dx.items():
+                if v.value is not None:
+                    mine.material_flow_dx[(t,) + idx[1:]].set_value(
+                        pyo.value(v))
+
+    def rhs(cd):
+        return pyo.value(cd.expr.args[1])
+
+    for j in maq:
+        v = rhs(msc.aqueous_material_holdup_constraint[t0, 1, "liquid", j])
+        m.ic_maq[j] = v
+        m.component(f"ss_maq_{j}").set_value(v)
+    v = rhs(msc.organic_material_holdup_constraint[t0, 1, "organic", "DEHPA"])
+    m.ic_dehpa = v
+    m.ss_dehpa = v
+    for i, x in enumerate(xs, 1):
+        for j in saq:
+            v = rhs(aq.material_holdup_calculation[t0, x, "liquid", j])
+            m.ic_saq[x, j] = v
+            m.component(f"ss_saq{i}_{j}").set_value(v)
+        for j in sog:
+            v = rhs(og.material_holdup_calculation[t0, x, "organic", j])
+            m.ic_sog[x, j] = v
+            m.component(f"ss_sog{i}_{j}").set_value(v)
+
+    # the extents: refixed at the steady values at the first instant,
+    # and set there everywhere else as the initial guess (they are the
+    # one algebra the pointwise cold-start solves cannot reach, since
+    # the equilibrium formulation determines them only jointly with the
+    # dynamics)
+    # the generation variables and the accumulations: the point solves
+    # leave the generations underdetermined (they close only jointly
+    # with the dynamics), and nothing values the algebraic entries'
+    # accumulations at all. At steady, every accumulation is zero and
+    # the generations come off the solved flowsheet
+    for t in m.fs.time:
+        for var, tvar in (
+            (msc.aqueous_inherent_reaction_generation,
+             tmsc.aqueous_inherent_reaction_generation),
+            (msc.aqueous_heterogeneous_reactions_generation,
+             tmsc.aqueous_heterogeneous_reactions_generation),
+            (msc.organic_heterogeneous_reactions_generation,
+             tmsc.organic_heterogeneous_reactions_generation),
+            (aq.inherent_reaction_generation, taq.inherent_reaction_generation),
+        ):
+            for idx, tv in tvar.items():
+                if tv.value is not None:
+                    var[(t,) + idx[1:]].set_value(pyo.value(tv))
+        for acc in (msc.aqueous_material_accumulation,
+                    msc.organic_material_accumulation,
+                    aq.material_accumulation, og.material_accumulation):
+            for idx in acc:
+                if idx[0] == t:
+                    acc[idx].set_value(0.0)
+
+    ka2 = pyo.value(tmsc.aqueous_inherent_reaction_extent[ts, 1, "Ka2"])
+    het = {r: pyo.value(tmsc.heterogeneous_reaction_extent[ts, 1, r])
+           for r in m.fs.reaxn.reaction_idx}
+    ska2 = {x: pyo.value(taq.inherent_reaction_extent[ts, x, "Ka2"])
+            for x in xs}
+    for t in m.fs.time:
+        msc.aqueous_inherent_reaction_extent[t, 1, "Ka2"].set_value(ka2)
+        for r, v in het.items():
+            msc.heterogeneous_reaction_extent[t, 1, r].set_value(v)
+        for x in xs:
+            aq.inherent_reaction_extent[t, x, "Ka2"].set_value(ska2[x])
+    msc.aqueous_inherent_reaction_extent[t0, 1, "Ka2"].fix()
+    msc.heterogeneous_reaction_extent[t0, 1, :].fix()
+    for x in xs:
+        aq.inherent_reaction_extent[t0, x, "Ka2"].fix()
+    return sm
+
+
+def scale(model):
+    """Variable and constraint scaling factors, measured at the current point.
+
+    Concentrations in this model span twelve decades across species and
+    the Jacobian at the cold-start point spans seventeen, which makes
+    the KKT factorization numerically singular (the pounce pre-flight
+    measures both). Call after ``steady_targets`` and a cold start have
+    filled the model.
+
+    Variable factors are assigned one per Var per species: the members
+    of each Var are grouped by their string index elements (species and
+    phase names), so time points, settler nodes, and the stage index
+    never split a factor. Each group's magnitude is its largest value,
+    and a group outside [1e-2, 1e2] gets the power of ten bringing that
+    magnitude to order one. A group whose largest value is below 1e-6
+    sits below the steady flowsheet's precision (it solves to an
+    absolute tolerance of 1e-8): its values are not resolved by the
+    data, and normalizing them would promote that imprecision into
+    constraint violations, so the group keeps factor one. Each
+    constraint whose largest Jacobian entry, in the scaled variables,
+    is above 1e2 gets the power of ten bringing that entry to order
+    one; constraints with only small entries are left alone for the
+    same reason the small groups are. Solve through ``scaled_solve``;
+    the drto initializers and the closed loop honor the suffix on their
+    internal solves.
+    """
+    if model.component("scaling_factor") is not None:
+        model.del_component("scaling_factor")
+    model.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    groups = {}
+    for v in model.component_data_objects(pyo.Var, descend_into=True):
+        idx = v.index()
+        if not isinstance(idx, tuple):
+            idx = (idx,)
+        names = tuple(e for e in idx if isinstance(e, str))
+        groups.setdefault((id(v.parent_component()), names), []).append(v)
+    for members in groups.values():
+        mag = max(
+            (abs(v.value) for v in members if v.value is not None),
+            default=0.0,
+        )
+        if mag < 1e-6 or 1e-2 <= mag <= 1e2:
+            continue
+        e = max(-12, min(12, round(math.log10(mag))))
+        factor = 10.0 ** (-e)
+        for v in members:
+            model.scaling_factor[v] = factor
+
+    from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
+
+    nlp = PyomoNLP(model)
+    jac = nlp.evaluate_jacobian_eq().tocsr()
+    variables = nlp.get_pyomo_variables()
+    constraints = nlp.get_pyomo_equality_constraints()
+    vf = [model.scaling_factor.get(v, 1.0) for v in variables]
+    for i, con in enumerate(constraints):
+        # the endpoint pins stay in each state's own units: their slacks
+        # and penalty weight are defined there, and a row factor would
+        # change the pin's effective weight against the objective
+        if con.parent_component().local_name.endswith("_pin_eq"):
+            continue
+        row = jac.getrow(i)
+        if row.nnz == 0:
+            continue
+        m_row = max(
+            abs(a) / vf[j] for j, a in zip(row.indices, row.data) if a != 0.0
+        )
+        if m_row <= 1e2:
+            continue
+        model.scaling_factor[con] = 10.0 ** (-round(math.log10(m_row)))
+
+
+
+def scaled_solve(model, solver="pounce", tee=False, options=None):
+    """Solve a scaled clone and write the solution back.
+
+    ``scale`` measures the factors at the model's current point,
+    ``core.scale_model`` builds the scaled clone, the named solver runs
+    it, and the solution propagates back in the model's own units.
+
+    The default options run the adaptive barrier update and accept the
+    first iterate whose scaled KKT error is below 1e-6. The residuals of
+    the largest holdup constraints bottom out near 2e-5 in their own
+    units, which is their floating-point floor at 1e6-scale
+    coefficients; the default termination test reads that floor as
+    local infeasibility one iteration after the solve has converged.
+    """
+    if solver == "pounce":
+        import pyomo_pounce  # noqa: F401  registers the solver
+
+    opts = {
+        "mu_strategy": "adaptive",
+        "acceptable_tol": 1e-6,
+        "acceptable_iter": 1,
+    }
+    opts.update(options or {})
+    scale(model)
+    sm = pyo.TransformationFactory("core.scale_model").create_using(model)
+    res = pyo.SolverFactory(solver).solve(sm, tee=tee, options=opts)
+    pyo.TransformationFactory("core.scale_model").propagate_solution(sm, model)
+    return res
+
+
+def noise_sigmas(m, frac=0.3):
+    """Per-channel standard deviations for the rare earth noise, mol/hr.
+
+    The nine rare earth channels in the mixer, each drawing with a
+    standard deviation of ``frac`` times its steady inventory per hour:
+    the grade of the incoming leachate wandering. The solvent, acid,
+    impurity, and settler channels stay at zero by default; their
+    inventories are tied into the closure algebra tightly enough that
+    comparable forcing defeats the plant solves rather than perturbing
+    the process.
+    """
+    ree = ("Sc", "Y", "La", "Ce", "Pr", "Nd", "Sm", "Gd", "Dy")
+    return {
+        f"w_m_{j}": frac * abs(pyo.value(m.component(f"ss_maq_{j}")))
+        for j in ree
+    }

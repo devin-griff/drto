@@ -37,7 +37,7 @@ alongside the CHANGELOG section rename.
 | [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [023 drto.scale](023-drto.scale.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
-| [024 drto.check_index](024-drto.check_index.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 
 ## Template
 
