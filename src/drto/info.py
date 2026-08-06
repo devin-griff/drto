@@ -305,14 +305,10 @@ class Info:
         combination. The time coordinate is divided out, so the count is
         the model's dimension rather than its grid's.
         """
-        if not (
-            self.has_declaration("state") or self.has_declaration("control")
-        ):
+        if not (self.has_declaration("state") or self.has_declaration("control")):
             return None
         time = (
-            self.components("horizon")[0]
-            if self.has_declaration("horizon")
-            else None
+            self.components("horizon")[0] if self.has_declaration("horizon") else None
         )
         counts = {}
         for kind in ("state", "control"):
