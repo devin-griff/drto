@@ -265,6 +265,7 @@ def test_nested_time_indexed_block_is_rejected():
         pyo.TransformationFactory(SS).apply_to(m)
 
 
+@needs_ipopt
 def test_block_reduction_reaches_the_fixed_point():
     m = block_model()
     pyo.TransformationFactory(SS).apply_to(m)
