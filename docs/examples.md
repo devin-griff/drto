@@ -34,8 +34,6 @@ unmodified IDAES models.
   benchmark.
 - [Cart-pole](notebooks/cart_pole.ipynb) — stabilizing an unstable
   equilibrium.
-- [Binary distillation column](notebooks/binary_column.ipynb) — the
-  infinite horizon on a full column model.
 - [Double column](notebooks/double_column.ipynb) — a larger flowsheet,
   infinite versus finite horizon.
 
@@ -80,7 +78,6 @@ notebooks/hicks_steady_state
 notebooks/hicks_initialize
 notebooks/quad_tank
 notebooks/cart_pole
-notebooks/binary_column
 notebooks/double_column
 notebooks/idaes_cstr
 notebooks/cstr_cold_start

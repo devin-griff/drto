@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+
+- The binary distillation column example (notebook, model, and data).
+  Its infinite-horizon case runs to the iteration limit without
+  converging, so the page argued the opposite of its point. The model
+  is held outside the repository until the solve is diagnosed.
+
 ### Added
 
 - `drto.info(m)` opens with the problem's size (gh #63): the number of

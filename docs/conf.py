@@ -20,7 +20,6 @@ _NOTEBOOKS = [
     "hicks_initialize",
     "quad_tank",
     "cart_pole",
-    "binary_column",
     "double_column",
     "idaes_cstr",
     "cstr_cold_start",
