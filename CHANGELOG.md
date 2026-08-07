@@ -343,6 +343,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `drto.parameterize` records the component cvp puts in a profiled
+  control's place beside the one the terminal segment's records already
+  hold (gh #70). A segment copy is looked up by the declared component,
+  so after a profile was applied the copy stopped being reachable and
+  `drto.plot_controls` drew the finite horizon without its tail. The
+  record keeps the component as declared, which is what
+  `drto.warm_start_dynamic` shifts a replaced Reference's underlying
+  members through, and `drto.plotting` keys the copy under both.
+
 - The registry render is readable in the docs' dark mode (#62).
   `Info._repr_html_` marks its outer div with the `drto-registry` class,
   and the docs carry a small stylesheet: the registry sits on the
