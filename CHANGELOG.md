@@ -149,6 +149,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.plot_states` draws the terminal segment's element boundaries only
+  under `element_boundaries=True` (feature 022). The segment collocates on
+  Gauss-Legendre points, so a boundary value is the element polynomial
+  extended to its edge rather than a point the solver placed on the
+  trajectory; on a converged trajectory it is the only point away from the
+  curve, so it set the axis limits and a settled state read as if it were
+  oscillating.
+
 - The tracking costs are checked for coverage at declaration (gh #60):
   the stage cost must reference every declared state and control and
   may contain only declared state and control members (targets and
