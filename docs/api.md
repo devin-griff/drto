@@ -50,6 +50,14 @@ The estimation-side surface:
 .. autofunction:: drto.build_objective
 ```
 
+## Diagnostics
+
+```{eval-rst}
+.. autofunction:: drto.check_index
+.. autoclass:: drto.CheckIndexReport
+   :members:
+```
+
 ## Initialization
 
 ```{eval-rst}

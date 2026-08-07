@@ -308,12 +308,13 @@ def steady_targets(m, tee=False):
     values. Returns the solved steady flowsheet.
     """
     from prommis.solvent_extraction.mixer_settler_ex_flowsheet_steady import (
-        initialize_steady_model, model_buildup_and_set_inputs, solve_model,
+        initialize_steady_model, model_buildup_and_set_inputs,
     )
+    import pyomo_pounce  # noqa: F401  registers the solver
 
     sm = model_buildup_and_set_inputs(DOSAGE, 1)
     initialize_steady_model(sm)
-    solve_model(sm)
+    pyo.SolverFactory("pounce").solve(sm, tee=tee)
 
     their = sm.fs.mixer_settler_ex
     tmsc = their.mixer[1].unit.mscontactor
@@ -441,27 +442,107 @@ def steady_targets(m, tee=False):
     return sm
 
 
-def tag_scaling(model):
-    """Value-based scaling factors from the model's current magnitudes.
+def scale(model):
+    """Variable and constraint scaling factors, measured at the current point.
 
-    Concentrations in this model span 1e-8 to 1e6, so the factors come
-    from the values themselves: after ``steady_targets`` and a cold
-    start have filled the model at its operating point, every variable
-    whose magnitude sits outside [1e-2, 1e2] is tagged with the nearest
-    power of ten bringing it to order one. The drto initializers and the
-    closed loop honor the suffix on their internal solves.
+    Concentrations in this model span twelve decades across species and
+    the Jacobian at the cold-start point spans seventeen, which makes
+    the KKT factorization numerically singular (the pounce pre-flight
+    measures both). Call after ``steady_targets`` and a cold start have
+    filled the model.
+
+    Variable factors are assigned one per Var per species: the members
+    of each Var are grouped by their string index elements (species and
+    phase names), so time points, settler nodes, and the stage index
+    never split a factor. Each group's magnitude is its largest value,
+    and a group outside [1e-2, 1e2] gets the power of ten bringing that
+    magnitude to order one. A group whose largest value is below 1e-6
+    sits below the steady flowsheet's precision (it solves to an
+    absolute tolerance of 1e-8): its values are not resolved by the
+    data, and normalizing them would promote that imprecision into
+    constraint violations, so the group keeps factor one. Each
+    constraint whose largest Jacobian entry, in the scaled variables,
+    is above 1e2 gets the power of ten bringing that entry to order
+    one; constraints with only small entries are left alone for the
+    same reason the small groups are. Solve through ``scaled_solve``;
+    the drto initializers and the closed loop honor the suffix on their
+    internal solves.
     """
     if model.component("scaling_factor") is not None:
         model.del_component("scaling_factor")
     model.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    groups = {}
     for v in model.component_data_objects(pyo.Var, descend_into=True):
-        val = v.value
-        if val is None or val == 0.0:
+        idx = v.index()
+        if not isinstance(idx, tuple):
+            idx = (idx,)
+        names = tuple(e for e in idx if isinstance(e, str))
+        groups.setdefault((id(v.parent_component()), names), []).append(v)
+    for members in groups.values():
+        mag = max(
+            (abs(v.value) for v in members if v.value is not None),
+            default=0.0,
+        )
+        if mag < 1e-6 or 1e-2 <= mag <= 1e2:
             continue
-        mag = abs(val)
-        if 1e-2 <= mag <= 1e2:
+        e = max(-12, min(12, round(math.log10(mag))))
+        factor = 10.0 ** (-e)
+        for v in members:
+            model.scaling_factor[v] = factor
+
+    from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
+
+    nlp = PyomoNLP(model)
+    jac = nlp.evaluate_jacobian_eq().tocsr()
+    variables = nlp.get_pyomo_variables()
+    constraints = nlp.get_pyomo_equality_constraints()
+    vf = [model.scaling_factor.get(v, 1.0) for v in variables]
+    for i, con in enumerate(constraints):
+        # the endpoint pins stay in each state's own units: their slacks
+        # and penalty weight are defined there, and a row factor would
+        # change the pin's effective weight against the objective
+        if con.parent_component().local_name.endswith("_pin_eq"):
             continue
-        model.scaling_factor[v] = 10.0 ** (-round(math.log10(mag)))
+        row = jac.getrow(i)
+        if row.nnz == 0:
+            continue
+        m_row = max(
+            abs(a) / vf[j] for j, a in zip(row.indices, row.data) if a != 0.0
+        )
+        if m_row <= 1e2:
+            continue
+        model.scaling_factor[con] = 10.0 ** (-round(math.log10(m_row)))
+
+
+
+def scaled_solve(model, solver="pounce", tee=False, options=None):
+    """Solve a scaled clone and write the solution back.
+
+    ``scale`` measures the factors at the model's current point,
+    ``core.scale_model`` builds the scaled clone, the named solver runs
+    it, and the solution propagates back in the model's own units.
+
+    The default options run the adaptive barrier update and accept the
+    first iterate whose scaled KKT error is below 1e-6. The residuals of
+    the largest holdup constraints bottom out near 2e-5 in their own
+    units, which is their floating-point floor at 1e6-scale
+    coefficients; the default termination test reads that floor as
+    local infeasibility one iteration after the solve has converged.
+    """
+    if solver == "pounce":
+        import pyomo_pounce  # noqa: F401  registers the solver
+
+    opts = {
+        "mu_strategy": "adaptive",
+        "acceptable_tol": 1e-6,
+        "acceptable_iter": 1,
+    }
+    opts.update(options or {})
+    scale(model)
+    sm = pyo.TransformationFactory("core.scale_model").create_using(model)
+    res = pyo.SolverFactory(solver).solve(sm, tee=tee, options=opts)
+    pyo.TransformationFactory("core.scale_model").propagate_solution(sm, model)
+    return res
 
 
 def noise_sigmas(m, frac=0.3):

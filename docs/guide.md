@@ -14,13 +14,14 @@ flowsheets.
 Every declaration records itself in the model's registry, and every
 transformation reads the registry rather than re-scanning the model.
 `drto.info(m)` returns it; displaying it renders the model in its own
-terms — components grouped by role, indexed constraints in compact
-symbolic form (one equation per family, not the per-index expansion
-`pprint` produces), units where the model carries them, and the ordered
-log of applied transformations:
+terms — the problem's size at the top, components grouped by role,
+indexed constraints in compact symbolic form (one equation per family,
+not the per-index expansion `pprint` produces), units where the model
+carries them, and the ordered log of applied transformations:
 
 ```
 <drto registry>
+states: 1, controls: 1
 declarations:
   horizon: t (ContinuousSet, 11 points)
   states: z (free)
@@ -29,6 +30,11 @@ declarations:
   ...
 transformations: (none)
 ```
+
+The size line counts declared states and controls as members at one time
+point, so it reads the model's dimension rather than its grid's: a
+129-state flowsheet says so on the first line whether the horizon holds
+two samples or two hundred.
 
 The registry is stored outside the component tree and survives `clone()`
 (and therefore every `create_using`) with its references remapped, so a
@@ -73,6 +79,23 @@ moving-horizon estimation.
 
 Declarations are checked as they are made, and a bad one raises a
 descriptive error at declaration time, not at solve time.
+
+## Checking the DAE index
+
+Declare first, then check: `drto.check_index(m)` tests whether the
+declared model is an index-one DAE — whether every algebraic variable
+is determined, pointwise, by the algebraic constraints. A model that
+fails is higher-index, and its optimization symptoms are indirect;
+the report names the variables no algebraic constraint determines and
+the constraints left unmatched, states the structural index, and
+estimates the condition of the algebra's Jacobian at the current
+values. The [gallery notebook](notebooks/check_index.ipynb) walks the
+pendulum's index ladder and a flowsheet posed both ways.
+
+```python
+report = drto.check_index(m)
+print(report)
+```
 
 ## Workflow: an infinite-horizon controller
 

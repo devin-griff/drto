@@ -34,8 +34,6 @@ unmodified IDAES models.
   benchmark.
 - [Cart-pole](notebooks/cart_pole.ipynb) — stabilizing an unstable
   equilibrium.
-- [Binary distillation column](notebooks/binary_column.ipynb) — the
-  infinite horizon on a full column model.
 - [Double column](notebooks/double_column.ipynb) — a larger flowsheet,
   infinite versus finite horizon.
 
@@ -58,6 +56,10 @@ unmodified IDAES models.
   — solve at a prediction, correct at the measurement without
   re-solving: the implemented moves within a percent of the warm
   re-solve, an order of magnitude faster.
+- [Checking the DAE index](notebooks/check_index.ipynb) — the
+  pendulum's index ladder and the solvent extraction stage posed with
+  extents and on the reaction invariants: the higher-index forms fail
+  with the offending variables named, the index-one forms pass.
 - [Ideal NMPC on the IDAES CSTR](notebooks/cstr_ideal_nmpc.ipynb) —
   the closed loop in one call: measure, solve, implement, simulate,
   the cold start then warm-started re-solves on persistent scaled
@@ -82,12 +84,12 @@ notebooks/hicks_steady_state
 notebooks/hicks_initialize
 notebooks/quad_tank
 notebooks/cart_pole
-notebooks/binary_column
 notebooks/double_column
 notebooks/idaes_cstr
 notebooks/cstr_cold_start
 notebooks/cstr_warm_start
 notebooks/cstr_advanced_step
 notebooks/cstr_ideal_nmpc
+notebooks/check_index
 notebooks/sx_ideal_nmpc
 ```

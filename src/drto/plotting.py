@@ -55,18 +55,22 @@ def _tail(m):
     """Return (segment block, tN, gamma, copies) or None if no segment.
 
     ``copies`` maps ``id(declared component)`` to its segment copy, from
-    the pairing the transform records on the registry (gh #27).
+    the pairing the transform records on the registry (gh #27). A control
+    whose profile has been applied is keyed under both the component as
+    declared and the replacement cvp put in its place (gh #70).
     """
     b = m.component("drto_ih")
     if b is None:
         return None
     reg = drto.info(m)
     time = reg.components("horizon")[0]
-    copies = {
-        id(r["of"]): r["copy"]
-        for r in reg._segment_records()
-        if r.get("copy") is not None
-    }
+    copies = {}
+    for r in reg._segment_records():
+        if r.get("copy") is None:
+            continue
+        copies[id(r["of"])] = r["copy"]
+        if r.get("live") is not None:
+            copies[id(r["live"])] = r["copy"]
     return b, time.last(), pyo.value(b.gamma), copies
 
 

@@ -20,13 +20,13 @@ _NOTEBOOKS = [
     "hicks_initialize",
     "quad_tank",
     "cart_pole",
-    "binary_column",
     "double_column",
     "idaes_cstr",
     "cstr_cold_start",
     "cstr_warm_start",
     "cstr_advanced_step",
     "cstr_ideal_nmpc",
+    "check_index",
     "sx_ideal_nmpc",
 ]
 _here = Path(__file__).parent

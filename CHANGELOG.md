@@ -6,7 +6,51 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+
+- The hand-written initialization script `examples/initialize.py`. The
+  double column, its last user in the repository, calls
+  `drto.cold_start_dynamic` instead and reaches the identical solution
+  in the identical iteration count.
+
+- The binary distillation column example (notebook, model, and data).
+  Its infinite-horizon case runs to the iteration limit without
+  converging, so the page argued the opposite of its point. The model
+  is held outside the repository until the solve is diagnosed.
+
 ### Added
+
+- `drto.info(m)` opens with the problem's size (gh #63): the number of
+  declared states and controls, counted as members at one time point,
+  before the per-declaration lines, in both the plain and HTML
+  renderings. The count is the model's dimension rather than its grid's,
+  so it does not move with the horizon length or under the transforms.
+
+- The steady-state reduction covers spatially distributed models
+  (gh #54, feature 021 extended). A `Block(t, x)` or
+  `Block(t, element)` family collapses per spatial point — the first
+  time point's member of every combination survives with its internal
+  equations — spatial discretization equations are kept (only the
+  declared time set's collocation and continuity equations are
+  discarded), sparse dynamics containers reduce to their members, and
+  the declared-state guard reads a balance's variables so noise-carrying
+  rows pass. The declared PrOMMiS mixer-settler stage reduces to a
+  square steady system at held controls.
+
+- The DAE index check (feature 024). `drto.check_index(m)` tests
+  whether the declared model is an index-one DAE: a maximum matching of
+  the pointwise algebraic constraints to the algebraic variables names
+  every variable no constraint determines, Pantelides' algorithm
+  reports the structural index on failure (or the lower bound of two
+  when the pointwise algebra is not square), and a condition estimate
+  of the equilibrated Jacobian at the current point catches the
+  numerically singular case the structure cannot see. The check writes
+  nothing and returns a readable report. The gallery gains
+  [Checking the DAE index](docs/examples.md): the pendulum's index
+  ladder and the solvent extraction stage posed both ways — the
+  MSContactor form with transfer extents fails with the extents named,
+  and the reformulation on the reaction invariants
+  (`examples/models/prommis_sx_index_one.py`, new) passes.
 
 - The PrOMMiS mixer-settler example (`examples/sx_ideal_nmpc.ipynb`,
   `examples/models/prommis_sx.py`). Rare earth solvent extraction under
@@ -327,6 +371,15 @@ All notable changes to this project are documented here. The format is based on
   IDAES feed or a fixed volume carries onto the tail as itself.
 
 ### Fixed
+
+- `drto.parameterize` records the component cvp puts in a profiled
+  control's place beside the one the terminal segment's records already
+  hold (gh #70). A segment copy is looked up by the declared component,
+  so after a profile was applied the copy stopped being reachable and
+  `drto.plot_controls` drew the finite horizon without its tail. The
+  record keeps the component as declared, which is what
+  `drto.warm_start_dynamic` shifts a replaced Reference's underlying
+  members through, and `drto.plotting` keys the copy under both.
 
 - The registry render is readable in the docs' dark mode (#62).
   `Info._repr_html_` marks its outer div with the `drto-registry` class,

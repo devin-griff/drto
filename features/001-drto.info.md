@@ -43,6 +43,11 @@ cloning, which the `create_using` form of every transformation depends on.
   write the `drto` scope and it never appears in the model's component tree.
 - The registry records declarations, keyed by kind, and an ordered list of the
   transformations that have been applied to the model.
+- Both renderings open with the problem's size — the number of declared
+  states and controls, counted as members at one time point, so the
+  count is the model's dimension and not its grid's — before the
+  per-declaration lines (gh #63). A model with neither declared shows no
+  size line.
 - A declaration records its target component in the registry; the
   transformations read the registry to find declared components rather than
   re-scanning the model.

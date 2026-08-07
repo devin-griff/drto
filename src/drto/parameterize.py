@@ -54,6 +54,16 @@ class ParameterizeTransformation(Transformation):
             replacement = replaced.get(id(target.get("of")))
             if replacement is not None:
                 target["of"] = replacement
+        # the terminal segment's records pair each declared component with
+        # its copy. "of" stays the component as declared, which is what
+        # drto.warm_start_dynamic shifts a replaced Reference's underlying
+        # members through; the replacement is recorded beside it so a
+        # consumer holding the live component can still reach the copy
+        # (gh #70, the missing tail points in plot_controls)
+        for record in reg._segment_records():
+            replacement = replaced.get(id(record.get("of")))
+            if replacement is not None:
+                record["live"] = replacement
         reg.record_transformation(
             "drto.parameterize",
             profiles=", ".join(
