@@ -1,6 +1,6 @@
 # drto.scale
 
-**Status:** ![draft](https://img.shields.io/badge/draft-lightgrey)
+**Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
 ## Description
 
@@ -16,7 +16,7 @@ import drto
 
 drto.scale(m)
 results = drto.scaled_solve(m)
-results = drto.scaled_solve(m, solver="ipopt", tee=True,
+results = drto.scaled_solve(m, solver="ipopt_v2", tee=True,
                             options={"max_iter": 500})
 ```
 
@@ -64,18 +64,20 @@ own units, and a factor on the slack or its constraint changes the
 pin's effective weight against the objective.
 
 `drto.scaled_solve(m, solver=..., tee=..., options=...)` applies the
-factors and solves. `solver` names the solver and defaults to
-`ipopt_v2`; `options` is a mapping passed through to it, overriding any
-default the call sets. For a solver whose interface passes the Suffix
-through and honors user scaling, it solves the model directly with
-`nlp_scaling_method=user-scaling`: the solver works in scaled space
-internally and returns the solution, duals included, in the model's own
-units, with no second model. ipopt does this today; pounce's algorithm
-honors user scaling but `pyomo_pounce` does not yet pass the Suffix to
-it, so pounce takes the fallback until that lands. The fallback is
-Pyomo's `core.scale_model`: build the scaled clone, solve it, propagate
-the solution back. The two paths solve the same scaled problem; the
-fallback costs the clone and maps only the primal solution back.
+factors and solves. `solver` names the solver and defaults to `pounce`;
+`options` is a mapping passed through to it, overriding any default the
+call sets.
+
+pounce and ipopt read the Suffix under `nlp_scaling_method=user-scaling`
+and solve the model directly: objective and constraint factors travel
+through the NL file's suffix segments, variable factors are applied as a
+change of variables inside the solver, and the solution comes back in the
+model's own units. No second model is built and nothing propagates back.
+
+Any other solver takes Pyomo's `core.scale_model`: build the scaled
+clone, solve it, propagate the solution back. The two paths solve the
+same scaled problem; the fallback costs the clone and maps only the
+primal solution back.
 
 The factors compose with the rest of the package: the initializers
 already honor an active `scaling_factor` Suffix on their internal solves
@@ -126,14 +128,13 @@ demonstrate.
   the pin constraints have no entries in the Suffix, so the pin's
   effective weight against the objective is the declared one, unchanged
   by scaling.
-- `drto.scaled_solve` takes the solver by name, defaulting to
-  `ipopt_v2`, and passes an options mapping through to it.
-- With a solver whose interface passes the Suffix through it solves the
-  model directly under `nlp_scaling_method=user-scaling`, no clone
-  built, and returns the solution in the model's own units. With one
-  that does not it builds the `core.scale_model` clone, solves it, and
-  propagates the solution back. Both paths reach the same solution on a
-  test model.
+- `drto.scaled_solve` takes the solver by name, defaulting to `pounce`,
+  and passes an options mapping through to it.
+- With pounce or ipopt it solves the model directly under
+  `nlp_scaling_method=user-scaling`, no clone built, and returns the
+  solution in the model's own units. With any other solver it builds the
+  `core.scale_model` clone, solves it, and propagates the solution back.
+  Both paths reach the same solution on a test model.
 - The solvent extraction example's dynamic optimization converges from
   its steady start through `drto.scale` and `drto.scaled_solve`, with
   the concentrations and flows carrying their bounds at zero: the
