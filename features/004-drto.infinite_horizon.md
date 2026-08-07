@@ -39,13 +39,8 @@ picks them up wherever it runs: called directly as above, or as the final
 step of `drto.dynamic_optimization`. Applying this transform before the mode
 transform is the whole composition. There is no coupling option.
 
-A model may keep its per-time structure in `Block(time)` members rather
-than time-indexed Vars, the IDAES property-block idiom. Those members are
-time-varying: their variables and equations replicate onto the segment as
-any other algebra does, per non-time index combination for a Block
-carrying further indexes, and a derivative over a ContinuousSet other than
-the declared time set replicates with them. A time-indexed Block nested
-inside another is a descriptive error.
+Per-time structure kept in `Block(time)` members replicates onto the
+segment like any other algebra; a nested time-indexed Block errors.
 
 ## Benefit hypothesis
 
@@ -66,10 +61,9 @@ move.
 
 ## Acceptance criteria
 
-- A model keeping per-time structure in `Block(time)` members, the dynamic
-  IDAES CSTR and the PrOMMiS mixer-settler, keeps its degrees of freedom
-  across the transform and solves; a nested time-indexed Block errors.
-- A model with no time-indexed Blocks builds a byte-identical segment.
+- The dynamic IDAES CSTR and the PrOMMiS mixer-settler, which keep
+  per-time structure in Blocks, hold their degrees of freedom across the
+  transform and solve.
 - `TransformationFactory('drto.infinite_horizon')` requires `horizon`,
   `state`, `dynamics`, `control`, and
   `tracking_stage_cost`, and errors clearly if any is missing.

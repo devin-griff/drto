@@ -23,13 +23,9 @@ drto.build_objective(ss)              # e.g. the single-point cost
 pyo.SolverFactory("ipopt").solve(ss)
 ```
 
-A model may keep its per-time structure in `Block(time)` members rather
-than time-indexed Vars, the IDAES property-block idiom. Such a family
-collapses to its `t0` member, one per non-time index combination for a
-Block carrying further indexes, its contents untouched and its References
-re-pointed at the survivor. Only the declared time set's discretization
-and continuity equations are discarded, so a spatial derivative's survive.
-A time-indexed Block nested inside another is a descriptive error.
+A `Block(time)` family collapses to its `t0` member, one per non-time
+index combination, discarding only the declared time set's discretization
+equations; a nested time-indexed Block errors.
 
 ## Benefit hypothesis
 
@@ -87,10 +83,5 @@ many modes" promise.
 - It errors clearly on a time-indexed constraint that spans more than one time
   point, since that cannot be reduced to a single point.
 
-- A model keeping per-time structure in `Block(time)` members reduces to a
-  square steady system: the dynamic IDAES CSTR matches a hand-built
-  `FlowsheetBlock(dynamic=False)` twin, and the declared mixer-settler
-  stage reduces square at held controls with its spatial discretization
-  equations kept.
-- A sparse dynamics container reduces to its members, and a nested
-  time-indexed Block errors.
+- The dynamic IDAES CSTR and the declared mixer-settler stage, which keep
+  per-time structure in Blocks, reduce to square steady systems.
