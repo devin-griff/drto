@@ -348,6 +348,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Solver logs on the documentation pages render as one scrollable block
+  (gh #71). Execution saves a cell's output in chunks and the renderer
+  drew every chunk as its own block, so a long log arrived as a column
+  of one-line boxes; the docs build now joins a cell's consecutive
+  stdout entries when it copies a notebook, and the stylesheet gives the
+  result a fixed height with a scrollbar. The committed notebooks are
+  unchanged, so a re-executed notebook cannot reintroduce the split.
+
 - `drto.parameterize` records the component cvp puts in a profiled
   control's place beside the one the terminal segment's records already
   hold (gh #70). A segment copy is looked up by the declared component,
