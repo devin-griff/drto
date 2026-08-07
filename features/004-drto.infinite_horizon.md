@@ -39,6 +39,45 @@ picks them up wherever it runs: called directly as above, or as the final
 step of `drto.dynamic_optimization`. Applying this transform before the mode
 transform is the whole composition. There is no coupling option.
 
+### Models that keep per-time structure in Blocks
+
+A model may keep its per-time structure in `Block(time)` members rather
+than time-indexed Vars, which is the IDAES property-block idiom. A
+variable inside such a member is indexed by component, not by time, so
+discovery classifies it by its parent Block's index rather than its own:
+
+- A referenced variable inside a `Block(time)` member is time-varying,
+  and joins the same classification the flat scan applies: a declared
+  state or control by identity, otherwise algebraic. Its segment copies
+  are new Vars over `tau` carrying the source's units, with no values
+  copied from any time point.
+- The equations inside the members are algebraic equations. Each family,
+  meaning the same constraint name across the members, replicates onto
+  the segment from a representative member, exactly as flat algebraic
+  constraints do.
+- A fixed variable is a specification, not a decision: its segment copy
+  is fixed at the horizon-end value, with no declaration involved. An
+  IDAES feed, a fixed volume, or any given input carries onto the tail as
+  itself.
+- A Block family may carry index sets besides time, an IDAES stage
+  element or a spatial node (`Block(t, s)`). Each non-time combination is
+  its own family: its members get their own segment copies and its
+  equations replicate per combination, and the segment's copy names carry
+  the combination.
+- A derivative over a ContinuousSet other than the declared time set, a
+  spatial axis, is ordinary algebra: its referenced members copy to the
+  segment and its discretization equations, despite the pyomo.dae naming,
+  replicate with them. Only the declared time set's discretization and
+  continuity equations are the artifacts the segment rebuilds over tau.
+- Two components sharing a local name, as the two settlers of a
+  mixer-settler both carrying `_flow_terms` do, get distinct segment
+  names, the sanitized full path breaking the tie.
+- Time-invariant components, including Params and parameter blocks, are
+  shared as-is.
+
+Out of scope, rejected with a descriptive error: a time-indexed Block
+nested inside another time-indexed Block.
+
 ## Benefit hypothesis
 
 Terminal costs and terminal regions are the expert-only part of stabilizing
@@ -57,6 +96,28 @@ plus segment reproduces the 50-step policy to about 2 percent on the first
 move.
 
 ## Acceptance criteria
+
+- The dynamic IDAES CSTR (saponification packages, feature-002
+  declarations, nothing beyond them) keeps its degrees of freedom across
+  the transform, up to the documented pin slacks, and ipopt solves the
+  result. No segment constraint references a main-model Block member,
+  segment copies of Block-borne variables carry their source units, and
+  the replicated equations are dimensionally consistent on the segment.
+- A model with no time-indexed Blocks builds a byte-identical segment:
+  hicks and the existing suite are unaffected.
+- A reference to a member away from the constraint's own time point, and
+  a nested time-indexed Block, raise the transform's usual descriptive
+  ValueError naming the offending component.
+- The registry's transformation log counts the replicated Block families
+  alongside the algebraic-components count.
+- A `Block(t, s)` family replicates per non-time combination and solves
+  identically to the flat twin of the same physics; a spatial
+  discretization equation replicates as algebra with its derivative
+  members copied; same-named components take distinct segment names; and
+  the free-copy guard covers partially copied containers, so a member
+  left without a replicated defining equation is the descriptive error
+  rather than a silent freedom. The declared PrOMMiS mixer-settler goes
+  through the transform with its degrees of freedom accounted for.
 
 - `TransformationFactory('drto.infinite_horizon')` requires `horizon`,
   `state`, `dynamics`, `control`, and

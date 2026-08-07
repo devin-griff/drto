@@ -170,7 +170,7 @@ def test_apply_to_reduces_in_place():
     assert m.component("t") is None
 
 
-# ── time-indexed Blocks in the reduction (feature 021) ───────────────────────
+# ── time-indexed Blocks in the reduction (feature 005) ───────────────────────
 
 
 def test_block_family_collapses_to_the_steady_member():
