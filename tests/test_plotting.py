@@ -106,3 +106,27 @@ def test_history_moves_draw_as_a_staircase():
 def test_history_selection_errors_on_unknown_labels():
     with pytest.raises(ValueError, match="not a recorded state"):
         drto.plot_states(_history(), states=["nope"])
+
+
+def test_a_parameterized_control_keeps_its_segment_copy():
+    # cvp replaces the profiled control, and the segment records pair a
+    # declared component with its copy: without remapping, the copy stops
+    # being reachable and plot_controls loses the tail (gh #70)
+    from drto.plotting import _tail
+
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    pyo.TransformationFactory("drto.parameterize").apply_to(m)
+    _valued(m)
+    control = drto.info(m).components("control")[0]
+    assert id(control) in _tail(m)[3]
+
+
+def test_a_parameterized_control_draws_its_tail():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    pyo.TransformationFactory("drto.parameterize").apply_to(m)
+    _valued(m)
+    (ax,) = drto.plot_controls(m)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "tail" in labels
