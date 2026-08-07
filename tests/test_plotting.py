@@ -130,3 +130,25 @@ def test_a_parameterized_control_draws_its_tail():
     (ax,) = drto.plot_controls(m)
     labels = [t.get_text() for t in ax.figure.legends[0].texts]
     assert "tail" in labels
+
+
+def test_element_boundaries_stay_off_by_default():
+    # the boundary value is the element polynomial extended to its edge,
+    # so on a converged trajectory it is the only point off the curve and
+    # would set the axis limits
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    _valued(m)
+    (ax,) = drto.plot_states(m)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "tail" in labels
+    assert "element boundary" not in labels
+
+
+def test_element_boundaries_draw_on_request():
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    _valued(m)
+    (ax,) = drto.plot_states(m, element_boundaries=True)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "element boundary" in labels

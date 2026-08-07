@@ -8,8 +8,10 @@ declared horizon and its sample grid, the declared states or controls, and
 the paired steady-state targets for the dotted setpoint lines. If the model
 carries an infinite-horizon terminal segment (``drto_ih``), the
 tail is found automatically, mapped back to real time through
-``t = tN + atanh(tau)/gamma``, and drawn with open markers, squares marking
-the segment's finite element boundaries (continuity extrapolations).
+``t = tN + atanh(tau)/gamma``, and drawn with open markers.
+``plot_states(..., element_boundaries=True)`` adds squares at the segment's
+element boundaries, where the value is the element polynomial extended to
+its edge rather than a point the solver placed on the trajectory.
 
 Each selected quantity gets its own fixed-size panel in a two-column grid.
 Selection takes component names, components, or member strings like
@@ -337,16 +339,25 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
     return flat[: len(panels)]
 
 
-def plot_states(m, states=None, t_max=50):
+def plot_states(m, states=None, t_max=50, element_boundaries=False):
     """Plot declared states, one fixed-size panel each, two columns.
 
     ``states`` selects by name, component, or member string like
     ``"x1[41,1]"``. With no selection every declared state is drawn, a
     multi-index state expanding to one panel per member, up to a cap of
     ``_MAX_PANELS`` panels; past it, select members by name.
-    Setpoint lines come from the ``steady_state`` pairings; squares mark the
-    segment's element boundaries, where the state value is the continuity
-    extrapolation rather than a collocation point. Returns the panel axes.
+    Setpoint lines come from the ``steady_state`` pairings.
+
+    ``element_boundaries=True`` adds squares at the terminal segment's
+    element boundaries. The segment collocates on Gauss-Legendre points,
+    which lie strictly inside each element, so a boundary value is the
+    element polynomial extended to its edge and tied to the next element
+    by a continuity equation, not a point the solver placed on the
+    trajectory. A boundary far from its neighbors says the mesh is too
+    coarse there, which is what the squares are for. They stay off by
+    default: on a converged trajectory they are the only points away
+    from the curve, so they set the axis limits and a settled state
+    reads as if it were oscillating. Returns the panel axes.
 
     Handed an :class:`drto.NmpcHistory` instead of a model, draws its
     actual state trajectories at the recorded sample instants, the
@@ -367,7 +378,7 @@ def plot_states(m, states=None, t_max=50):
         _targets(reg, "steady_state"),
         slice(None),
         t_max,
-        boundary_squares=True,
+        boundary_squares=element_boundaries,
     )
 
 

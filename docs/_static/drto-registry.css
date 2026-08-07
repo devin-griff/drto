@@ -45,3 +45,13 @@ div.drto-registry code,
   color: inherit;
   background: transparent;
 }
+
+/* A solver log is committed as executed, which can be hundreds of
+   iteration lines. The docs build joins a cell's consecutive stdout
+   entries into one output (see docs/conf.py); this gives that output a
+   fixed height with a scrollbar, so a long log stays readable in place
+   instead of running down the page, the way JupyterLab presents one. */
+.cell_output div.output.stream {
+  max-height: 24em;
+  overflow-y: auto;
+}

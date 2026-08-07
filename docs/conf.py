@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
 """Sphinx configuration for the drto documentation."""
+import json
 import shutil
 from importlib.metadata import PackageNotFoundError, version as _version
 from pathlib import Path
@@ -32,8 +33,39 @@ _NOTEBOOKS = [
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"
 (_nb_dst / "models").mkdir(parents=True, exist_ok=True)
+
+
+def _merge_stream_outputs(path):
+    """Join a cell's consecutive stdout entries into one output.
+
+    Execution flushes a solve's output in chunks and nbformat saves each
+    chunk as its own stream output; the renderer draws every output as a
+    separate block, so a long solver log arrives as a column of one-line
+    boxes. Joining them here keeps the committed notebooks exactly as
+    they were executed and leaves the docs with one block per log, which
+    the stylesheet then gives a fixed height and a scrollbar.
+    """
+    nb = json.loads(path.read_text(encoding="utf-8"))
+    for cell in nb.get("cells", []):
+        merged = []
+        for out in cell.get("outputs", []):
+            if (
+                merged
+                and out.get("output_type") == "stream"
+                and merged[-1].get("output_type") == "stream"
+                and out.get("name") == merged[-1].get("name")
+            ):
+                merged[-1]["text"] = list(merged[-1]["text"]) + list(out["text"])
+            else:
+                merged.append(out)
+        if "outputs" in cell:
+            cell["outputs"] = merged
+    path.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
 for _name in _NOTEBOOKS:
     shutil.copy2(_here.parent / "examples" / f"{_name}.ipynb", _nb_dst)
+    _merge_stream_outputs(_nb_dst / f"{_name}.ipynb")
 # the notebooks link their model modules; ship them as downloads
 for _py in (_here.parent / "examples" / "models").glob("*.py"):
     if _py.stem != "asu":  # work in progress, not in any shipped notebook

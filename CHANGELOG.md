@@ -173,6 +173,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.plot_states` draws the terminal segment's element boundaries only
+  under `element_boundaries=True` (feature 022). The segment collocates on
+  Gauss-Legendre points, so a boundary value is the element polynomial
+  extended to its edge rather than a point the solver placed on the
+  trajectory; on a converged trajectory it is the only point away from the
+  curve, so it set the axis limits and a settled state read as if it were
+  oscillating.
+
 - The tracking costs are checked for coverage at declaration (gh #60):
   the stage cost must reference every declared state and control and
   may contain only declared state and control members (targets and
@@ -371,6 +379,14 @@ All notable changes to this project are documented here. The format is based on
   IDAES feed or a fixed volume carries onto the tail as itself.
 
 ### Fixed
+
+- Solver logs on the documentation pages render as one scrollable block
+  (gh #71). Execution saves a cell's output in chunks and the renderer
+  drew every chunk as its own block, so a long log arrived as a column
+  of one-line boxes; the docs build now joins a cell's consecutive
+  stdout entries when it copies a notebook, and the stylesheet gives the
+  result a fixed height with a scrollbar. The committed notebooks are
+  unchanged, so a re-executed notebook cannot reintroduce the split.
 
 - `drto.parameterize` records the component cvp puts in a profiled
   control's place beside the one the terminal segment's records already
