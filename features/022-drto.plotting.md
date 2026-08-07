@@ -18,8 +18,16 @@ The helper is registry-driven already: everything it draws comes from
   the declared states and controls, the steady-state pairings for the
   dotted setpoint lines, and the stage-cost equality for the cost variable.
   If the model carries a terminal segment (`drto_ih`), its points draw
-  open, mapped back to real time through `t = tN + atanh(tau)/gamma`, with
-  squares marking the element boundaries on state panels.
+  open, mapped back to real time through `t = tN + atanh(tau)/gamma`.
+- `plot_states(..., element_boundaries=True)` adds squares at the
+  segment's element boundaries. The segment collocates on Gauss-Legendre
+  points, which lie strictly inside each element, so a boundary value is
+  the element polynomial extended to its edge and tied to the next
+  element by a continuity equation, not a point the solver placed on the
+  trajectory. A boundary far from its neighbors says the mesh is too
+  coarse there. They stay off by default: on a converged trajectory they
+  are the only points away from the curve, so they set the axis limits
+  and a settled state reads as if it were oscillating.
 - Selection takes component names, components, or member strings like
   `"x1[41,1]"`. With no selection every declared component is drawn, a
   multi-index component expanding to one panel per member, up to a cap;
@@ -57,8 +65,10 @@ infrastructure.
 - Controls draw as a staircase on the finite horizon, the last move held
   to the end of the horizon; states and the stage cost draw as points.
 - With a terminal segment present, the tail points draw at
-  `t = tN + atanh(tau)/gamma`, open markers, element-boundary squares on
-  state panels, clipped to `t_max`.
+  `t = tN + atanh(tau)/gamma`, open markers, clipped to `t_max`.
+- `plot_states` draws no element-boundary squares by default and draws
+  them under `element_boundaries=True`, the legend gaining its entry only
+  then.
 - Setpoint lines come from the `steady_state` and `steady_state_control`
   pairings, per member.
 - `import drto` succeeds without matplotlib; calling a plot function
