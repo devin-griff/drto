@@ -61,9 +61,8 @@ move.
 
 ## Acceptance criteria
 
-- The dynamic IDAES CSTR and the PrOMMiS mixer-settler, which keep
-  per-time structure in Blocks, hold their degrees of freedom across the
-  transform and solve.
+- A model keeping per-time structure in `Block(time)` members holds its
+  degrees of freedom across the transform.
 - `TransformationFactory('drto.infinite_horizon')` requires `horizon`,
   `state`, `dynamics`, `control`, and
   `tracking_stage_cost`, and errors clearly if any is missing.

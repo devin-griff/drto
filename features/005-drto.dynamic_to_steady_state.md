@@ -83,5 +83,5 @@ many modes" promise.
 - It errors clearly on a time-indexed constraint that spans more than one time
   point, since that cannot be reduced to a single point.
 
-- The dynamic IDAES CSTR and the declared mixer-settler stage, which keep
-  per-time structure in Blocks, reduce to square steady systems.
+- A model keeping per-time structure in `Block(time)` members reduces to a
+  square steady system.
