@@ -38,16 +38,13 @@ jobs:
       # drto.scale measures the constraint factors through PyNumero,
       # which calls a compiled ASL library. pyomo builds it from
       # source; download-extensions does not carry it.
-      - run: python -m pip install pybind11 setuptools
-      # build-extensions attempts every extension and exits nonzero on
-      # ones drto does not use (MCPP's source is not distributed), so
-      # its status is ignored; the scaling tests fail if the ASL
-      # library it does build is missing.
-      - run: python -m pyomo.scripting.pyomo_main build-extensions || true
-      - run: >
-          python -c "from pyomo.common.fileutils import find_library;
-          import sys;
-          sys.exit(0 if find_library('pynumero_ASL') else 'pynumero_ASL was not built')"
+      # drto.scale measures the constraint factors through PyNumero,
+      # which calls a compiled ASL library. This builds that library and
+      # nothing else: build-extensions also builds the AMPL demo and
+      # cubic spline libraries and attempts MCPP, whose source is not
+      # distributed, taking 73 s against 8 s and exiting nonzero either
+      # way (gh #76).
+      - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -79,16 +76,13 @@ jobs:
       # drto.scale measures the constraint factors through PyNumero,
       # which calls a compiled ASL library. pyomo builds it from
       # source; download-extensions does not carry it.
-      - run: python -m pip install pybind11 setuptools
-      # build-extensions attempts every extension and exits nonzero on
-      # ones drto does not use (MCPP's source is not distributed), so
-      # its status is ignored; the scaling tests fail if the ASL
-      # library it does build is missing.
-      - run: python -m pyomo.scripting.pyomo_main build-extensions || true
-      - run: >
-          python -c "from pyomo.common.fileutils import find_library;
-          import sys;
-          sys.exit(0 if find_library('pynumero_ASL') else 'pynumero_ASL was not built')"
+      # drto.scale measures the constraint factors through PyNumero,
+      # which calls a compiled ASL library. This builds that library and
+      # nothing else: build-extensions also builds the AMPL demo and
+      # cubic spline libraries and attempts MCPP, whose source is not
+      # distributed, taking 73 s against 8 s and exiting nonzero either
+      # way (gh #76).
+      - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q
 
   docs:
