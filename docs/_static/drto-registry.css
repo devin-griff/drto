@@ -11,7 +11,10 @@ div.drto-registry,
   border-radius: 4px;
   padding: 0.5em 0.8em;
   color: var(--pst-color-text-base, inherit);
-  overflow-x: auto;
+  /* a model with many declarations runs the length of the page:
+     the panel scrolls in both directions instead */
+  max-height: 24em;
+  overflow: auto;
 }
 
 /* In dark mode the theme paints every text_html output that is not a
