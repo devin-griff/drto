@@ -38,8 +38,12 @@ jobs:
       # drto.scale measures the constraint factors through PyNumero,
       # which calls a compiled ASL library. pyomo builds it from
       # source; download-extensions does not carry it.
-      - run: python -m pip install pybind11
-      - run: python -m pyomo.scripting.pyomo_main build-extensions --package pynumero
+      - run: python -m pip install pybind11 setuptools
+      # build-extensions attempts every extension and exits nonzero on
+      # ones drto does not use (MCPP's source is not distributed), so
+      # its status is ignored; the scaling tests fail if the ASL
+      # library it does build is missing.
+      - run: python -m pyomo.scripting.pyomo_main build-extensions || true
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -71,8 +75,12 @@ jobs:
       # drto.scale measures the constraint factors through PyNumero,
       # which calls a compiled ASL library. pyomo builds it from
       # source; download-extensions does not carry it.
-      - run: python -m pip install pybind11
-      - run: python -m pyomo.scripting.pyomo_main build-extensions --package pynumero
+      - run: python -m pip install pybind11 setuptools
+      # build-extensions attempts every extension and exits nonzero on
+      # ones drto does not use (MCPP's source is not distributed), so
+      # its status is ignored; the scaling tests fail if the ASL
+      # library it does build is missing.
+      - run: python -m pyomo.scripting.pyomo_main build-extensions || true
       - run: python -m pytest -q
 
   docs:
