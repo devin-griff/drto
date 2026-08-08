@@ -11,4 +11,3 @@ Nd = "Nd"  # neodymium (the PrOMMiS rare earth components)
 # Domain terms, not misspellings.
 RTO = "RTO"  # real-time optimization
 pn = "pn"  # the n-propanol vapor pressure (binary column)
-Nd = "Nd"  # neodymium (solvent extraction)
