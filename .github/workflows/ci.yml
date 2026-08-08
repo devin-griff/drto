@@ -44,6 +44,10 @@ jobs:
       # its status is ignored; the scaling tests fail if the ASL
       # library it does build is missing.
       - run: python -m pyomo.scripting.pyomo_main build-extensions || true
+      - run: >
+          python -c "from pyomo.common.fileutils import find_library;
+          import sys;
+          sys.exit(0 if find_library('pynumero_ASL') else 'pynumero_ASL was not built')"
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -81,6 +85,10 @@ jobs:
       # its status is ignored; the scaling tests fail if the ASL
       # library it does build is missing.
       - run: python -m pyomo.scripting.pyomo_main build-extensions || true
+      - run: >
+          python -c "from pyomo.common.fileutils import find_library;
+          import sys;
+          sys.exit(0 if find_library('pynumero_ASL') else 'pynumero_ASL was not built')"
       - run: python -m pytest -q
 
   docs:
