@@ -779,7 +779,7 @@ def test_segment_unitless_stays_unitless():
         assert member.get_units() is None, comp.name
 
 
-# ── the tail's disturbance handling (feature 020) ────────────────────────────
+# ── the tail's disturbance handling (feature 004) ────────────────────────────
 
 
 def disturbed_model():
@@ -843,7 +843,7 @@ def test_tail_rejects_an_undeclared_disturbance_value():
         pyo.TransformationFactory(IH).apply_to(m, disturbances={"nope": 1.0})
 
 
-# ── time-indexed Blocks on the segment (feature 020) ─────────────────────────
+# ── time-indexed Blocks on the segment (feature 004) ─────────────────────────
 
 
 def block_model(nested=False, indirect=False, flat=False):

@@ -23,6 +23,10 @@ drto.build_objective(ss)              # e.g. the single-point cost
 pyo.SolverFactory("ipopt").solve(ss)
 ```
 
+A `Block(time)` family collapses to its `t0` member, one per non-time
+index combination, discarding only the declared time set's discretization
+equations; a nested time-indexed Block errors.
+
 ## Benefit hypothesis
 
 Deriving the steady-state model from the same dynamic declarations makes the
@@ -78,3 +82,6 @@ many modes" promise.
   (leaving the source dynamic model unchanged).
 - It errors clearly on a time-indexed constraint that spans more than one time
   point, since that cannot be reduced to a single point.
+
+- A model keeping per-time structure in `Block(time)` members reduces to a
+  square steady system.

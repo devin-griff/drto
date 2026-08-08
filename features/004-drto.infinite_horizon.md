@@ -39,6 +39,9 @@ picks them up wherever it runs: called directly as above, or as the final
 step of `drto.dynamic_optimization`. Applying this transform before the mode
 transform is the whole composition. There is no coupling option.
 
+Per-time structure kept in `Block(time)` members replicates onto the
+segment like any other algebra; a nested time-indexed Block errors.
+
 ## Benefit hypothesis
 
 Terminal costs and terminal regions are the expert-only part of stabilizing
@@ -58,6 +61,8 @@ move.
 
 ## Acceptance criteria
 
+- A model keeping per-time structure in `Block(time)` members holds its
+  degrees of freedom across the transform.
 - `TransformationFactory('drto.infinite_horizon')` requires `horizon`,
   `state`, `dynamics`, `control`, and
   `tracking_stage_cost`, and errors clearly if any is missing.

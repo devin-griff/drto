@@ -33,10 +33,8 @@ alongside the CHANGELOG section rename.
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [019 Registry units](019-registry_units.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [020 Time-indexed Blocks in the terminal segment](020-time_indexed_blocks.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [021 Time-indexed Blocks in the steady-state reduction](021-time_indexed_blocks_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [023 drto.scale](023-drto.scale.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
+| [023 drto.scale](023-drto.scale.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 
 ## Template

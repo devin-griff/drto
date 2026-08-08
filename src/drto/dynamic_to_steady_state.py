@@ -14,7 +14,7 @@ fixed), and a per-sample stage cost becomes the single-point cost that
 A ``Block(time)`` family (the IDAES property-block idiom) collapses to its
 single steady member: the ``t0`` member stays as written, its variables and
 internal equations untouched, and the other members leave the model with
-their contents (feature 021). A Block carrying further indexes — a 1D
+their contents (feature 005). A Block carrying further indexes — a 1D
 control volume's ``Block(t, x)``, an MSContactor's ``Block(t, element)``
 — collapses the same way per spatial point: the ``t0`` member of every
 combination survives, so the spatial structure is kept and only time
