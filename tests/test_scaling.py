@@ -6,7 +6,6 @@ import pytest
 import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
 
-import idaes  # noqa: F401  registers its library directory with pyomo
 import drto
 from test_infinite_horizon import ready_model
 
@@ -14,6 +13,29 @@ IH = "drto.infinite_horizon"
 
 ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
+
+
+def _asl_available():
+    """Whether PyNumero's library is findable, importing idaes to look.
+
+    drto never imports idaes; a machine carrying it keeps the library in
+    a directory only that import registers with pyomo, so the tests look
+    there before deciding to skip.
+    """
+    from pyomo.common.fileutils import find_library
+
+    if find_library("pynumero_ASL") is not None:
+        return True
+    try:
+        import idaes  # noqa: F401
+    except ImportError:
+        return False
+    return find_library("pynumero_ASL") is not None
+
+
+needs_asl = pytest.mark.skipif(
+    not _asl_available(), reason="PyNumero's pynumero_ASL library not available"
+)
 
 
 def spanning_model(valued=True):
@@ -94,6 +116,7 @@ def factors(m):
 # ----------------------------------------------------------------------
 # variable factors
 # ----------------------------------------------------------------------
+@needs_asl
 def test_the_suffix_is_filled_with_powers_of_ten():
     m = spanning_model()
     drto.scale(m)
@@ -102,6 +125,7 @@ def test_the_suffix_is_filled_with_powers_of_ten():
         assert value == pytest.approx(10.0 ** round(pyo.log10(value)))
 
 
+@needs_asl
 def test_repeat_calls_replace_the_suffix():
     m = spanning_model()
     drto.scale(m)
@@ -110,6 +134,7 @@ def test_repeat_calls_replace_the_suffix():
     assert len(m.scaling_factor) == first
 
 
+@needs_asl
 def test_time_points_share_a_factor_and_species_do_not():
     m = spanning_model()
     drto.scale(m)
@@ -119,6 +144,7 @@ def test_time_points_share_a_factor_and_species_do_not():
     assert f["c[0,big]"] != f["c[0,trace]"]
 
 
+@needs_asl
 def test_the_band_and_the_floor_get_no_entry():
     m = spanning_model()
     m.u[0].set_value(1.0)  # inside [1e-2, 1e2]
@@ -131,6 +157,7 @@ def test_the_band_and_the_floor_get_no_entry():
     assert "c[0,trace]" not in f
 
 
+@needs_asl
 def test_fixed_variables_get_no_entry():
     m = spanning_model()
     m.c[:, "big"].fix(1e6)
@@ -147,6 +174,7 @@ def test_a_model_without_values_errors():
 # ----------------------------------------------------------------------
 # constraint factors
 # ----------------------------------------------------------------------
+@needs_asl
 def test_large_rows_come_to_order_one_and_small_rows_are_left():
     import numpy as np
     from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
@@ -174,6 +202,7 @@ def test_large_rows_come_to_order_one_and_small_rows_are_left():
     )
 
 
+@needs_asl
 def test_a_model_with_no_objective_scales():
     m = spanning_model()
     assert next(m.component_data_objects(pyo.Objective, active=True), None) is None
@@ -182,6 +211,7 @@ def test_a_model_with_no_objective_scales():
     assert m.component("_drto_scale_objective") is None
 
 
+@needs_asl
 def test_a_constant_zero_objective_scales_like_any_other():
     m = spanning_model()
     drto.scale(m)
@@ -194,6 +224,7 @@ def test_a_constant_zero_objective_scales_like_any_other():
 # ----------------------------------------------------------------------
 # the terminal segment's pins
 # ----------------------------------------------------------------------
+@needs_asl
 def test_the_endpoint_pins_get_no_entries():
     m = ready_model()
     pyo.TransformationFactory(IH).apply_to(m)
@@ -215,6 +246,7 @@ def test_the_endpoint_pins_get_no_entries():
 # scaled_solve
 # ----------------------------------------------------------------------
 @needs_ipopt
+@needs_asl
 def test_the_direct_path_builds_no_clone_and_returns_own_units():
     m = spanning_model()
     m.obj = pyo.Objective(expr=sum(m.cost[t] for t in m.cost))
@@ -225,6 +257,7 @@ def test_the_direct_path_builds_no_clone_and_returns_own_units():
 
 
 @needs_ipopt
+@needs_asl
 def test_both_paths_reach_the_same_solution(monkeypatch):
     # the fallback is chosen by name, so a solver drto does not list as
     # reading the Suffix takes the clone: patch the list to send ipopt
