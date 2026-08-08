@@ -33,3 +33,7 @@ docs/_build/
 
 # docs build copies of the example notebooks
 docs/notebooks/
+
+# personal Claude Code instructions, not part of the project
+CLAUDE.md
+.claude/

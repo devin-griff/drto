@@ -28,6 +28,7 @@ _NOTEBOOKS = [
     "cstr_advanced_step",
     "cstr_ideal_nmpc",
     "check_index",
+    "sx_infinite_horizon",
 ]
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"

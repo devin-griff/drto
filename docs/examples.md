@@ -64,6 +64,11 @@ unmodified IDAES models.
   the closed loop in one call: measure, solve, implement, simulate,
   the cold start then warm-started re-solves on persistent scaled
   clones, the hot start driven onto the setpoint in three samples.
+- [The infinite horizon on the PrOMMiS mixer-settler](notebooks/sx_infinite_horizon.ipynb)
+  — rare earth solvent extraction, posed on PrOMMiS's chemistry as an
+  index-one model: the states are the inventories the reactions cannot
+  change, the setpoint comes from the model's own steady reduction, and
+  the assigned scaling factors are what make the solve possible.
 
 ```{toctree}
 :maxdepth: 1
@@ -85,4 +90,5 @@ notebooks/cstr_warm_start
 notebooks/cstr_advanced_step
 notebooks/cstr_ideal_nmpc
 notebooks/check_index
+notebooks/sx_infinite_horizon
 ```
