@@ -57,6 +57,14 @@ A model whose objective is the constant zero, which is what
 carrying no objective at all is handled rather than rejected, since the
 Jacobian measurement reads the objective through PyomoNLP.
 
+The Jacobian is evaluated through PyNumero, which needs its `pynumero_ASL`
+library findable. `pyomo download-extensions` installs it where pyomo
+looks; IDAES ships the same library and registers its directory when
+`idaes` is imported, which is why an IDAES model scales with nothing
+further done. drto imports neither: when the library is absent, `scale`
+raises an error naming both ways to install it, rather than letting
+PyNumero fail on a null handle.
+
 The infinite horizon endpoint pins are skipped completely: the pin
 slacks get no variable factors and the pin constraints get no
 constraint factors. The pin's penalty weight is defined in each state's
@@ -122,6 +130,9 @@ demonstrate.
   constraint whose entries were all small carries no factor.
 - A model whose objective is the constant zero scales like any other,
   and a model with no objective raises no error.
+- Without PyNumero's `pynumero_ASL` library, `scale` raises a descriptive
+  error naming `pyomo download-extensions` and IDAES's extensions. drto
+  imports neither pyomo's extension machinery nor IDAES to find it.
 - A model without values raises a descriptive error saying to
   initialize first.
 - On a model carrying a terminal segment, the endpoint pin slacks and
