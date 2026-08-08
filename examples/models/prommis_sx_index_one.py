@@ -6,7 +6,9 @@ The same stage as ``prommis_sx``, written directly in Pyomo instead of
 through the MSContactor: PrOMMiS supplies the chemistry data (feed
 compositions, molar masses, the distribution correlations, Ka2, the
 reaction stoichiometry), and the equations are the notebook's, with the
-balances recombined so the transfer extents never appear. The states
+balances recombined so the transfer extents never appear. The module builds and declares
+the stage; the notebook solves the steady state and fills the targets
+from it. The states
 are the inventories the reactions cannot touch: each metal's total
 across both phases, the hydrogen and sulfur combinations with
 bisulfate, the extractant total with the bound metal, and the plain
@@ -25,7 +27,7 @@ fixed at zero along with the stage outlet flows.
 
 Usage from a notebook in ``examples/``::
 
-    from models.prommis_sx2 import build, F_AQ, F_OG
+    from models.prommis_sx_index_one import build
     m = build(N=8, h=1)
 """
 import math
@@ -119,7 +121,9 @@ def build(N=8, h=1, ncp=3, noise=True):
     m.TK = pyo.Set(initialize=tanks)
 
     # ------------------------------------------------------------------
-    # variables
+    # variables. Concentrations, holdups, and flows are nonnegative:
+    # nothing in the balances stops them going negative, so the bounds
+    # carry that physics
     # ------------------------------------------------------------------
     m.og_feed = pyo.Var(m.time, initialize=F_OG, bounds=(45.0, 75.0))
     m.aq_feed = pyo.Var(m.time, initialize=F_AQ, bounds=(45.0, 75.0))
@@ -133,10 +137,17 @@ def build(N=8, h=1, ncp=3, noise=True):
     m.cm = pyo.Var(m.time, ACID, initialize=1e-3,
                    within=pyo.NonNegativeReals)   # mol/L, acid system
     m.pH = pyo.Var(m.time, initialize=2.0)
+    # the dosage is the argument of a logarithm in the distribution
+    # correlation, so it carries a bound; at 4.75 percent it sits far
+    # from that bound and the solver's starting point leaves it alone
+    m.dosage = pyo.Var(m.time, initialize=DOSAGE,
+                       within=pyo.PositiveReals)
     m.th_aq = pyo.Var(m.time, initialize=0.5, bounds=(0.05, 0.95))
     m.th_og = pyo.Var(m.time, initialize=0.5, bounds=(0.05, 0.95))
-    m.F_aq = pyo.Var(m.time, initialize=F_AQ, within=pyo.NonNegativeReals)
-    m.F_og = pyo.Var(m.time, initialize=F_OG, within=pyo.NonNegativeReals)
+    m.F_aq = pyo.Var(m.time, initialize=F_AQ,
+                     within=pyo.NonNegativeReals)
+    m.F_og = pyo.Var(m.time, initialize=F_OG,
+                     within=pyo.NonNegativeReals)
 
     # the states the reactions cannot touch: metal totals, the hydrogen,
     # sulfur, and extractant combinations (mol)
@@ -225,7 +236,7 @@ def build(N=8, h=1, ncp=3, noise=True):
     m.split = pyo.Constraint(
         m.time, rule=lambda b, t: b.th_aq[t] + b.th_og[t] == 1)
     m.withdrawal = pyo.Constraint(
-        m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0 else
+        m.time, rule=lambda b, t:
         b.th_aq[t] * b.F_og[t] == b.th_og[t] * b.F_aq[t])
 
     # acid chemistry, molar concentrations: cm [mol/L] = c [mg/L] / (1000 mw)
@@ -238,6 +249,13 @@ def build(N=8, h=1, ncp=3, noise=True):
     m.ph_relation = pyo.Constraint(
         m.time, rule=lambda b, t: 10.0 ** (-b.pH[t]) == b.cm[t, "H"])
 
+    # the extractant dosage follows the mixer's local free DEHPA, as
+    # PrOMMiS defines it: the mass concentration over pure DEHPA's,
+    # as a volume percent
+    m.dosage_relation = pyo.Constraint(
+        m.time, rule=lambda b, t:
+        b.dosage[t] == b.c_og[t, "DEHPA"] / 975.8e3 * 100)
+
     # the metal transfer: the phases sit on the distribution equilibrium
     # in molar concentrations, c_og,e / mw_og = D_e * c_aq,e / mw_aq.
     # D_e blends PrOMMiS's log-linear pH correlation with a constant
@@ -246,7 +264,7 @@ def build(N=8, h=1, ncp=3, noise=True):
     # constants.
     def _distribution(b, t, e):
         m0, m1, b0, b1, kc, k1 = corr[e]
-        logd = (m0 + DOSAGE * m1) * b.pH[t] + b0 + b1 * math.log10(DOSAGE)
+        logd = (m0 + b.dosage[t] * m1) * b.pH[t]             + b0 + b1 * pyo.log10(b.dosage[t])
         d = 10.0 ** logd * (1 - kc) + kc * k1
         return b.c_og[t, f"{e}_o"] / mw_og[f"{e}_o"]             == d * b.c_aq[t, e] / mw_aq[e]
     m.distribution = pyo.Constraint(m.time, m.E, rule=_distribution)
@@ -255,36 +273,36 @@ def build(N=8, h=1, ncp=3, noise=True):
     # mixer balances: one derivative per row, no extents, skipped at the
     # first point where no discretization equations reach
     # ------------------------------------------------------------------
-    def flow_aq(b, t, j):     # aqueous feed inflow minus outflow, mol/hr
+    def fa(b, t, j):     # aqueous feed inflow minus outflow, mol/hr
         return (b.aq_feed[t] * AQ_FEED[j] - b.F_aq[t] * b.c_aq[t, j]) \
             / mw_aq[j]
 
-    def flow_og(b, t, j):     # organic feed inflow minus outflow, mol/hr
+    def fo(b, t, j):     # organic feed inflow minus outflow, mol/hr
         feed = C_DEHPA_FEED if j == "DEHPA" else OG_FEED[j]
         return (b.og_feed[t] * feed - b.F_og[t] * b.c_og[t, j]) / mw_og[j]
 
     m.metal_balance = pyo.Constraint(
         m.time, m.E, rule=lambda b, t, e: pyo.Constraint.Skip if t == t0
         else b.dnt_metal[t, e]
-        == flow_aq(b, t, e) + flow_og(b, t, f"{e}_o") + b.w_metal[t, e])
+        == fa(b, t, e) + fo(b, t, f"{e}_o") + b.w_metal[t, e])
     m.hydrogen_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_h[t] == flow_aq(b, t, "H") + flow_aq(b, t, "HSO4")
-        - sum(z[e] * flow_og(b, t, f"{e}_o") for e in elements) + b.w_h[t])
+        else b.dnt_h[t] == fa(b, t, "H") + fa(b, t, "HSO4")
+        - sum(z[e] * fo(b, t, f"{e}_o") for e in elements) + b.w_h[t])
     m.sulfur_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_s[t] == flow_aq(b, t, "SO4") + flow_aq(b, t, "HSO4") + b.w_s[t])
+        else b.dnt_s[t] == fa(b, t, "SO4") + fa(b, t, "HSO4") + b.w_s[t])
     m.extractant_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dnt_a[t] == flow_og(b, t, "DEHPA")
-        + sum(z[e] * flow_og(b, t, f"{e}_o") for e in elements) + b.w_a[t])
+        else b.dnt_a[t] == fo(b, t, "DEHPA")
+        + sum(z[e] * fo(b, t, f"{e}_o") for e in elements) + b.w_a[t])
     m.chloride_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dn_aq[t, "Cl"] == flow_aq(b, t, "Cl") + b.w_cl[t])
+        else b.dn_aq[t, "Cl"] == fa(b, t, "Cl") + b.w_cl[t])
 
     m.water_balance = pyo.Constraint(
         m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else b.dn_aq[t, "H2O"] == flow_aq(b, t, "H2O") + b.w_h2o[t])
+        else b.dn_aq[t, "H2O"] == fa(b, t, "H2O") + b.w_h2o[t])
 
     # the kerosene balance with its derivative eliminated: both solvent
     # concentrations are constants, so the kerosene and water holdups
@@ -293,9 +311,9 @@ def build(N=8, h=1, ncp=3, noise=True):
     # that determines the organic outlet flow.
     k_sol = (OG_FEED["Kerosene"] / mw_og["Kerosene"])         / (AQ_FEED["H2O"] / mw_aq["H2O"])
     m.kerosene_closure = pyo.Constraint(
-        m.time, rule=lambda b, t: pyo.Constraint.Skip if t == t0
-        else flow_og(b, t, "Kerosene")
-        + k_sol * (flow_aq(b, t, "H2O") + b.w_h2o[t]) == 0)
+        m.time, rule=lambda b, t:
+        fo(b, t, "Kerosene")
+        + k_sol * (fa(b, t, "H2O") + b.w_h2o[t]) == 0)
 
     # ------------------------------------------------------------------
     # settlers: four transport tanks per cascade, fed by the mixer; the
@@ -355,9 +373,12 @@ def build(N=8, h=1, ncp=3, noise=True):
         pyo.Constraint.Skip if (t == t0 or j == "Kerosene")
         else b.dsn_og[t, i, j] == so_in(b, t, i, j) + b.w_so[t, i, j])
 
-    # the first time point: no discretization equations reach it, so the
-    # derivative members there constrain nothing and are fixed, and the
-    # stage outlet flows are data, as the feeds' nominal values
+    # the first time point: no discretization equation reaches the
+    # derivative members there, so they appear in no active constraint
+    # and are fixed at zero. The stage outlet flows stay free: the
+    # withdrawal relation gives their ratio and the kerosene closure
+    # their magnitude, and both are algebraic, so they hold at every
+    # time point including this one
     for var in (m.dn_aq, m.dn_og, m.dnt_metal, m.dsn_aq, m.dsn_og):
         for k in var:
             if k[0] == t0:
@@ -366,8 +387,7 @@ def build(N=8, h=1, ncp=3, noise=True):
         var[t0].fix(0.0)
     for var in (m.dsnt_h, m.dsnt_s):
         var[t0, :].fix(0.0)
-    m.F_aq[t0].fix(F_AQ)
-    m.F_og[t0].fix(F_OG)
+
 
     # ------------------------------------------------------------------
     # drto declarations
@@ -530,132 +550,6 @@ def build(N=8, h=1, ncp=3, noise=True):
     return m
 
 
-def steady_targets(m, tee=False):
-    """Fill the targets and hooks from PrOMMiS's own steady flowsheet.
-
-    Build and solve ``mixer_settler_ex_flowsheet_steady`` at the same
-    dosage and stage count, then map its point onto this model's
-    variables: concentrations, phase split, and flows directly, and
-    every state evaluated through this model's own linking and holdup
-    rows. Returns the solved steady flowsheet.
-    """
-    from prommis.solvent_extraction.mixer_settler_ex_flowsheet_steady import (
-        initialize_steady_model, model_buildup_and_set_inputs,
-    )
-    import pyomo_pounce  # noqa: F401  registers the solver
-
-    sm = model_buildup_and_set_inputs(DOSAGE, 1)
-    initialize_steady_model(sm)
-    pyo.SolverFactory("pounce").solve(sm, tee=tee)
-
-    their = sm.fs.mixer_settler_ex
-    tmsc = their.mixer[1].unit.mscontactor
-    taq = their.aqueous_settler[1].unit
-    tog = their.organic_settler[1].unit
-    ts = sm.fs.time.first()
-    xs = [x for x in taq.length_domain
-          if x != taq.length_domain.first()]
-    if len(xs) != NTANKS:
-        raise ValueError(
-            "drto example: the steady flowsheet's settler mesh does not "
-            "match this model's; build both with the same tank count.")
-
-    elements, z, corr, ka2, mw_aq, mw_og = _chemistry()
-    AQ, OG = list(mw_aq), list(mw_og)
-    stk = elements + ["Cl"]
-    sog = [j for j in OG if j != "Kerosene"]
-
-    th = pyo.value(tmsc.volume_frac_stream[ts, 1, "aqueous"])
-    faq = pyo.value(tmsc.aqueous[ts, 1].flow_vol)
-    fog = pyo.value(tmsc.organic[ts, 1].flow_vol)
-
-    # the steady point, written into this model at every time point
-    for t in m.time:
-        m.th_aq[t].set_value(th)
-        m.th_og[t].set_value(1 - th)
-        m.F_aq[t].set_value(faq)
-        m.F_og[t].set_value(fog)
-        for j in AQ:
-            cj = pyo.value(tmsc.aqueous[ts, 1].conc_mass_comp[j])
-            if not m.c_aq[t, j].fixed:
-                m.c_aq[t, j].set_value(cj)
-            m.n_aq[t, j].set_value(VOLUME * th * cj / mw_aq[j])
-        for j in OG:
-            cj = pyo.value(tmsc.organic[ts, 1].conc_mass_comp[j])
-            if not m.c_og[t, j].fixed:
-                m.c_og[t, j].set_value(cj)
-            m.n_og[t, j].set_value(VOLUME * (1 - th) * cj / mw_og[j])
-        for j in ACID:
-            m.cm[t, j].set_value(
-                pyo.value(tmsc.aqueous[ts, 1].conc_mol_comp[j]))
-        m.pH[t].set_value(pyo.value(tmsc.aqueous[ts, 1].pH_phase["liquid"]))
-        for e in elements:
-            m.nt_metal[t, e].set_value(
-                pyo.value(m.n_aq[t, e]) + pyo.value(m.n_og[t, f"{e}_o"]))
-        m.nt_h[t].set_value(
-            pyo.value(m.n_aq[t, "H"]) + pyo.value(m.n_aq[t, "HSO4"])
-            - sum(z[e] * pyo.value(m.n_og[t, f"{e}_o"]) for e in elements))
-        m.nt_s[t].set_value(
-            pyo.value(m.n_aq[t, "SO4"]) + pyo.value(m.n_aq[t, "HSO4"]))
-        m.nt_a[t].set_value(
-            pyo.value(m.n_og[t, "DEHPA"])
-            + sum(z[e] * pyo.value(m.n_og[t, f"{e}_o"]) for e in elements))
-        for i, x in enumerate(xs, 1):
-            for j in AQ:
-                cj = pyo.value(taq.properties[ts, x].conc_mass_comp[j])
-                if not m.sc_aq[t, i, j].fixed:
-                    m.sc_aq[t, i, j].set_value(cj)
-                m.sn_aq[t, i, j].set_value(VTANK * cj / mw_aq[j])
-            for j in OG:
-                cj = pyo.value(tog.properties[ts, x].conc_mass_comp[j])
-                if not m.sc_og[t, i, j].fixed:
-                    m.sc_og[t, i, j].set_value(cj)
-                m.sn_og[t, i, j].set_value(VTANK * cj / mw_og[j])
-            for j in ACID:
-                m.scm[t, i, j].set_value(
-                    pyo.value(taq.properties[ts, x].conc_mol_comp[j]))
-            m.snt_h[t, i].set_value(
-                pyo.value(m.sn_aq[t, i, "H"])
-                + pyo.value(m.sn_aq[t, i, "HSO4"]))
-            m.snt_s[t, i].set_value(
-                pyo.value(m.sn_aq[t, i, "SO4"])
-                + pyo.value(m.sn_aq[t, i, "HSO4"]))
-
-    # the targets and the initial condition, from the values just set
-    t0 = m.time.first()
-    for e in elements:
-        v = pyo.value(m.nt_metal[t0, e])
-        m.component(f"ss_metal_{e}").set_value(v)
-        m.ic_metal[e] = v
-    for name, var, ic in (("ss_h", m.nt_h, "ic_h"), ("ss_s", m.nt_s, "ic_s"),
-                          ("ss_a", m.nt_a, "ic_a")):
-        v = pyo.value(var[t0])
-        m.component(name).set_value(v)
-        m.component(ic).set_value(v)
-    m.ss_h2o.set_value(pyo.value(m.n_aq[t0, "H2O"]))
-    m.ic_h2o.set_value(pyo.value(m.n_aq[t0, "H2O"]))
-    m.ss_cl.set_value(pyo.value(m.n_aq[t0, "Cl"]))
-    m.ic_cl.set_value(pyo.value(m.n_aq[t0, "Cl"]))
-    for i in range(1, NTANKS + 1):
-        for j in stk:
-            v = pyo.value(m.sn_aq[t0, i, j])
-            m.component(f"ss_sa{i}_{j}").set_value(v)
-            m.ic_sa[i, j] = v
-        v = pyo.value(m.snt_h[t0, i])
-        m.component(f"ss_sh{i}").set_value(v)
-        m.ic_sh[i] = v
-        v = pyo.value(m.snt_s[t0, i])
-        m.component(f"ss_ss{i}").set_value(v)
-        m.ic_ss[i] = v
-        for j in sog:
-            v = pyo.value(m.sn_og[t0, i, j])
-            m.component(f"ss_so{i}_{j}").set_value(v)
-            m.ic_so[i, j] = v
-    m.ss_fog.set_value(fog)
-    m.ss_faq.set_value(faq)
-    return sm
-
-
 def scale(model):
     """Variable and constraint scaling factors, measured at the current point.
 
@@ -680,7 +574,7 @@ def scale(model):
             (abs(v.value) for v in members if v.value is not None),
             default=0.0,
         )
-        if mag < 1e-6 or 1e-2 <= mag <= 1e2:
+        if mag < 1e-16 or 1e-2 <= mag <= 1e2:
             continue
         e = max(-12, min(12, round(math.log10(mag))))
         factor = 10.0 ** (-e)
@@ -689,7 +583,19 @@ def scale(model):
 
     from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
-    nlp = PyomoNLP(model)
+    # PyomoNLP reads exactly one objective, and a square steady model
+    # carries none: add one at zero for the measurement and remove it
+    temporary = (
+        next(model.component_data_objects(pyo.Objective, active=True), None)
+        is None
+    )
+    if temporary:
+        model.add_component("_scale_objective", pyo.Objective(expr=0.0))
+    try:
+        nlp = PyomoNLP(model)
+    finally:
+        if temporary:
+            model.del_component("_scale_objective")
     jac = nlp.evaluate_jacobian_eq().tocsr()
     variables = nlp.get_pyomo_variables()
     constraints = nlp.get_pyomo_equality_constraints()
@@ -712,24 +618,41 @@ def scale(model):
 
 
 def scaled_solve(model, solver="pounce", tee=False, options=None):
-    """Solve a scaled clone and write the solution back.
+    """Assign the factors and solve, in the model's own units.
 
-    ``scale`` measures the factors at the model's current point,
-    ``core.scale_model`` builds the scaled clone, the named solver runs
-    it, and the solution propagates back in the model's own units.
+    ``scale`` measures the factors at the model's current point and
+    writes them into the ``scaling_factor`` Suffix. pounce reads that
+    Suffix under ``nlp_scaling_method=user-scaling``: objective and
+    constraint factors travel through the NL file's suffix segments,
+    and variable factors are applied as a change of variables inside
+    the solver, which returns the solution in the model's own units.
+    No clone is built and nothing propagates back.
+
+    Any other solver takes Pyomo's ``core.scale_model``: build the
+    scaled clone, solve it, and propagate the solution back. The two
+    paths solve the same scaled problem.
+
+    ``options`` passes through to the solver, overriding the defaults
+    set here.
     """
+    opts = {"nlp_scaling_method": "user-scaling", "mu_strategy": "adaptive"}
+    opts.update(options or {})
+    scale(model)
     if solver == "pounce":
         import pyomo_pounce  # noqa: F401  registers the solver
 
-    opts = {
-        "mu_strategy": "adaptive",
-        "acceptable_tol": 1e-6,
-        "acceptable_iter": 1,
-    }
-    opts.update(options or {})
-    scale(model)
+        return pyo.SolverFactory("pounce").solve(model, tee=tee, options=opts)
+
     sm = pyo.TransformationFactory("core.scale_model").create_using(model)
     res = pyo.SolverFactory(solver).solve(sm, tee=tee, options=opts)
+    # propagate_solution rescales the duals through the objective's own
+    # factor, so on a square model with no objective those suffixes are
+    # dropped and the primal values come back alone
+    if next(sm.component_data_objects(pyo.Objective, active=True), None) is None:
+        for name in ("dual", "rc", "ipopt_zL_out", "ipopt_zU_out"):
+            comp = sm.component(name)
+            if comp is not None and comp.ctype is pyo.Suffix:
+                sm.del_component(comp)
     pyo.TransformationFactory("core.scale_model").propagate_solution(sm, model)
     return res
 
