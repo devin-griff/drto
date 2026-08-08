@@ -36,12 +36,9 @@ jobs:
       # floor bump when the release lands.
       - run: python -m pip install --force-reinstall --no-deps "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
       # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. pyomo's own
-      # download-extensions does not carry it; IDAES publishes it
-      # prebuilt, and importing idaes registers the directory with
-      # pyomo. drto itself imports neither.
-      - run: python -m pip install idaes-pse
-      - run: idaes get-extensions
+      # which calls a compiled ASL library. pyomo builds it from
+      # source; download-extensions does not carry it.
+      - run: python -m pyomo.scripting.pyomo_main build-extensions
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -71,12 +68,9 @@ jobs:
       - run: python -m pip install --force-reinstall --no-deps "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
       - run: python -m pip install "pyomo==6.8.1"
       # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. pyomo's own
-      # download-extensions does not carry it; IDAES publishes it
-      # prebuilt, and importing idaes registers the directory with
-      # pyomo. drto itself imports neither.
-      - run: python -m pip install idaes-pse
-      - run: idaes get-extensions
+      # which calls a compiled ASL library. pyomo builds it from
+      # source; download-extensions does not carry it.
+      - run: python -m pyomo.scripting.pyomo_main build-extensions
       - run: python -m pytest -q
 
   docs:
