@@ -20,6 +20,19 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Scaling factors measured from the model's own values (feature 023).
+  `drto.scale(m)` fills Pyomo's `scaling_factor` Suffix: one factor per
+  Var per name, from the magnitude that group's members hold, with time
+  points and spatial nodes of one quantity scaled alike and species
+  scaled apart; then one per constraint, bringing each large row's
+  biggest scaled Jacobian entry to order one, rows with only small
+  entries left alone. The terminal segment's endpoint pins are skipped,
+  since their penalty weight is stated in each state's own units.
+  `drto.scaled_solve(m)` assigns the factors and solves: pounce and ipopt
+  read the Suffix under `nlp_scaling_method=user-scaling` and return the
+  solution in the model's own units, and any other solver takes a
+  `core.scale_model` clone.
+
 - `drto.info(m)` opens with the problem's size (gh #63): the number of
   declared states and controls, counted as members at one time point,
   before the per-declaration lines, in both the plain and HTML
