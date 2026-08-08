@@ -58,6 +58,13 @@ The estimation-side surface:
    :members:
 ```
 
+## Scaling
+
+```{eval-rst}
+.. autofunction:: drto.scale
+.. autofunction:: drto.scaled_solve
+```
+
 ## Initialization
 
 ```{eval-rst}

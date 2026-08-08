@@ -33,6 +33,7 @@ from drto.initialize_steady_state import SteadyStateInitReport, initialize_stead
 from drto.advanced_step import advanced_step_controller
 from drto.cold_start import ColdStartReport, cold_start_dynamic
 from drto.check_index import CheckIndexReport, check_index
+from drto.scaling import scale, scaled_solve
 from drto.warm_start import WarmStartReport, warm_start_dynamic
 from drto.ideal_nmpc import NmpcHistory, ideal_nmpc
 from drto.objective import build_objective
@@ -59,6 +60,8 @@ __all__ = [
     "advanced_step_controller",
     "cold_start_dynamic",
     "check_index",
+    "scale",
+    "scaled_solve",
     "CheckIndexReport",
     "warm_start_dynamic",
     "WarmStartReport",
