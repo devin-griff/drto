@@ -200,6 +200,15 @@ declarations rather than re-deriving them.
   Constraint registers instead and an indexed one is rejected: the same
   accommodation `control` makes, and the single-point shape the steady-state
   reduction produces from a per-sample cost.
+- `move_suppression(m.con)` tags one per-sample equality Constraint
+  pricing the control moves: each member's defining side references only
+  declared control members at that sample and the one before, plus
+  Params (the weights, and the previous action the first member is
+  priced against). Indexed like the stage costs; requires a declared
+  horizon, since a steady-state model has no moves. `build_objective`
+  sums it with the stage costs, the steady-state reduction drops it (the
+  moves are zero at any steady point), and the terminal segment keeps it
+  on the finite horizon and out of the tail integrand.
 - `tracking_terminal_cost(m.con)` tags an equality Constraint whose
   left-hand side is the scalar terminal-cost variable. Its defining side
   covers every declared state and contains only declared states (and
