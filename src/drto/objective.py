@@ -23,7 +23,7 @@ from drto.declarations import _is_var_member, _side_matching
 from drto.info import info
 
 #: The registry kinds whose cost vars are summed per time point.
-_STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
+_STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost", "move_suppression")
 
 #: The registry kinds whose cost var is a single scalar.
 _TERMINAL_KINDS = ("tracking_terminal_cost",)

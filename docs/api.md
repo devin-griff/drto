@@ -27,6 +27,7 @@ The control-side surface:
 .. autofunction:: drto.disturbance
 .. autofunction:: drto.tracking_stage_cost
 .. autofunction:: drto.economic_stage_cost
+.. autofunction:: drto.move_suppression
 .. autofunction:: drto.tracking_terminal_cost
 .. autofunction:: drto.initial_condition
 .. autofunction:: drto.terminal_constraint

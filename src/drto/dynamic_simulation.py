@@ -42,6 +42,7 @@ _REQUIRED = ("horizon", "state", "dynamics", "control", "initial_condition")
 _SIMULATION_SHED = (
     "tracking_stage_cost",
     "economic_stage_cost",
+    "move_suppression",
     "tracking_terminal_cost",
     "terminal_constraint",
 )

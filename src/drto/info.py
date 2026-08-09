@@ -38,6 +38,7 @@ _KIND_LABELS = (
     ("control", "controls"),
     ("tracking_stage_cost", "tracking stage cost"),
     ("economic_stage_cost", "economic stage cost"),
+    ("move_suppression", "move suppression"),
     ("tracking_terminal_cost", "terminal cost"),
     ("initial_condition", "initial conditions"),
     ("terminal_constraint", "terminal constraint"),
@@ -279,7 +280,11 @@ class Info:
         expression, ``sorted(t)[:-1]``. The members are checked against the
         recorded sample grid rather than assumed.
         """
-        if kind not in ("tracking_stage_cost", "economic_stage_cost"):
+        if kind not in (
+            "tracking_stage_cost",
+            "economic_stage_cost",
+            "move_suppression",
+        ):
             return None
         horizons = self.declarations("horizon")
         if not horizons:

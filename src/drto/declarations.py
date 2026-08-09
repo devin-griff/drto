@@ -610,6 +610,11 @@ def _register_stage_cost(kind, component, fn):
     the one the steady-state reduction produces from a per-sample cost.
     """
     reg = info(component.model())
+    if kind == "move_suppression" and not reg.has_declaration("horizon"):
+        raise ValueError(
+            f"drto: {fn} requires a declared horizon; a steady-state model "
+            f"has no moves."
+        )
     if reg.has_declaration("horizon"):
         time = _declared_horizon(reg, fn)
         if any(s is time for s in component.index_set().subsets()):
@@ -642,6 +647,8 @@ def _register_stage_cost(kind, component, fn):
         )
     if kind == "tracking_stage_cost":
         _tracking_cost_coverage(component, fn, controls_too=True)
+    if kind == "move_suppression":
+        _move_cost_containment(component, fn)
     _declare_single(kind, component, fn)
 
 
@@ -686,6 +693,67 @@ def economic_stage_cost(*args, **kwargs):
     return _declare_stage_cost(
         "economic_stage_cost", args, "economic_stage_cost", kwargs
     )
+
+
+def _move_cost_containment(component, fn):
+    """The move cost prices control members inside each member's window.
+
+    Each member's defining side may reference only declared control
+    members, at the member's own sample or the one before it. Params (the
+    weights, and the previous action the first member is priced against)
+    pass untouched; the defining cost variable sits on the other side of
+    the equality.
+    """
+    reg = info(component.model())
+    controls = list(reg.components("control"))
+    if not controls:
+        raise ValueError(
+            f"drto: {fn}: declare the controls before the move cost; it "
+            f"prices their moves."
+        )
+    owner_of = {}
+    for comp in controls:
+        for vd in comp.values() if comp.is_indexed() else (comp,):
+            owner_of[id(vd)] = comp
+    samples = list(reg.declarations("horizon")[0]["samples"])
+    for cd in _members(component):
+        _, expr = _side_matching(
+            cd, _is_var_member, fn, "the scalar cost variable (the cost term)"
+        )
+        pos = samples.index(cd.index())
+        allowed = set(samples[max(pos - 1, 0) : pos + 1])
+        for v in identify_variables(expr, include_fixed=True):
+            if id(v) not in owner_of:
+                raise ValueError(
+                    f"drto: {fn}: '{cd.name}' references '{v.name}', which "
+                    f"is not a declared control member. A move cost contains "
+                    f"declared control members and Params (weights, the "
+                    f"previous action) only."
+                )
+            idx = v.index()
+            elems = idx if isinstance(idx, tuple) else (idx,)
+            if not any(e in allowed for e in elems):
+                raise ValueError(
+                    f"drto: {fn}: '{cd.name}' references '{v.name}', which "
+                    f"is outside its own sample and the one before."
+                )
+
+
+def move_suppression(*args, **kwargs):
+    """Declare the move-suppression cost, a per-sample equality.
+
+    One side of each member is the scalar move-cost variable; the other
+    prices the control moves, referencing declared control members at
+    that sample and the one before, plus Params (the weights, and the
+    previous action the first member is priced against). One per model,
+    indexed over the samples minus the final time; requires a declared
+    horizon, since a steady-state model has no moves. The objective sums
+    it with the stage costs, the steady-state reduction drops it, and
+    the terminal segment keeps it on the finite horizon and out of the
+    tail integrand. Tags, wraps, or builds as a decorator:
+    ``@drto.move_suppression(m, sorted(m.t)[:-1])``.
+    """
+    return _declare_stage_cost("move_suppression", args, "move_suppression", kwargs)
 
 
 def _declare_scalar_cost(kind, args, fn, kwargs, scalar_reason, var_desc):
