@@ -30,7 +30,7 @@ directly as steady-state, so the same declaration surface serves both.
 ## Acceptance criteria
 
 - `TransformationFactory('drto.steady_state_optimization')` requires
-  `state`, `control`, and an economic stage cost, and errors
+  `state`, `control`, and a stage cost of either kind, and errors
   clearly if any is missing. `horizon` and `dynamics`
   are optional, since the user may define either a steady-state or dynamic model
   initially.
@@ -45,7 +45,9 @@ directly as steady-state, so the same declaration surface serves both.
   RTO-layer equivalent of move suppression. With both declared,
   `tracking_weight` scales the tracking side, mirroring
   `drto.dynamic_optimization` (feature 006): it defaults to 1, and the
-  economic cost is in currency units and is never scaled.
+  economic cost is in currency units and is never scaled. With only a
+  tracking stage cost declared, the objective is that cost alone: the
+  steady point nearest the declared targets.
 - The estimation-category declarations (feature 018) are neutralized through
   the routine shared with the other control-side modes: the estimation costs
   and the measurement Params are deleted, and an estimated parameter is fixed
