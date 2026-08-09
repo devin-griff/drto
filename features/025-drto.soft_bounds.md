@@ -26,8 +26,7 @@ Var and written as two constraints, `x + s_lo >= lo` and
 ways of stating a bound are handled: the explicit `bounds` pair, and a
 bound that comes from the domain, which is how the solvent extraction
 stage states nonnegativity. Removing a domain's bound widens the domain
-to the smallest one that keeps the variable's integrality, `Reals` or
-`Integers`. A variable bounded on one side gets one slack; a fixed
+to `Reals`. A variable bounded on one side gets one slack; a fixed
 variable gets none.
 
 For an inequality constraint `g(x) <= b`, the constraint is rewritten in
@@ -94,10 +93,8 @@ local infeasibility from initial conditions far from the setpoint.
   constraint carrying a nonnegative slack. A solution whose slacks are
   all zero satisfies every original bound.
 - A bound stated through the domain is softened like an explicit
-  `bounds` pair, and the widened domain keeps the variable's
-  integrality: `NonNegativeReals` becomes `Reals` and
-  `NonNegativeIntegers` becomes `Integers`. A one-sided bound gets one
-  slack. A fixed variable gets none.
+  `bounds` pair: `NonNegativeReals` becomes `Reals`. A one-sided bound
+  gets one slack. A fixed variable gets none.
 - An inequality constraint is rewritten in place with a slack and keeps
   its identity, so a declaration naming it stays valid; a two-sided
   inequality gets a slack per side; an equality constraint is unchanged.
