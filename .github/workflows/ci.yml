@@ -39,14 +39,12 @@ jobs:
       # 3.11 environments already carry and the 3.12 one does not.
       - run: python -m pip install setuptools
       # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. pyomo builds it from
-      # source; download-extensions does not carry it.
-      # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. This builds that library and
-      # nothing else: build-extensions also builds the AMPL demo and
-      # cubic spline libraries and attempts MCPP, whose source is not
-      # distributed, taking 73 s against 8 s and exiting nonzero either
-      # way (gh #76).
+      # which calls a compiled ASL library; download-extensions does not
+      # carry it, so pyomo builds it from source. This builds that
+      # library and nothing else: build-extensions also builds the AMPL
+      # demo and cubic spline libraries and attempts MCPP, whose source
+      # is not distributed, taking 73 s against 8 s and exiting nonzero
+      # either way (gh #76).
       - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
@@ -80,14 +78,12 @@ jobs:
       # the step should not depend on the floor being that version.
       - run: python -m pip install setuptools
       # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. pyomo builds it from
-      # source; download-extensions does not carry it.
-      # drto.scale measures the constraint factors through PyNumero,
-      # which calls a compiled ASL library. This builds that library and
-      # nothing else: build-extensions also builds the AMPL demo and
-      # cubic spline libraries and attempts MCPP, whose source is not
-      # distributed, taking 73 s against 8 s and exiting nonzero either
-      # way (gh #76).
+      # which calls a compiled ASL library; download-extensions does not
+      # carry it, so pyomo builds it from source. This builds that
+      # library and nothing else: build-extensions also builds the AMPL
+      # demo and cubic spline libraries and attempts MCPP, whose source
+      # is not distributed, taking 73 s against 8 s and exiting nonzero
+      # either way (gh #76).
       - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q
 
