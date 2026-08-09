@@ -84,6 +84,49 @@ def econ_model(tracking=False, estimation=False):
     return m
 
 
+def tracking_model():
+    """A dynamic model with only a tracking cost: dz/dt = -z + u.
+
+    At rest z = u, and the targets disagree (z_ss 0.4, u_ss 0.2), so the
+    steady point nearest them is z = u = 0.3.
+    """
+    m = pyo.ConcreteModel()
+    N, h = 4, 2.5
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
+    m.z = pyo.Var(m.t, initialize=0.4)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.5)
+    m.z_ss = pyo.Param(initialize=0.4, mutable=True)
+    m.u_ss = pyo.Param(initialize=0.2, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.4, mutable=True)
+    m.tcost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def ode(m, t):
+        return m.dzdt[t] == -m.z[t] + m.u[t]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def track(m, t):
+        return m.tcost[t] == (m.z[t] - m.z_ss) ** 2 + (m.u[t] - m.u_ss) ** 2
+
+    @m.Constraint()
+    def init(m):
+        return m.z[0] == m.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.track)
+    drto.initial_condition(m.init)
+    drto.steady_state(m.z, m.z_ss)
+    drto.steady_state_control(m.u, m.u_ss)
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    return m
+
+
 def steady_authored_model():
     """The same economics written directly as steady-state: no horizon."""
     m = pyo.ConcreteModel()
@@ -112,7 +155,9 @@ def test_requires_the_declarations():
     m = pyo.ConcreteModel()
     m.z = pyo.Var()
     drto.state(m.z)
-    with pytest.raises(ValueError, match="missing: control, economic_stage_cost"):
+    with pytest.raises(
+        ValueError, match="missing: control, a stage cost of either kind"
+    ):
         pyo.TransformationFactory(SSO).apply_to(m)
 
 
@@ -155,6 +200,14 @@ def test_cost_equations_stay():
     pyo.TransformationFactory(SSO).apply_to(m)
     assert drto.info(m).has_declaration("economic_stage_cost")
     assert m.component("drto_objective") is not None
+
+
+def test_tracking_only_model_transforms():
+    # feature 009 amendment: a tracking cost alone gates the mode too
+    m = tracking_model()
+    pyo.TransformationFactory(SSO).apply_to(m)
+    assert m.component("drto_objective") is not None
+    assert not m.u.fixed
 
 
 def test_steady_state_pairings_are_kept():
@@ -221,6 +274,18 @@ def test_steady_authored_reaches_the_same_optimum():
     pyo.TransformationFactory(SSO).apply_to(m)
     pyo.SolverFactory("ipopt").solve(m)
     assert pyo.value(m.u) == pytest.approx(0.5, abs=1e-6)
+
+
+@needs_ipopt
+def test_tracking_only_optimum_is_the_nearest_steady_point():
+    # at rest z = u; targets z_ss = 0.4, u_ss = 0.2 disagree, so the
+    # minimizer of (z - 0.4)^2 + (u - 0.2)^2 on z = u is 0.3
+    m = tracking_model()
+    pyo.TransformationFactory(SSO).apply_to(m)
+    r = pyo.SolverFactory("ipopt").solve(m)
+    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert pyo.value(m.u) == pytest.approx(0.3, abs=1e-6)
+    assert pyo.value(m.z) == pytest.approx(0.3, abs=1e-6)
 
 
 @needs_ipopt

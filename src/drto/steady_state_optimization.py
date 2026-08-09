@@ -12,7 +12,9 @@ The cost equations stay, unlike the simulation modes: this mode needs them. A
 declared tracking stage cost is kept rather than dropped, since it regularizes
 the economic optimum toward a known operating point, the RTO-layer equivalent
 of move suppression. With both cost kinds declared, ``tracking_weight`` scales
-the tracking side, as in ``drto.dynamic_optimization`` (feature 006).
+the tracking side, as in ``drto.dynamic_optimization`` (feature 006). With
+only a tracking stage cost declared, the objective is that cost alone: the
+steady point nearest the declared targets.
 
 The estimation-category declarations (feature 018) are neutralized before the
 reduction, through the routine shared with the other control-side modes. That
@@ -32,9 +34,10 @@ from drto.dynamic_optimization import _fix_disturbances, _neutralize_estimation
 from drto.info import info
 from drto.objective import build_objective
 
-#: The declarations the transform requires. No horizon or dynamics: the user
-#: may author the model as steady-state.
-_REQUIRED = ("state", "control", "economic_stage_cost")
+#: The declarations the transform requires, alongside a stage cost of either
+#: kind. No horizon or dynamics: the user may author the model as
+#: steady-state.
+_REQUIRED = ("state", "control")
 
 #: Both stage-cost kinds; the tracking weight applies only with both present.
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
@@ -71,10 +74,13 @@ class SteadyStateOptimizationTransformation(Transformation):
         config = self.CONFIG(kwds)
         reg = info(model)
         missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
+        if not any(reg.has_declaration(k) for k in _STAGE_KINDS):
+            missing.append("a stage cost of either kind")
         if missing:
             raise ValueError(
-                f"drto: steady_state_optimization requires the declarations "
-                f"{', '.join(_REQUIRED)}; missing: {', '.join(missing)}."
+                f"drto: steady_state_optimization requires state, control, "
+                f"and a stage cost of either kind; missing: "
+                f"{', '.join(missing)}."
             )
 
         # before the reduction, which collapses the control-side costs and not
@@ -101,7 +107,7 @@ class SteadyStateOptimizationTransformation(Transformation):
             "drto.steady_state_optimization",
             controls="free",
             tracking_weight=(
-                weighted if weighted is not None else "(economic cost only)"
+                weighted if weighted is not None else "(one stage cost declared)"
             ),
             **({"disturbances": ", ".join(noise)} if noise else {}),
             **outcome,
