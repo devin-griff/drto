@@ -64,7 +64,13 @@ from drto.info import info
 _REQUIRED = ("horizon", "state", "dynamics")
 
 #: The declaration kinds whose components leave the model outright.
-_REMOVED_KINDS = ("initial_condition", "terminal_constraint", "tracking_terminal_cost")
+_REMOVED_KINDS = (
+    "initial_condition",
+    "terminal_constraint",
+    "tracking_terminal_cost",
+    # the moves are zero at any steady point, so the move cost leaves
+    "move_suppression",
+)
 
 #: The stage-cost kinds, indexed by the sample list: they collapse to scalars.
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")

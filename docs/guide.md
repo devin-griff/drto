@@ -63,6 +63,10 @@ The control-side surface, in the order a model usually declares them:
   covers every declared state (the stage cost the controls too) and
   contains nothing else besides Params; a gap or a foreign variable is
   a declaration-time error.
+- `drto.move_suppression(move)` — a cost constraint pricing the control
+  moves, each member referencing controls at its own sample and the one
+  before, the first member against previous-action Params. The steady
+  reduction drops it, and the terminal segment keeps it off the tail.
 - `drto.initial_condition(ic, ...)` — constraints pinning states at
   the first point to mutable Params, which a receding-horizon loop overwrites
   with each measurement.
