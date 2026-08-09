@@ -36,6 +36,7 @@ alongside the CHANGELOG section rename.
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [023 drto.scale](023-drto.scale.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [025 drto.soft_bounds](025-drto.soft_bounds.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 
 ## Template
 
