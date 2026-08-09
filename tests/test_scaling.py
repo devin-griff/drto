@@ -6,7 +6,6 @@ import pytest
 import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
 
-import idaes  # noqa: F401  registers its library directory with pyomo
 import drto
 from test_infinite_horizon import ready_model
 

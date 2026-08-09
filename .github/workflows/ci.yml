@@ -35,6 +35,17 @@ jobs:
       # upstream in jkitchin/pounce#421. Remove alongside the pounce
       # floor bump when the release lands.
       - run: python -m pip install --force-reinstall --no-deps "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
+      # pyomo's cmake builder imports setuptools, which the 3.10 and
+      # 3.11 environments already carry and the 3.12 one does not.
+      - run: python -m pip install setuptools
+      # drto.scale measures the constraint factors through PyNumero,
+      # which calls a compiled ASL library; download-extensions does not
+      # carry it, so pyomo builds it from source. This builds that
+      # library and nothing else: build-extensions also builds the AMPL
+      # demo and cubic spline libraries and attempts MCPP, whose source
+      # is not distributed, taking 73 s against 8 s and exiting nonzero
+      # either way (gh #76).
+      - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q --cov=drto --cov-report=term-missing
 
   import-base:
@@ -63,6 +74,17 @@ jobs:
       # floor bump when the release lands.
       - run: python -m pip install --force-reinstall --no-deps "pyomo-pounce @ git+https://github.com/jkitchin/pounce.git@8a5193dd3b62fb456a11e28f89719978205b6551#subdirectory=pyomo-pounce"
       - run: python -m pip install "pyomo==6.8.1"
+      # pyomo's cmake builder imports setuptools: 3.10 carries it, but
+      # the step should not depend on the floor being that version.
+      - run: python -m pip install setuptools
+      # drto.scale measures the constraint factors through PyNumero,
+      # which calls a compiled ASL library; download-extensions does not
+      # carry it, so pyomo builds it from source. This builds that
+      # library and nothing else: build-extensions also builds the AMPL
+      # demo and cubic spline libraries and attempts MCPP, whose source
+      # is not distributed, taking 73 s against 8 s and exiting nonzero
+      # either way (gh #76).
+      - run: python -c "from pyomo.contrib.pynumero.build import build_pynumero; build_pynumero()"
       - run: python -m pytest -q
 
   docs:
