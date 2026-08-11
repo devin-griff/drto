@@ -277,6 +277,12 @@ def explicit_nmpc_data(
         if hessians:
             import pyomo_pounce
 
+            if not hasattr(pyomo_pounce, "information"):
+                raise RuntimeError(
+                    "drto: hessians=True reads the reduced Hessian through "
+                    "pyomo_pounce.information, which this pyomo-pounce does "
+                    "not carry; upgrade pyomo-pounce."
+                )
             block = pyomo_pounce.information(m, wrt=moves)
             point["H"] = {
                 ui.parent_component().name: {
