@@ -78,7 +78,8 @@ against the stored derivatives; `fine_tune` trains the final fraction
 of the budget on the value error alone. Every run trains the full
 budget and keeps the weights with the best validation value error;
 `seeds` trains that many networks and keeps the best by the same
-metric. Training requires torch, an optional dependency, and a missing
+metric. The kept policy carries its run's per-epoch training loss and
+validation value error as `policy.history`. Training requires torch, an optional dependency, and a missing
 install is a descriptive error.
 
 The trained policy is callable with named input values in the model's own
@@ -132,7 +133,8 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   used as given. Runs are reproducible under a seed, and with
   `seeds > 1` the network kept is the best by validation value error.
 - The trained policy is callable with named inputs in model units and
-  returns controls in model units; `save`/`load` round-trips it.
+  returns controls in model units; `save`/`load` round-trips it, the
+  training history included.
 - `explicit_nmpc_closed_loop` steps the declared model under the policy and
   returns a readable report in the feature 010 shape holding the state
   and applied-control trajectory per sample, its summary stating the
