@@ -152,39 +152,39 @@ def test_save_load_round_trips(tmp_path):
 # ----------------------------------------------------------------------
 # the hessian weighting
 # ----------------------------------------------------------------------
-def toy_with_hessians(scale=1.0, vary=False, n=64):
+def toy_with_information(scale=1.0, vary=False, n=64):
     # diagonal 1/range^2 blocks: the identity in scaled control units
     d = toy_dataset(n=n)
     ru = {k: hi - lo for k, (lo, hi) in U_BOX.items()}
     for i, p in enumerate(d.points):
         c = scale * (1.0 + (i / n if vary else 0.0))
-        p["H"] = {
+        p["information"] = {
             "u1": {"u1": c / ru["u1"] ** 2, "u2": 0.0},
             "u2": {"u1": 0.0, "u2": c / ru["u2"] ** 2},
         }
-    d.config["hessians"] = True
+    d.config["information"] = True
     return d
 
 
-def test_weighting_needs_stored_hessians():
-    with pytest.raises(ValueError, match="hessians=True"):
-        drto.explicit_nmpc_train(toy_dataset(), weighting="hessian", epochs=10)
+def test_weighting_needs_stored_information():
+    with pytest.raises(ValueError, match="information=True"):
+        drto.explicit_nmpc_train(toy_dataset(), weighting="information", epochs=10)
 
 
 def test_a_bad_weighting_value_errors():
-    with pytest.raises(ValueError, match="None, hessian"):
+    with pytest.raises(ValueError, match="None, information"):
         quick(weighting="curvature")
 
 
-def test_identity_hessians_reproduce_the_plain_loss():
+def test_identity_information_reproduces_the_plain_loss():
     # a constant multiple of the scaled-units identity normalizes to
     # the identity:
     # the losses are equal, and a short run matches the plain one to
     # floating-point accumulation (the summation orders differ)
     plain = quick(epochs=50)
     weighted = drto.explicit_nmpc_train(
-        toy_with_hessians(scale=7.0),
-        weighting="hessian",
+        toy_with_information(scale=7.0),
+        weighting="information",
         epochs=50,
         hidden=(16,),
         lr=1e-2,
@@ -196,13 +196,13 @@ def test_identity_hessians_reproduce_the_plain_loss():
     assert weighted.validation_error == pytest.approx(plain.validation_error, rel=1e-6)
 
 
-def test_varying_hessians_train_and_are_recorded():
+def test_varying_information_trains_and_is_recorded():
     policy = drto.explicit_nmpc_train(
-        toy_with_hessians(vary=True),
-        weighting="hessian",
+        toy_with_information(vary=True),
+        weighting="information",
         epochs=200,
         hidden=(8,),
         schedule="flat",
     )
-    assert policy.meta["weighting"] == "hessian"
+    assert policy.meta["weighting"] == "information"
     assert policy.validation_error > 0

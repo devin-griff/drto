@@ -176,7 +176,7 @@ def explicit_nmpc_data(
     inputs=None,
     ranges=None,
     gradients=True,
-    hessians=False,
+    information=False,
     solver="pounce",
     seed=0,
     path=None,
@@ -202,11 +202,11 @@ def explicit_nmpc_data(
     gradients : bool
         Record the derivative of each first action with respect to each
         sampled Param, read from the pounce factorization.
-    hessians : bool
-        Record each labeled point's reduced Hessian over the first
-        moves, read from the same factorization through pounce's
-        ``information``: one query per solve, symmetric, in control
-        units.
+    information : bool
+        Record each labeled point's information matrix — the reduced
+        Hessian over the first moves — read from the same factorization
+        through pounce's ``information``: one query per solve,
+        symmetric, in control units.
     solver : str
         The labeling solver's name.
     seed : int
@@ -226,11 +226,11 @@ def explicit_nmpc_data(
             f"got solver='{solver}'. Pass gradients=False, or solve with "
             f"pounce."
         )
-    if hessians and solver != "pounce":
+    if information and solver != "pounce":
         raise ValueError(
-            f"drto: {fn} reads the reduced Hessians from the pounce "
-            f"factorization; got solver='{solver}'. Pass hessians=False, "
-            f"or solve with pounce."
+            f"drto: {fn} reads the information matrices from the pounce "
+            f"factorization; got solver='{solver}'. Pass "
+            f"information=False, or solve with pounce."
         )
     reg = info(m)
     pairs = _sampled_params(reg, inputs, ranges, fn)
@@ -274,17 +274,17 @@ def explicit_nmpc_data(
                 }
                 for u in moves
             }
-        if hessians:
+        if information:
             import pyomo_pounce
 
             if not hasattr(pyomo_pounce, "information"):
                 raise RuntimeError(
-                    "drto: hessians=True reads the reduced Hessian through "
-                    "pyomo_pounce.information, which this pyomo-pounce does "
-                    "not carry; upgrade pyomo-pounce."
+                    "drto: information=True reads the information matrix "
+                    "through pyomo_pounce.information, which this "
+                    "pyomo-pounce does not carry; upgrade pyomo-pounce."
                 )
             block = pyomo_pounce.information(m, wrt=moves)
-            point["H"] = {
+            point["information"] = {
                 ui.parent_component().name: {
                     uj.parent_component().name: float(block.matrix[i][j])
                     for j, uj in enumerate(moves)
@@ -299,7 +299,7 @@ def explicit_nmpc_data(
             "method": method,
             "seed": seed,
             "gradients": bool(gradients),
-            "hessians": bool(hessians),
+            "information": bool(information),
             "solver": solver,
             "inputs": [p.name for p, _ in pairs],
             "ranges": {p.name: list(box) for p, box in pairs},
@@ -347,8 +347,9 @@ def _resolve_dataset(data, what):
     )
 
 
-def _arrays(dataset, gradients, fn, hessians=False):
-    """The dataset as scaled arrays: x, u, the Jacobian, the Hessians."""
+def _arrays(dataset, gradients, fn, information=False):
+    """The dataset as scaled arrays: x, u, the Jacobian, the information
+    matrices."""
     import numpy as np
 
     cfg = dataset.config
@@ -382,16 +383,16 @@ def _arrays(dataset, gradients, fn, hessians=False):
         )
         J = J * rx[None, None, :] / ru[None, :, None]
     H = None
-    if hessians:
-        if any("H" not in p for p in dataset.points):
+    if information:
+        if any("information" not in p for p in dataset.points):
             raise ValueError(
-                f"drto: {fn}: weighting='hessian' needs the stored reduced "
-                f"Hessians, and this dataset carries none; regenerate it "
-                f"with hessians=True."
+                f"drto: {fn}: weighting='information' needs the stored "
+                f"information matrices, and this dataset carries none; "
+                f"regenerate it with information=True."
             )
         H = np.array(
             [
-                [[p["H"][ui][uj] for uj in u_names] for ui in u_names]
+                [[p["information"][ui][uj] for uj in u_names] for ui in u_names]
                 for p in dataset.points
             ]
         )
@@ -487,8 +488,8 @@ def explicit_nmpc_train(
         The final fraction of the budget trained on the value error
         alone, at a flat 1e-4; ``0`` disables the phase.
     weighting : str, optional
-        ``None`` is the plain loss. ``"hessian"`` weights both terms by
-        each point's stored reduced Hessian in scaled control units,
+        ``None`` is the plain loss. ``"information"`` weights both terms
+        by each point's stored information matrix in scaled control units,
         every matrix divided by the dataset's mean trace so ``gamma``
         keeps its scale; the validation value error is weighted the
         same way. The fit is then accurate where the cost surface is
@@ -514,14 +515,14 @@ def explicit_nmpc_train(
         raise ValueError(
             f"drto: {fn} got schedule='{schedule}'; the choices are " f"cosine, flat."
         )
-    if weighting not in (None, "hessian"):
+    if weighting not in (None, "information"):
         raise ValueError(
             f"drto: {fn} got weighting='{weighting}'; the choices are "
-            f"None, hessian."
+            f"None, information."
         )
-    weighted = weighting == "hessian"
+    weighted = weighting == "information"
     dataset = _resolve_dataset(data, "data")
-    x, u, J, H = _arrays(dataset, sobolev, fn, hessians=weighted)
+    x, u, J, H = _arrays(dataset, sobolev, fn, information=weighted)
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
         order = rng.permutation(len(x))
@@ -536,7 +537,7 @@ def explicit_nmpc_train(
             H = H[train_idx]
     else:
         vset = _resolve_dataset(validation, "validation")
-        x_val, u_val, _, H_val = _arrays(vset, False, fn, hessians=weighted)
+        x_val, u_val, _, H_val = _arrays(vset, False, fn, information=weighted)
     if weighted:
         # one normalization for both sets, so gamma keeps its scale
         norm = float(np.mean(np.trace(H, axis1=1, axis2=2))) / H.shape[1]
