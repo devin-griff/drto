@@ -20,7 +20,7 @@ data = drto.explicit_nmpc_data(
     method="sobol",     # "sobol" | "lhs" | "uniform"
     inputs=None,        # Params to sample; default the initial-condition Params
     ranges=None,        # {param: (lo, hi)}; default the paired state's bounds
-    gradients=True,     # store du0/dinput from the solve's factorization
+    gradients=True,     # store du0/dinput, read from the solve's factorization
     solver="pounce",
     seed=0,
     path=None,          # JSON written when given
@@ -63,9 +63,9 @@ Param, read from the converged factorization the way
 `drto.advanced_step_controller` reads it. The default box comes from the
 bounds of the state each initial-condition Param pins; `ranges` narrows
 or widens it per Param. `method` picks the design: `sobol` (the
-default) keeps its spread under truncation, so one pool serves nested
-training-set sizes; `lhs` stratifies every coordinate exactly at its
-own `n`; `uniform` is independent draws, the sampling of Lueken,
+default) stays evenly spread in any leading subset, so one pool serves
+nested training-set sizes; `lhs` stratifies every coordinate exactly at
+its own `n`; `uniform` is independent draws, the sampling of Lueken,
 Brandner & Lucia (2023). Draws whose solve does not return optimal are
 recorded as failures and carry no labels. The model is cold-started
 before each solve and left at its last solution.
@@ -85,20 +85,25 @@ The trained law is callable with named input values in the model's own
 units and returns the control values in theirs.
 `explicit_nmpc_rollout` runs it closed loop against the declared model,
 one `dynamic_simulation` step per sample, and with `compare` runs the
-solver loop on the same scenario, so the fitted controller's closed-loop
-cost stands next to the solver's in one report.
+solver loop on the same scenario, so one report carries the fitted
+controller's closed-loop cost and the solver's.
 
 ## Benefit hypothesis
 
-The Klatt-Engell study measured what this feature packages: labels at
-0.2 s per solve, gradient labels worth a two-to-threefold data saving
-in the sparse regime, and the training protocol mattering more than
-the loss choice. The defaults are that study's tuned winner (cosine
-decay with clipping, gamma 1, value-only fine-tune), so a user gets
-the measured configuration rather than the paper's, and the options
-reproduce the paper's protocol exactly when set to it. On models where
-one solve costs minutes, the data method and the gradient labels carry
-the economics.
+An explicit controller replaces each online solve with a function
+evaluation, so NMPC can run where a solver cannot: an embedded target,
+a sampling rate the solve cannot meet, or a platform that carries no
+solver. The offline cost is the labeled dataset, one solve per point,
+and it grows with the model size and the input dimension. Both data
+options lower that cost: each solve's factorization also yields the
+derivative of the action with respect to every sampled input, so the
+gradient labels multiply the information per solve at no additional
+solves, and their value is largest exactly where solves are expensive
+and the dataset is therefore sparse; the low-discrepancy designs
+spend a fixed solve budget evenly over the operating region. The
+training defaults are the configuration this package measured best,
+and the options reproduce the protocol of Lueken, Brandner & Lucia
+(2023) exactly when set to it.
 
 ## Acceptance criteria
 
