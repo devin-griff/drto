@@ -75,7 +75,9 @@ before each solve and left at its last solution. With ``information``,
 each labeled point also carries its information matrix — the reduced
 Hessian over the first moves — read from the same factorization
 through pounce's ``information``: one query per solve, symmetric, in
-control units, nested by control names.
+control units, nested by control names. The per-point warnings that
+query raises are suppressed and counted by kind, and the dataset
+records the counts.
 
 `explicit_nmpc_train` fits the network on min-max-scaled inputs and
 outputs, the scaling taken from the sampled boxes and the control
