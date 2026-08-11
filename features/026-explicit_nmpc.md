@@ -55,6 +55,7 @@ report = drto.explicit_nmpc_closed_loop(
     samples=50,         # closed-loop steps
     x0=None,            # initial state; default the initial-condition Params' values
     disturbances=None,  # realization per step, as the simulations take it
+    solver="pounce",
     compare=True,       # also solve at each visited state; record the solver's control
 )
 ```
