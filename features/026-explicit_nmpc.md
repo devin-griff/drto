@@ -47,7 +47,7 @@ u0 = policy({"ca_hat": 0.8, "cb_hat": 0.5, "tr_hat": 134.1, "tk_hat": 130.0})
 policy.save("policy.pt")
 policy = drto.ExplicitNMPC.load("policy.pt")
 
-report = drto.explicit_nmpc_rollout(
+report = drto.explicit_nmpc_closed_loop(
     policy, m,
     samples=50,         # closed-loop steps
     x0=None,            # initial state; default the initial-condition Params' values
@@ -83,7 +83,7 @@ install is a descriptive error.
 
 The trained policy is callable with named input values in the model's own
 units and returns the control values in theirs.
-`explicit_nmpc_rollout` runs it closed loop against the declared model,
+`explicit_nmpc_closed_loop` runs it closed loop against the declared model,
 one `dynamic_simulation` step per sample, and with `compare` runs the
 solver loop on the same scenario, so one report carries the fitted
 controller's closed-loop cost and the solver's.
@@ -125,7 +125,7 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   validation value error.
 - The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it.
-- `explicit_nmpc_rollout` steps the declared model under the policy and
+- `explicit_nmpc_closed_loop` steps the declared model under the policy and
   returns a readable report in the feature 010 shape; with `compare`
   the same scenario runs under the solver loop and the report carries
   both closed-loop costs.
