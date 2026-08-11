@@ -21,6 +21,7 @@ data = drto.explicit_nmpc_data(
     inputs=None,        # Params to sample; default the initial-condition Params
     ranges=None,        # {param: (lo, hi)}; default the paired state's bounds
     gradients=True,     # store du0/dinput, read from the solve's factorization
+    hessians=False,     # store each point's reduced Hessian over the first moves
     solver="pounce",
     seed=0,
     path=None,          # JSON written when given
@@ -39,6 +40,8 @@ policy = drto.explicit_nmpc_train(
     clip=1.0,           # gradient-norm cap; None disables
     epochs=50000,
     fine_tune=0.2,      # final fraction trained on the value error alone
+    weighting=None,     # None, or "hessian": weight both loss terms by
+                        # the point's reduced Hessian
     seeds=1,            # networks trained; the best by validation is kept
     device="auto",
 )
@@ -68,7 +71,11 @@ nested training-set sizes; `lhs` stratifies every coordinate exactly at
 its own `n`; `uniform` is independent draws, the sampling of Lueken,
 Brandner & Lucia (2023). Draws whose solve does not return optimal are
 recorded as failures and carry no labels. The model is cold-started
-before each solve and left at its last solution.
+before each solve and left at its last solution. With ``hessians``,
+each labeled point also carries the reduced Hessian over the first
+moves, read from the same factorization through pounce's
+``information`` — one query per solve — symmetric, in control units,
+nested by control names.
 
 `explicit_nmpc_train` fits the network on min-max-scaled inputs and
 outputs, the scaling taken from the sampled boxes and the control
@@ -79,7 +86,18 @@ of the budget on the value error alone. Every run trains the full
 budget and keeps the weights with the best validation value error;
 `seeds` trains that many networks and keeps the best by the same
 metric. The kept policy carries its run's per-epoch training loss and
-validation value error as `policy.history`. Training requires torch, an optional dependency, and a missing
+validation value error as `policy.history`.
+
+With `weighting="hessian"` both loss terms are weighted by the point's
+stored reduced Hessian in scaled control units: the value term becomes
+the quadratic form of the residual in that matrix and the gradient
+term the trace of the Jacobian residual's quadratic form, each matrix
+divided by the dataset's mean trace so `gamma` keeps its scale, and
+the validation value error is weighted the same way. The weighting
+prices each error by the cost curvature the solve measured, so the fit
+is accurate where the objective is steep and tolerant where it is
+flat. A dataset without stored Hessians under this option is a
+descriptive error naming `hessians=True`. Training requires torch, an optional dependency, and a missing
 install is a descriptive error.
 
 The trained policy is callable with named input values in the model's own
@@ -122,9 +140,11 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   action per declared control, the objective, and, with `gradients`,
   the derivative of each first action with respect to each sampled
   Param. The derivatives are read from the pounce factorization, so
-  `gradients=True` with any other solver is a descriptive error. A
-  non-optimal solve is recorded as a failure and excluded. `path`
-  writes JSON that round-trips through the loader.
+  `gradients=True` with any other solver is a descriptive error, and
+  `hessians=True` likewise. With `hessians`, each labeled point stores
+  the symmetric reduced Hessian over the first moves, and the JSON
+  round-trips it. A non-optimal solve is recorded as a failure and
+  excluded. `path` writes JSON that round-trips through the loader.
 - `explicit_nmpc_train` honors every listed option; `sobolev=True` on a
   dataset without gradients is a descriptive error, and torch missing
   is a descriptive error naming the install, for training and for
