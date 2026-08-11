@@ -86,7 +86,9 @@ units and returns the control values in theirs.
 `explicit_nmpc_closed_loop` runs it closed loop against the declared model,
 one `dynamic_simulation` step per sample, and with `compare` runs the
 solver loop on the same scenario, so one report carries the fitted
-controller's closed-loop cost and the solver's.
+controller's closed-loop cost and the solver's, and both loops'
+trajectories: the state and the applied control per sample, so the two
+control sequences plot over each other.
 
 ## Benefit hypothesis
 
@@ -126,8 +128,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
 - The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it.
 - `explicit_nmpc_closed_loop` steps the declared model under the policy and
-  returns a readable report in the feature 010 shape; with `compare`
-  the same scenario runs under the solver loop and the report carries
-  both closed-loop costs.
+  returns a readable report in the feature 010 shape holding the state
+  and applied-control trajectory per sample; with `compare` the same
+  scenario runs under the solver loop and the report carries both
+  closed-loop costs and both trajectories.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
