@@ -94,6 +94,14 @@ The estimation-side surface:
    :members:
 ```
 
+## Explicit NMPC
+
+```{eval-rst}
+.. autofunction:: drto.explicit_nmpc_data
+.. autoclass:: drto.ExplicitNmpcDataset
+   :members:
+```
+
 ## Plotting
 
 ```{eval-rst}
