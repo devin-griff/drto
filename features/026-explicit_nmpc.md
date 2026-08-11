@@ -52,7 +52,7 @@ report = drto.explicit_nmpc_closed_loop(
     samples=50,         # closed-loop steps
     x0=None,            # initial state; default the initial-condition Params' values
     disturbances=None,  # realization per step, as the simulations take it
-    compare=True,       # also run the solver loop and report both costs
+    compare=True,       # also solve at each visited state; record the solver's control
 )
 ```
 
@@ -84,11 +84,12 @@ install is a descriptive error.
 The trained policy is callable with named input values in the model's own
 units and returns the control values in theirs.
 `explicit_nmpc_closed_loop` runs it closed loop against the declared model,
-one `dynamic_simulation` step per sample, and with `compare` runs the
-solver loop on the same scenario, so one report carries the fitted
-controller's closed-loop cost and the solver's, and both loops'
-trajectories: the state and the applied control per sample, so the two
-control sequences plot over each other.
+one `dynamic_simulation` step per sample. With `compare` the horizon
+problem is also solved at each state the policy visits, so the report
+carries one state trajectory and, per sample, the policy's applied
+control beside the control the solver takes at that same state: the two
+sequences compare point by point. The solver-driven closed loop is
+`drto.ideal_nmpc`, not repeated here.
 
 ## Benefit hypothesis
 
@@ -129,8 +130,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   returns controls in model units; `save`/`load` round-trips it.
 - `explicit_nmpc_closed_loop` steps the declared model under the policy and
   returns a readable report in the feature 010 shape holding the state
-  and applied-control trajectory per sample; with `compare` the same
-  scenario runs under the solver loop and the report carries both
-  closed-loop costs and both trajectories.
+  and applied-control trajectory per sample; with `compare` the horizon
+  problem is solved at each visited state and the report also carries
+  the solver's control there: one state trajectory, two control
+  sequences.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
