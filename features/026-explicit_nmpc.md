@@ -38,6 +38,7 @@ policy = drto.explicit_nmpc_train(
     schedule="cosine",  # "cosine" decays to lr_min; "flat" holds lr
     lr_min=1e-5,
     clip=1.0,           # gradient-norm cap; None disables
+    weight_decay=0.0,   # AdamW's decoupled L2 penalty on the weights; 0 disables
     epochs=50000,
     fine_tune=0.2,      # final fraction trained on the value error alone
     weighting=None,     # None, or "information": weight both loss
@@ -85,7 +86,9 @@ outputs, the scaling taken from the sampled boxes and the control
 bounds, with the gradient labels scaled by the ranges. With `sobolev`
 the loss adds `gamma` times the squared error of the network's Jacobian
 against the stored derivatives; `fine_tune` trains the final fraction
-of the budget on the value error alone. Every run trains the full
+of the budget on the value error alone. `weight_decay` passes AdamW's
+decoupled L2 penalty on the weights, applied in the Sobolev and
+fine-tune phases alike. Every run trains the full
 budget and keeps the weights with the best validation value error;
 `seeds` trains that many networks and keeps the best by the same
 metric. The kept policy carries its run's per-epoch training loss and
@@ -97,9 +100,9 @@ the quadratic form of the residual in that matrix and the gradient
 term the trace of the Jacobian residual's quadratic form, each matrix
 divided by the dataset's mean trace so `gamma` keeps its scale, and
 the validation value error is weighted the same way. The weighting
-prices each error by the cost curvature the solve measured, so the fit
-is accurate where the objective is steep and tolerant where it is
-flat. A dataset without stored information matrices under this option is a
+multiplies each error by the cost curvature the solve measured, so
+errors count for more where the objective is steep and for less where
+it is flat. A dataset without stored information matrices under this option is a
 descriptive error naming `information=True`. Training requires torch, an optional dependency, and a missing
 install is a descriptive error.
 
@@ -153,7 +156,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   is a descriptive error naming the install, for training and for
   `ExplicitNMPC.load` alike. A `validation` fraction splits off the
   dataset reproducibly under the seed; a dataset or path supplied is
-  used as given. Runs are reproducible under a seed, and with
+  used as given. `weight_decay` applies AdamW's decoupled penalty in
+  both phases; the default `0.0` reproduces the unpenalized run. Runs
+  are reproducible under a seed, and with
   `seeds > 1` the network kept is the best by validation value error.
   `weighting="information"` applies the stated weighted forms:
   matrices equal to one constant multiple of the identity in scaled
