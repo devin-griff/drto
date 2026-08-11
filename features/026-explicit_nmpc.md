@@ -152,6 +152,10 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   dataset reproducibly under the seed; a dataset or path supplied is
   used as given. Runs are reproducible under a seed, and with
   `seeds > 1` the network kept is the best by validation value error.
+  `weighting="hessian"` applies the stated weighted forms: Hessians
+  equal to one constant multiple of the identity in scaled control
+  units normalize to the identity and give the plain loss, and a
+  dataset without stored Hessians is a descriptive error.
 - The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it, the
   training history included.
