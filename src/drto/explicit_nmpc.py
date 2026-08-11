@@ -93,7 +93,7 @@ class ExplicitNmpcDataset:
         counts = c.get("information_warnings") or {}
         if counts:
             noted = ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))
-            summary += f"; information warnings: {noted}"
+            summary += f". Information warnings: {noted}"
         return summary
 
     def save(self, path):
@@ -771,11 +771,11 @@ class ExplicitNmpcReport(NmpcHistory):
             f"drto explicit-NMPC closed loop: "
             f"{max(0, len(self.times) - 1)} samples, closed-loop cost "
             f"{sum(self.stage_costs):.6g} (the stage cost summed over the "
-            f"visited samples); states {', '.join(self.states) or '(none)'}; "
-            f"moves {', '.join(self.moves) or '(none)'}"
+            f"visited samples). States {', '.join(self.states) or '(none)'}. "
+            f"Moves {', '.join(self.moves) or '(none)'}"
         )
         if self.solver_moves:
-            text += "; the solver's controls recorded at the visited states"
+            text += ". The solver's controls are recorded at the visited states"
         return text
 
 

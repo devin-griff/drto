@@ -221,4 +221,4 @@ def test_information_warnings_are_suppressed_and_counted(monkeypatch):
     assert counts["pinned member"] == 2
     assert counts["unprojected constraint"] == 2
     assert counts["other"] == 2
-    assert "information warnings" in repr(d)
+    assert "Information warnings" in repr(d)
