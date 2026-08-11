@@ -29,13 +29,26 @@ policy run on torch, an optional dependency.
 """
 import json
 import warnings
+from dataclasses import dataclass, field
 
 from pyomo.core import Objective, value
 from pyomo.opt import SolverFactory, TerminationCondition
 
-from drto.cold_start import cold_start_dynamic
+from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
+from drto.dynamic_optimization import _members, _spread
+from drto.ideal_nmpc import (
+    _WARM_SOLVERS,
+    _WARM_START_OPTIONS,
+    NmpcHistory,
+    _first_move,
+    _one_sample,
+    _pinned,
+    _prune_suffixes,
+)
+from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
+from drto.warm_start import warm_start_dynamic
 
 #: The designs explicit_nmpc_data draws by.
 _DESIGNS = ("sobol", "lhs", "uniform")
@@ -719,3 +732,266 @@ class ExplicitNMPC:
         torch = _torch()
         d = torch.load(path, weights_only=False)
         return cls(d["meta"], d["state"])
+
+
+#: The stage-cost kinds whose first member evaluates a visited sample's
+#: cost on the plant.
+_STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost", "move_suppression")
+
+#: The horizon-only cost constructs the plant sheds outright.
+_PLANT_SHED = ("tracking_terminal_cost", "terminal_constraint")
+
+#: The plant's constant-zero objective.
+_PLANT_OBJECTIVE = "_drto_policy_plant_objective"
+
+
+@dataclass
+class ExplicitNmpcReport(NmpcHistory):
+    """The policy's closed loop, in the loop-history shape.
+
+    Everything :class:`drto.NmpcHistory` records, plus ``stage_costs``,
+    the stage cost at each visited sample, and, when the comparison ran,
+    ``solver_moves``: the control the horizon solve takes at the same
+    visited states, beside the policy's applied ``moves``. The summary
+    states the closed-loop cost, the stage costs summed; it is computed
+    here and stored nowhere else.
+    """
+
+    solver_moves: dict = field(default_factory=dict)
+    stage_costs: list = field(default_factory=list)
+
+    def __str__(self):
+        text = (
+            f"drto explicit-NMPC closed loop: "
+            f"{max(0, len(self.times) - 1)} samples, closed-loop cost "
+            f"{sum(self.stage_costs):.6g} (the stage cost summed over the "
+            f"visited samples); states {', '.join(self.states) or '(none)'}; "
+            f"moves {', '.join(self.moves) or '(none)'}"
+        )
+        if self.solver_moves:
+            text += "; the solver's controls recorded at the visited states"
+        return text
+
+
+def _policy_plant(m, fn):
+    """The one-sample plant, cloned from the assembled optimization.
+
+    The controls are fixed (the loop writes each step's move), the
+    objective is the constant zero, the terminal constructs leave, and
+    each stage cost keeps only its first member, which evaluates the
+    visited sample's cost once the step is simulated.
+    """
+    from pyomo.core import Objective
+
+    plant = m.clone()
+    regp = info(plant)
+    t0 = regp.declarations("horizon")[0]["samples"][0]
+    for kind in _PLANT_SHED:
+        for record in regp.declarations(kind):
+            comp = record["component"]
+            if comp.parent_block() is not None:
+                comp.parent_block().del_component(comp)
+        regp._declarations.pop(kind, None)
+    for kind in _STAGE_KINDS:
+        for record in regp.declarations(kind):
+            con = record["component"]
+            if con.parent_block() is None or not con.is_indexed():
+                continue
+            for idx in list(con.keys()):
+                if idx != t0:
+                    del con[idx]
+    for u in regp.components("control"):
+        for vd in _members(u):
+            vd.fix()
+    for obj in plant.component_data_objects(Objective, active=True):
+        obj.deactivate()
+    plant.add_component(_PLANT_OBJECTIVE, Objective(expr=0.0))
+    _one_sample(plant)
+    _prune_suffixes(plant)
+    return plant
+
+
+def _stage_cost_vars(reg, t0, fn):
+    """The scalar cost variables of the stage costs' first members."""
+    out = []
+    for kind in _STAGE_KINDS:
+        for record in reg.declarations(kind):
+            con = record["component"]
+            if con.parent_block() is None:
+                continue
+            cd = con[t0] if con.is_indexed() else con
+            side, _ = _side_matching(cd, _is_var_member, fn, "the cost variable")
+            out.append(side)
+    return out
+
+
+def explicit_nmpc_closed_loop(
+    policy, m, samples=50, x0=None, disturbances=None, solver="pounce", compare=False
+):
+    """Run the fitted policy closed loop against the declared model.
+
+    Parameters
+    ----------
+    policy : ExplicitNMPC
+        The fitted policy.
+    m : Block
+        The assembled optimization the policy was sampled from. With
+        ``compare`` it is solved at each visited state; the plant is a
+        one-sample simulation cloned from it either way.
+    samples : int
+        The loop length.
+    x0 : mapping, optional
+        Declared state (the component, or its name) to the value
+        written into its initial-condition Params before the first
+        step. Omitted, the Params' current values are the first state.
+    disturbances : mapping, optional
+        Declared disturbance (the component, or its name) to its
+        per-step realization, one value per sample. A disturbance with
+        no entry is zero, and the loop is deterministic.
+    solver : str
+        The solver for the plant steps and the compare solves.
+    compare : bool
+        Also solve the horizon problem at each visited state and record
+        the control it takes there, beside the policy's.
+
+    Returns
+    -------
+    ExplicitNmpcReport
+        The visited trajectory, the applied controls, the per-sample
+        stage costs, and, with ``compare``, the solver's controls at
+        the same states. ``drto.plot_states`` and ``drto.plot_controls``
+        draw it.
+    """
+    fn = "explicit_nmpc_closed_loop"
+    reg = info(m)
+    if not reg.has_declaration("horizon"):
+        raise ValueError(f"drto: {fn} requires the horizon declaration.")
+    grid = reg.declarations("horizon")[0]["samples"]
+    t0, t1 = grid[0], grid[1]
+    dt = t1 - t0
+    time = reg.components("horizon")[0]
+
+    owner = {}
+    for z in reg.components("state"):
+        pos, subs = _time_index(z, time)
+        for idx in z:
+            o, t = _split_index(idx, pos, len(subs))
+            if t == t0:
+                owner[id(z[idx])] = (z, o)
+    pins = _pinned(reg, fn)
+    hooks_of = {}
+    for vd, hook in pins:
+        hooks_of.setdefault(owner[id(vd)][0].local_name, []).append(hook)
+    for key, val in (x0 or {}).items():
+        name = key if isinstance(key, str) else key.local_name
+        hooks = hooks_of.get(name)
+        if hooks is None:
+            raise ValueError(
+                f"drto: {fn} got an initial state for '{name}', which is "
+                f"not a pinned state; pinned: {', '.join(hooks_of) or '(none)'}."
+            )
+        for hook, v in zip(hooks, _spread(val, len(hooks), name, fn)):
+            hook.set_value(v)
+
+    declared_dist = [w.local_name for w in reg.components("disturbance")]
+    plan = {}
+    for key, val in (disturbances or {}).items():
+        name = key if isinstance(key, str) else key.local_name
+        if name not in declared_dist:
+            raise ValueError(
+                f"drto: {fn} got a realization for '{name}', which is not "
+                f"a declared disturbance; declared: "
+                f"{', '.join(declared_dist) or '(none)'}."
+            )
+        if len(val) < samples:
+            raise ValueError(
+                f"drto: {fn} runs {samples} samples but the sequence for "
+                f"'{name}' has {len(val)} values; give one per sample."
+            )
+        plan[name] = list(val)
+
+    if solver == "pounce":
+        import pyomo_pounce  # noqa: F401
+    opt = SolverFactory(solver)
+
+    plant = _policy_plant(m, fn)
+    regp = info(plant)
+    p_pins = _pinned(regp, fn)
+    time_p = regp.components("horizon")[0]
+    ss = list(reg.declarations("steady_state"))
+    labels, targets, p_read = [], [], []
+    for (c_vd, _h), (p_vd, _hp) in zip(pins, p_pins):
+        z, o = owner[id(c_vd)]
+        labels.append(
+            z.local_name if not o else f"{z.local_name}[{','.join(map(str, o))}]"
+        )
+        tgt = _target(ss, z, "steady_state", fn)
+        targets.append(value(tgt[o] if o else tgt))
+        zp = p_vd.parent_component()
+        pos, subs = _time_index(zp, time_p)
+        po, _t = _split_index(p_vd.index(), pos, len(subs))
+        p_read.append(zp[_join_index(po, t1, pos)])
+    c_hooks = [h for _vd, h in pins]
+    p_hooks = [h for _vd, h in p_pins]
+
+    report = ExplicitNmpcReport()
+    report.times.append(t0)
+    for label, hook, tgt in zip(labels, c_hooks, targets):
+        report.states[label] = [value(hook)]
+        report.state_targets[label] = tgt
+    m_controls = list(reg.components("control"))
+    p_controls = list(regp.components("control"))
+    ucss = list(reg.declarations("steady_state_control"))
+    for u in m_controls:
+        report.moves[u.local_name] = []
+        report.control_targets[u.local_name] = value(
+            _target(ucss, u, "steady_state_control", fn)
+        )
+        if compare:
+            report.solver_moves[u.local_name] = []
+    p_dist = list(regp.components("disturbance"))
+    for w in p_dist:
+        report.realizations[w.local_name] = []
+    cost_vars = _stage_cost_vars(regp, t0, fn)
+
+    for k in range(samples):
+        action = policy({h.name: value(h) for h in c_hooks})
+        if compare:
+            if k > 0:
+                warm_start_dynamic(m)
+            options = (
+                dict(_WARM_START_OPTIONS) if k > 0 and solver in _WARM_SOLVERS else {}
+            )
+            res = opt.solve(m, options=options)
+            if res.solver.termination_condition != TerminationCondition.optimal:
+                raise RuntimeError(
+                    f"drto: {fn}: the compare solve failed at sample {k} "
+                    f"({res.solver.termination_condition})."
+                )
+            for u in m_controls:
+                report.solver_moves[u.local_name].append(value(_first_move(u)))
+        for u, pu in zip(m_controls, p_controls):
+            move = float(action[u.name])
+            report.moves[u.local_name].append(move)
+            for vd in _members(pu):
+                vd.set_value(move)
+        for w in p_dist:
+            seq = plan.get(w.local_name)
+            realized = float(seq[k]) if seq is not None else 0.0
+            report.realizations[w.local_name].append(realized)
+            for vd in _members(w):
+                vd.set_value(realized)
+        res = opt.solve(plant)
+        if res.solver.termination_condition != TerminationCondition.optimal:
+            raise RuntimeError(
+                f"drto: {fn}: the plant solve failed at sample {k} "
+                f"({res.solver.termination_condition})."
+            )
+        report.stage_costs.append(sum(value(cv) for cv in cost_vars))
+        for c_hook, p_hook, src, label in zip(c_hooks, p_hooks, p_read, labels):
+            v = value(src)
+            c_hook.set_value(v)
+            p_hook.set_value(v)
+            report.states[label].append(v)
+        report.times.append(t0 + (k + 1) * dt)
+    return report

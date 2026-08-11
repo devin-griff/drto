@@ -103,6 +103,9 @@ The estimation-side surface:
 .. autofunction:: drto.explicit_nmpc_train
 .. autoclass:: drto.ExplicitNMPC
    :members:
+.. autofunction:: drto.explicit_nmpc_closed_loop
+.. autoclass:: drto.ExplicitNmpcReport
+   :members:
 ```
 
 ## Plotting

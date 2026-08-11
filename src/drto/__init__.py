@@ -32,6 +32,8 @@ from drto.declarations import (
 from drto.explicit_nmpc import (
     ExplicitNMPC,
     ExplicitNmpcDataset,
+    ExplicitNmpcReport,
+    explicit_nmpc_closed_loop,
     explicit_nmpc_data,
     explicit_nmpc_train,
 )
@@ -82,6 +84,8 @@ __all__ = [
     "SteadyStateInitReport",
     "explicit_nmpc_data",
     "explicit_nmpc_train",
+    "explicit_nmpc_closed_loop",
+    "ExplicitNmpcReport",
     "ExplicitNmpcDataset",
     "ExplicitNMPC",
     "horizon",

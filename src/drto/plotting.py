@@ -188,13 +188,15 @@ def _history_keys(recorded, selection, what):
     return keys
 
 
-def _draw_history(history, keys, series, targets, t_max, staircase):
+def _draw_history(history, keys, series, targets, t_max, staircase, second=None):
     """Draw a history's recorded trajectories, one fixed-size panel each.
 
     The actual values draw the way a model's draw: states as filled
     points at the sample instants, moves as the staircase they
     physically are, each held over its sample. Setpoint lines come from
-    the recorded targets.
+    the recorded targets. ``second`` lays a second recorded series on
+    the same panels, dashed — the solver's controls at the visited
+    states, when a closed-loop report carries them.
     """
     rows = max(1, math.ceil(len(keys) / 2))
     fig, axes = plt.subplots(
@@ -203,7 +205,7 @@ def _draw_history(history, keys, series, targets, t_max, staircase):
     flat = [ax for row in axes for ax in row]
     for ax in flat[len(keys) :]:
         ax.axis("off")
-    drew_target = False
+    drew_target = drew_second = False
     times = history.times
     for ax, key in zip(flat, keys):
         vals = series[key]
@@ -215,6 +217,11 @@ def _draw_history(history, keys, series, targets, t_max, staircase):
         else:
             pts = [(t, v) for t, v in zip(times, vals) if t <= t_max]
             ax.plot(*zip(*pts), "o", color="C0")
+        if second and second.get(key):
+            v2 = second[key]
+            pts = [(t, v) for t, v in zip(times, v2 + [v2[-1]]) if t <= t_max]
+            ax.step(*zip(*pts), where="post", color="C1", linestyle="--")
+            drew_second = True
         target = targets.get(key)
         if target is not None:
             ax.axhline(target, color="C0", linestyle=":")
@@ -230,6 +237,11 @@ def _draw_history(history, keys, series, targets, t_max, staircase):
         )
     ]
     labels = ["actual"]
+    if drew_second:
+        handles.append(
+            _mlines.Line2D([], [], color="C1", linestyle="--", drawstyle="steps-post")
+        )
+        labels.append("solver")
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
@@ -423,13 +435,23 @@ def plot_controls(m, controls=None, t_max=50):
 
     Handed an :class:`drto.NmpcHistory` instead of a model, draws the
     implemented moves as the staircase they physically are, each held
-    over its sample; ``controls`` then selects the recorded labels.
+    over its sample; ``controls`` then selects the recorded labels. A
+    closed-loop report carrying the solver's controls draws them on the
+    same panels, dashed.
     """
     from drto.ideal_nmpc import NmpcHistory
 
     if isinstance(m, NmpcHistory):
         keys = _history_keys(m.moves, controls, "control")
-        return _draw_history(m, keys, m.moves, m.control_targets, t_max, True)
+        return _draw_history(
+            m,
+            keys,
+            m.moves,
+            m.control_targets,
+            t_max,
+            True,
+            second=getattr(m, "solver_moves", None),
+        )
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("control"), controls, "control", time)
