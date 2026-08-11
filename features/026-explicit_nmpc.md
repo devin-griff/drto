@@ -88,7 +88,7 @@ one `dynamic_simulation` step per sample. With `compare` the horizon
 problem is also solved at each state the policy visits, so the report
 carries one state trajectory and, per sample, the policy's applied
 control beside the control the solver takes at that same state: the two
-sequences compare point by point. The solver-driven closed loop is
+sequences are comparable point by point. The solver-driven closed loop is
 `drto.ideal_nmpc`, not repeated here.
 
 ## Benefit hypothesis
@@ -119,20 +119,27 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
 - Each labeled point carries the sampled values, the first control
   action per declared control, the objective, and, with `gradients`,
   the derivative of each first action with respect to each sampled
-  Param. A non-optimal solve is recorded as a failure and excluded.
-  `path` writes JSON that round-trips through the loader.
+  Param. The derivatives are read from the pounce factorization, so
+  `gradients=True` with any other solver is a descriptive error. A
+  non-optimal solve is recorded as a failure and excluded. `path`
+  writes JSON that round-trips through the loader.
 - `explicit_nmpc_train` honors every listed option; `sobolev=True` on a
   dataset without gradients is a descriptive error, and torch missing
-  is a descriptive error naming the install. Runs are reproducible
-  under a seed, and with `seeds > 1` the network kept is the best by
-  validation value error.
+  is a descriptive error naming the install, for training and for
+  `ExplicitNMPC.load` alike. A `validation` fraction splits off the
+  dataset reproducibly under the seed; a dataset or path supplied is
+  used as given. Runs are reproducible under a seed, and with
+  `seeds > 1` the network kept is the best by validation value error.
 - The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it.
 - `explicit_nmpc_closed_loop` steps the declared model under the policy and
   returns a readable report in the feature 010 shape holding the state
-  and applied-control trajectory per sample; with `compare` the horizon
-  problem is solved at each visited state and the report also carries
-  the solver's control there: one state trajectory, two control
-  sequences.
+  and applied-control trajectory per sample, its summary stating the
+  policy's closed-loop cost computed from that trajectory and stored
+  nowhere else. `x0` and a supplied disturbance realization are
+  honored, and the loop is deterministic without one. With `compare`
+  the horizon problem is solved at each visited state and the report
+  also carries the solver's control there: one state trajectory, two
+  control sequences.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
