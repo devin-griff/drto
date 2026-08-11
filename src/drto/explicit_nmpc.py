@@ -176,6 +176,7 @@ def explicit_nmpc_data(
     inputs=None,
     ranges=None,
     gradients=True,
+    hessians=False,
     solver="pounce",
     seed=0,
     path=None,
@@ -201,6 +202,11 @@ def explicit_nmpc_data(
     gradients : bool
         Record the derivative of each first action with respect to each
         sampled Param, read from the pounce factorization.
+    hessians : bool
+        Record each labeled point's reduced Hessian over the first
+        moves, read from the same factorization through pounce's
+        ``information``: one query per solve, symmetric, in control
+        units.
     solver : str
         The labeling solver's name.
     seed : int
@@ -219,6 +225,12 @@ def explicit_nmpc_data(
             f"drto: {fn} reads the gradients from the pounce factorization; "
             f"got solver='{solver}'. Pass gradients=False, or solve with "
             f"pounce."
+        )
+    if hessians and solver != "pounce":
+        raise ValueError(
+            f"drto: {fn} reads the reduced Hessians from the pounce "
+            f"factorization; got solver='{solver}'. Pass hessians=False, "
+            f"or solve with pounce."
         )
     reg = info(m)
     pairs = _sampled_params(reg, inputs, ranges, fn)
@@ -262,6 +274,17 @@ def explicit_nmpc_data(
                 }
                 for u in moves
             }
+        if hessians:
+            import pyomo_pounce
+
+            block = pyomo_pounce.information(m, wrt=moves)
+            point["H"] = {
+                ui.parent_component().name: {
+                    uj.parent_component().name: float(block.matrix[i][j])
+                    for j, uj in enumerate(moves)
+                }
+                for i, ui in enumerate(moves)
+            }
         points.append(point)
 
     dataset = ExplicitNmpcDataset(
@@ -270,6 +293,7 @@ def explicit_nmpc_data(
             "method": method,
             "seed": seed,
             "gradients": bool(gradients),
+            "hessians": bool(hessians),
             "solver": solver,
             "inputs": [p.name for p, _ in pairs],
             "ranges": {p.name: list(box) for p, box in pairs},
@@ -317,8 +341,8 @@ def _resolve_dataset(data, what):
     )
 
 
-def _arrays(dataset, gradients, fn):
-    """The dataset as scaled arrays: x, u, and the Jacobian or None."""
+def _arrays(dataset, gradients, fn, hessians=False):
+    """The dataset as scaled arrays: x, u, the Jacobian, the Hessians."""
     import numpy as np
 
     cfg = dataset.config
@@ -351,7 +375,23 @@ def _arrays(dataset, gradients, fn):
             ]
         )
         J = J * rx[None, None, :] / ru[None, :, None]
-    return (x - x_lo) / rx, (u - u_lo) / ru, J
+    H = None
+    if hessians:
+        if any("H" not in p for p in dataset.points):
+            raise ValueError(
+                f"drto: {fn}: weighting='hessian' needs the stored reduced "
+                f"Hessians, and this dataset carries none; regenerate it "
+                f"with hessians=True."
+            )
+        H = np.array(
+            [
+                [[p["H"][ui][uj] for uj in u_names] for ui in u_names]
+                for p in dataset.points
+            ]
+        )
+        # scaled control units: H-tilde = Du H Du
+        H = H * ru[None, :, None] * ru[None, None, :]
+    return (x - x_lo) / rx, (u - u_lo) / ru, J, H
 
 
 def _network(torch, hidden, activation, n_in, n_out):
@@ -404,6 +444,7 @@ def explicit_nmpc_train(
     clip=1.0,
     epochs=50000,
     fine_tune=0.2,
+    weighting=None,
     seeds=1,
     device="auto",
 ):
@@ -439,6 +480,13 @@ def explicit_nmpc_train(
     fine_tune : float
         The final fraction of the budget trained on the value error
         alone, at a flat 1e-4; ``0`` disables the phase.
+    weighting : str, optional
+        ``None`` is the plain loss. ``"hessian"`` weights both terms by
+        each point's stored reduced Hessian in scaled control units,
+        every matrix divided by the dataset's mean trace so ``gamma``
+        keeps its scale; the validation value error is weighted the
+        same way. The fit is then accurate where the cost surface is
+        steep and tolerant where it is flat.
     seeds : int
         Networks trained from distinct initializations; the best by
         validation value error is kept.
@@ -460,20 +508,34 @@ def explicit_nmpc_train(
         raise ValueError(
             f"drto: {fn} got schedule='{schedule}'; the choices are " f"cosine, flat."
         )
+    if weighting not in (None, "hessian"):
+        raise ValueError(
+            f"drto: {fn} got weighting='{weighting}'; the choices are "
+            f"None, hessian."
+        )
+    weighted = weighting == "hessian"
     dataset = _resolve_dataset(data, "data")
-    x, u, J = _arrays(dataset, sobolev, fn)
+    x, u, J, H = _arrays(dataset, sobolev, fn, hessians=weighted)
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
         order = rng.permutation(len(x))
         n_val = max(1, round(validation * len(x)))
         val_idx, train_idx = order[:n_val], order[n_val:]
         x_val, u_val = x[val_idx], u[val_idx]
+        H_val = H[val_idx] if H is not None else None
         x, u = x[train_idx], u[train_idx]
         if J is not None:
             J = J[train_idx]
+        if H is not None:
+            H = H[train_idx]
     else:
         vset = _resolve_dataset(validation, "validation")
-        x_val, u_val, _ = _arrays(vset, False, fn)
+        x_val, u_val, _, H_val = _arrays(vset, False, fn, hessians=weighted)
+    if weighted:
+        # one normalization for both sets, so gamma keeps its scale
+        norm = float(np.mean(np.trace(H, axis1=1, axis2=2))) / H.shape[1]
+        H = H / norm
+        H_val = H_val / norm
 
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -483,6 +545,14 @@ def explicit_nmpc_train(
 
     x, u, x_val, u_val = t(x), t(u), t(x_val), t(u_val)
     J = t(J) if J is not None else None
+    H = t(H) if H is not None else None
+    H_val = t(H_val) if H is not None else None
+
+    def value_error(model_out, target, W):
+        e = model_out - target
+        if W is None:
+            return torch.mean(e**2)
+        return torch.mean(torch.einsum("bi,bij,bj->b", e, W, e)) / e.shape[1]
 
     phase2 = epochs - int(epochs * fine_tune)
     best_overall = None
@@ -506,10 +576,17 @@ def explicit_nmpc_train(
                 opt = torch.optim.Adam(model.parameters(), lr=_FINE_TUNE_LR)
                 sched, clipping = None, None
             opt.zero_grad()
-            loss = torch.mean((model(x) - u) ** 2)
+            loss = value_error(model(x), u, H)
             if sobolev and epoch < phase2:
                 jac = _jacobian(torch, model, x)
-                loss = loss + gamma * torch.mean((jac - J) ** 2)
+                E = jac - J
+                if H is None:
+                    gterm = torch.mean(E**2)
+                else:
+                    gterm = torch.mean(torch.einsum("boi,bop,bpi->b", E, H, E)) / (
+                        E.shape[1] * E.shape[2]
+                    )
+                loss = loss + gamma * gterm
             loss.backward()
             if clipping is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clipping)
@@ -520,7 +597,7 @@ def explicit_nmpc_train(
                 del loss
                 continue
             with torch.no_grad():
-                val = torch.mean((model(x_val) - u_val) ** 2).item()
+                val = value_error(model(x_val), u_val, H_val).item()
             history["epoch"].append(epoch + 1)
             history["train_loss"].append(float(loss.item()))
             history["val_mse"].append(val)
@@ -538,6 +615,7 @@ def explicit_nmpc_train(
         "u_bounds": {k: list(v) for k, v in dataset.config["u_bounds"].items()},
         "hidden": list(hidden),
         "activation": activation,
+        "weighting": weighting,
         "history": history,
         "validation_error": val_mse,
     }

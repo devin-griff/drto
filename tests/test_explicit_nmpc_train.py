@@ -147,3 +147,62 @@ def test_save_load_round_trips(tmp_path):
     assert back(probe) == policy(probe)
     assert back.history == policy.history
     assert back.validation_error == policy.validation_error
+
+
+# ----------------------------------------------------------------------
+# the hessian weighting
+# ----------------------------------------------------------------------
+def toy_with_hessians(scale=1.0, vary=False, n=64):
+    # diagonal 1/range^2 blocks: the identity in scaled control units
+    d = toy_dataset(n=n)
+    ru = {k: hi - lo for k, (lo, hi) in U_BOX.items()}
+    for i, p in enumerate(d.points):
+        c = scale * (1.0 + (i / n if vary else 0.0))
+        p["H"] = {
+            "u1": {"u1": c / ru["u1"] ** 2, "u2": 0.0},
+            "u2": {"u1": 0.0, "u2": c / ru["u2"] ** 2},
+        }
+    d.config["hessians"] = True
+    return d
+
+
+def test_weighting_needs_stored_hessians():
+    with pytest.raises(ValueError, match="hessians=True"):
+        drto.explicit_nmpc_train(toy_dataset(), weighting="hessian", epochs=10)
+
+
+def test_a_bad_weighting_value_errors():
+    with pytest.raises(ValueError, match="None, hessian"):
+        quick(weighting="curvature")
+
+
+def test_identity_hessians_reproduce_the_plain_loss():
+    # a constant multiple of the scaled-units identity normalizes to
+    # the identity:
+    # the losses are equal, and a short run matches the plain one to
+    # floating-point accumulation (the summation orders differ)
+    plain = quick(epochs=50)
+    weighted = drto.explicit_nmpc_train(
+        toy_with_hessians(scale=7.0),
+        weighting="hessian",
+        epochs=50,
+        hidden=(16,),
+        lr=1e-2,
+        schedule="flat",
+    )
+    assert weighted.history["train_loss"][0] == pytest.approx(
+        plain.history["train_loss"][0], rel=1e-9
+    )
+    assert weighted.validation_error == pytest.approx(plain.validation_error, rel=1e-6)
+
+
+def test_varying_hessians_train_and_are_recorded():
+    policy = drto.explicit_nmpc_train(
+        toy_with_hessians(vary=True),
+        weighting="hessian",
+        epochs=200,
+        hidden=(8,),
+        schedule="flat",
+    )
+    assert policy.meta["weighting"] == "hessian"
+    assert policy.validation_error > 0

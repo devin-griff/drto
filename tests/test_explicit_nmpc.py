@@ -171,3 +171,25 @@ def test_the_json_round_trips(tmp_path):
     assert back.config == d.config
     assert back.points == d.points
     assert back.failures == d.failures
+
+
+# ----------------------------------------------------------------------
+# the stored reduced Hessians
+# ----------------------------------------------------------------------
+def test_hessians_need_pounce():
+    m = assembled_model()
+    with pytest.raises(ValueError, match="hessians=False"):
+        drto.explicit_nmpc_data(m, n=1, gradients=False, hessians=True, solver="ipopt")
+
+
+@needs_pounce
+def test_hessians_are_stored_and_round_trip(tmp_path):
+    out = tmp_path / "d.json"
+    d = drto.explicit_nmpc_data(
+        assembled_model(), n=2, hessians=True, seed=0, path=str(out)
+    )
+    for p in d.points:
+        assert set(p["H"]) == {"u"} and set(p["H"]["u"]) == {"u"}
+        assert p["H"]["u"]["u"] > 0
+    back = drto.ExplicitNmpcDataset.load(str(out))
+    assert back.points[0]["H"] == d.points[0]["H"]
