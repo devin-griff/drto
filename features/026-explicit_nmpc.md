@@ -5,7 +5,7 @@
 ## Description
 
 As a user of DRTO, I want to sample my assembled optimization into a
-labeled dataset, fit a neural network to the control law, and evaluate
+labeled dataset, fit a neural network to the control policy, and evaluate
 the fitted controller, so that the online solve can be replaced by a
 function evaluation.
 
@@ -26,7 +26,7 @@ data = drto.explicit_nmpc_data(
     path=None,          # JSON written when given
 )
 
-law = drto.explicit_nmpc_train(
+policy = drto.explicit_nmpc_train(
     data,               # dataset, or a path
     validation=0.2,     # dataset, path, or a fraction split off `data`
     sobolev=True,       # gradient term in the loss
@@ -43,12 +43,12 @@ law = drto.explicit_nmpc_train(
     device="auto",
 )
 
-u0 = law({"ca_hat": 0.8, "cb_hat": 0.5, "tr_hat": 134.1, "tk_hat": 130.0})
-law.save("law.pt")
-law = drto.ExplicitNMPC.load("law.pt")
+u0 = policy({"ca_hat": 0.8, "cb_hat": 0.5, "tr_hat": 134.1, "tk_hat": 130.0})
+policy.save("policy.pt")
+policy = drto.ExplicitNMPC.load("policy.pt")
 
 report = drto.explicit_nmpc_rollout(
-    law, m,
+    policy, m,
     samples=50,         # closed-loop steps
     x0=None,            # initial state; default the initial-condition Params' values
     disturbances=None,  # realization per step, as the simulations take it
@@ -81,7 +81,7 @@ budget and keeps the weights with the best validation value error;
 metric. Training requires torch, an optional dependency, and a missing
 install is a descriptive error.
 
-The trained law is callable with named input values in the model's own
+The trained policy is callable with named input values in the model's own
 units and returns the control values in theirs.
 `explicit_nmpc_rollout` runs it closed loop against the declared model,
 one `dynamic_simulation` step per sample, and with `compare` runs the
@@ -123,9 +123,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   is a descriptive error naming the install. Runs are reproducible
   under a seed, and with `seeds > 1` the network kept is the best by
   validation value error.
-- The trained law is callable with named inputs in model units and
+- The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it.
-- `explicit_nmpc_rollout` steps the declared model under the law and
+- `explicit_nmpc_rollout` steps the declared model under the policy and
   returns a readable report in the feature 010 shape; with `compare`
   the same scenario runs under the solver loop and the report carries
   both closed-loop costs.
