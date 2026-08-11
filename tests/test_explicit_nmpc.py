@@ -195,3 +195,30 @@ def test_information_is_stored_and_round_trips(tmp_path):
         assert p["information"]["u"]["u"] > 0
     back = drto.ExplicitNmpcDataset.load(str(out))
     assert back.points[0]["information"] == d.points[0]["information"]
+
+
+def test_information_warnings_are_suppressed_and_counted(monkeypatch):
+    import warnings as w
+
+    import pyomo_pounce
+
+    real = pyomo_pounce.information
+
+    def noisy(m, wrt=None, **kw):
+        w.warn("information: member has curvature below the noise scale")
+        w.warn("information: member is held by its bound at the optimum")
+        w.warn("information: the direction is NOT projected")
+        w.warn("information: something else entirely")
+        return real(m, wrt=wrt, **kw)
+
+    monkeypatch.setattr(pyomo_pounce, "information", noisy)
+    with w.catch_warnings(record=True) as leaked:
+        w.simplefilter("always")
+        d = drto.explicit_nmpc_data(assembled_model(), n=2, information=True, seed=0)
+    assert not [x for x in leaked if "information:" in str(x.message)]
+    counts = d.config["information_warnings"]
+    assert counts["unidentified curvature"] == 2
+    assert counts["pinned member"] == 2
+    assert counts["unprojected constraint"] == 2
+    assert counts["other"] == 2
+    assert "information warnings" in repr(d)

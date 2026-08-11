@@ -28,6 +28,7 @@ configuration the package's own study measured best. Training and the
 policy run on torch, an optional dependency.
 """
 import json
+import warnings
 
 from pyomo.core import Objective, value
 from pyomo.opt import SolverFactory, TerminationCondition
@@ -38,6 +39,14 @@ from drto.info import info
 
 #: The designs explicit_nmpc_data draws by.
 _DESIGNS = ("sobol", "lhs", "uniform")
+
+#: The kinds of per-point warning pounce's information raises, by a
+#: marker in the message; anything else counts as "other".
+_INFO_WARNINGS = (
+    ("unidentified curvature", "noise scale"),
+    ("pinned member", "held by its bound"),
+    ("unprojected constraint", "NOT projected"),
+)
 
 
 class ExplicitNmpcDataset:
@@ -63,11 +72,16 @@ class ExplicitNmpcDataset:
 
     def __repr__(self):
         c = self.config
-        return (
+        summary = (
             f"drto explicit-NMPC dataset: points {len(self.points)}, "
             f"failures {len(self.failures)}, method {c.get('method')}, "
             f"inputs {', '.join(c.get('inputs', ())) or '(none)'}"
         )
+        counts = c.get("information_warnings") or {}
+        if counts:
+            noted = ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+            summary += f"; information warnings: {noted}"
+        return summary
 
     def save(self, path):
         """Write the dataset as JSON; ``load`` reads it back."""
@@ -245,7 +259,7 @@ def explicit_nmpc_data(
     factory = SolverFactory(solver)
 
     cube = _design(method, n, len(pairs), seed)
-    points, failures = [], []
+    points, failures, info_warnings = [], [], {}
     for row in cube:
         draw = {}
         for (param, (lo, hi)), r in zip(pairs, row):
@@ -283,7 +297,13 @@ def explicit_nmpc_data(
                     "through pyomo_pounce.information, which this "
                     "pyomo-pounce does not carry; upgrade pyomo-pounce."
                 )
-            block = pyomo_pounce.information(m, wrt=moves)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                block = pyomo_pounce.information(m, wrt=moves)
+            for w in caught:
+                text = str(w.message)
+                kind = next((k for k, mark in _INFO_WARNINGS if mark in text), "other")
+                info_warnings[kind] = info_warnings.get(kind, 0) + 1
             point["information"] = {
                 ui.parent_component().name: {
                     uj.parent_component().name: float(block.matrix[i][j])
@@ -305,6 +325,7 @@ def explicit_nmpc_data(
             "ranges": {p.name: list(box) for p, box in pairs},
             # the control bounds, which the training scales outputs by
             "u_bounds": {u.parent_component().name: [u.lb, u.ub] for u in moves},
+            **({"information_warnings": info_warnings} if information else {}),
         },
         points,
         failures,
