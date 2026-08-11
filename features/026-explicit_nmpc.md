@@ -142,9 +142,10 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   the horizon problem is solved at each visited state and the report
   also carries the solver's control there: one state trajectory, two
   control sequences.
-- `drto.plot_controls` on the closed-loop report draws the policy's
-  applied control per sample and, when the report carries a `compare`
-  run, the solver's control at the same states on the same axes, the
-  two distinguished.
+- `drto.plot_states` draws the closed-loop report's state trajectory
+  directly, the way it draws the loop histories. `drto.plot_controls`
+  on the report draws the policy's applied control per sample and, when
+  the report carries a `compare` run, the solver's control at the same
+  states on the same axes, the two distinguished.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
