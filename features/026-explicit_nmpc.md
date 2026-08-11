@@ -88,8 +88,9 @@ one `dynamic_simulation` step per sample. With `compare` the horizon
 problem is also solved at each state the policy visits, so the report
 carries one state trajectory and, per sample, the policy's applied
 control beside the control the solver takes at that same state: the two
-sequences are comparable point by point. The solver-driven closed loop is
-`drto.ideal_nmpc`, not repeated here.
+sequences are comparable point by point, and `drto.plot_controls` draws
+them on one axes. The solver-driven closed loop is `drto.ideal_nmpc`,
+not repeated here.
 
 ## Benefit hypothesis
 
@@ -141,5 +142,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   the horizon problem is solved at each visited state and the report
   also carries the solver's control there: one state trajectory, two
   control sequences.
+- `drto.plot_controls` on the closed-loop report draws the policy's
+  applied control per sample and, when the report carries a `compare`
+  run, the solver's control at the same states on the same axes, the
+  two distinguished.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
