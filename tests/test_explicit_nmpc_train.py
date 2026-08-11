@@ -206,3 +206,16 @@ def test_varying_information_trains_and_is_recorded():
     )
     assert policy.meta["weighting"] == "information"
     assert policy.validation_error > 0
+
+
+# ----------------------------------------------------------------------
+# weight decay
+# ----------------------------------------------------------------------
+def test_weight_decay_shrinks_the_weights():
+    plain = quick(weight_decay=0.0)
+    decayed = quick(weight_decay=1.0)
+
+    def norm(policy):
+        return sum(float((w**2).sum()) for w in policy._model.parameters())
+
+    assert norm(decayed) < norm(plain)

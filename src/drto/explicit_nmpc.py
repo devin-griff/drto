@@ -483,6 +483,7 @@ def explicit_nmpc_train(
     schedule="cosine",
     lr_min=1e-5,
     clip=1.0,
+    weight_decay=0.0,
     epochs=50000,
     fine_tune=0.2,
     weighting=None,
@@ -516,6 +517,9 @@ def explicit_nmpc_train(
         The cosine schedule's final rate.
     clip : float, optional
         The gradient-norm cap per step; ``None`` disables clipping.
+    weight_decay : float
+        AdamW's decoupled L2 penalty on the weights, applied in the
+        Sobolev and fine-tune phases alike; ``0`` disables it.
     epochs : int
         The training budget; every run trains all of it.
     fine_tune : float
@@ -526,8 +530,8 @@ def explicit_nmpc_train(
         by each point's stored information matrix in scaled control units,
         every matrix divided by the dataset's mean trace so ``gamma``
         keeps its scale; the validation value error is weighted the
-        same way. The fit is then accurate where the cost surface is
-        steep and tolerant where it is flat.
+        same way. Errors then count for more where the cost surface is
+        steep and for less where it is flat.
     seeds : int
         Networks trained from distinct initializations; the best by
         validation value error is kept.
@@ -601,7 +605,7 @@ def explicit_nmpc_train(
         torch.manual_seed(seed)
         model = _network(torch, hidden, activation, x.shape[1], u.shape[1])
         model = model.to(device)
-        opt = torch.optim.Adam(model.parameters(), lr=lr)
+        opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         sched = (
             torch.optim.lr_scheduler.CosineAnnealingLR(
                 opt, T_max=max(phase2, 1), eta_min=lr_min
@@ -614,7 +618,9 @@ def explicit_nmpc_train(
         best, best_state = float("inf"), None
         for epoch in range(epochs):
             if epoch == phase2 and fine_tune:
-                opt = torch.optim.Adam(model.parameters(), lr=_FINE_TUNE_LR)
+                opt = torch.optim.AdamW(
+                    model.parameters(), lr=_FINE_TUNE_LR, weight_decay=weight_decay
+                )
                 sched, clipping = None, None
             opt.zero_grad()
             loss = value_error(model(x), u, H)
