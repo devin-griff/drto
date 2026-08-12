@@ -79,8 +79,12 @@ records the targets' values as `x_ss` and `u_ss`, which
 `steady_state_enforced` training reads.
 
 `explicit_nmpc_train` fits the network on min-max-scaled inputs and
-outputs, the scaling taken from the sampled boxes and the control
-bounds, with the gradient labels scaled by the ranges. `training_loss`
+outputs. The inputs scale by the sampled boxes. Each control scales
+by the span its labels occupy over the training set, floored at one
+thousandth of the control's bound range, so a control commanding a
+sliver of its box still trains at full price. A supplied validation
+set measures in the training set's units, the gradient labels scale
+accordingly, and the policy records the scale. `training_loss`
 picks the loss the run minimizes: `"sobolev"`, the default, adds
 `gamma` times the squared error of the network's Jacobian against the
 stored derivatives to the value error, and `"value"` fits the values
@@ -169,7 +173,10 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   is a descriptive error naming the install, for training and for
   `ExplicitNMPC.load` alike. A `validation` fraction splits off the
   dataset reproducibly under the seed; a dataset or path supplied is
-  used as given. `weight_decay` applies AdamW's decoupled penalty in
+  used as given. The controls scale by their labels' span over the
+  training set, recorded in the policy's metadata, with a
+  near-constant control floored at one thousandth of its bound
+  range. `weight_decay` applies AdamW's decoupled penalty in
   both phases; the default `0.0` reproduces the unpenalized run. Runs
   are reproducible under a seed, and with `seeds > 1` the network
   kept is the best by the validation loss. `validation_loss` honors
