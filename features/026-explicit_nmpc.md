@@ -130,7 +130,9 @@ problem is also solved at each state the policy visits, so the report
 carries one state trajectory and, per sample, the policy's applied
 control beside the control the solver takes at that same state: the two
 sequences are comparable point by point, and `drto.plot_controls` draws
-them on one axes. The solver-driven closed loop is `drto.ideal_nmpc`,
+them on one axes. A visited state the horizon problem does not solve
+at records no solver control for that sample, and the loop keeps
+stepping the plant. The solver-driven closed loop is `drto.ideal_nmpc`,
 not repeated here.
 
 ## Benefit hypothesis
@@ -203,11 +205,15 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   bound simulates, the report recording the excursion. With `compare`
   the horizon problem is solved at each visited state and the report
   also carries the solver's control there: one state trajectory, two
-  control sequences.
+  control sequences. A compare solve that does not return optimal
+  records nan for that sample and the sample's time, and the run
+  continues.
 - `drto.plot_states` draws the closed-loop report's state trajectory
   directly, the way it draws the loop histories. `drto.plot_controls`
   on the report draws the policy's applied control per sample and, when
   the report carries a `compare` run, the solver's control at the same
-  states on the same axes, the two distinguished.
+  states on the same axes, the two distinguished. A sample the compare
+  solve failed at is marked on the applied trajectory and named in the
+  legend.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
