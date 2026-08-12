@@ -152,3 +152,13 @@ def test_element_boundaries_draw_on_request():
     (ax,) = drto.plot_states(m, element_boundaries=True)
     labels = [t.get_text() for t in ax.figure.legends[0].texts]
     assert "element boundary" in labels
+
+
+def test_ticks_never_use_offset_notation():
+    h = _history()
+    h.states = {"z": [-714.55, -714.6, -714.62]}
+    h.state_targets = {"z": -714.6}
+    (ax,) = drto.plot_states(h)
+    assert not ax.yaxis.get_major_formatter().get_useOffset()
+    (ax,) = drto.plot_states(_valued(ready_model()))
+    assert not ax.yaxis.get_major_formatter().get_useOffset()

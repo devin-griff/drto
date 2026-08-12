@@ -195,14 +195,17 @@ def _draw_history(history, keys, series, targets, t_max, staircase, second=None)
     points at the sample instants, moves as the staircase they
     physically are, each held over its sample. Setpoint lines come from
     the recorded targets. ``second`` lays a second recorded series on
-    the same panels, dashed — the solver's controls at the visited
-    states, when a closed-loop report carries them.
+    the same panels, dashed (the solver's controls at the visited
+    states, when a closed-loop report carries them).
     """
     rows = max(1, math.ceil(len(keys) / 2))
     fig, axes = plt.subplots(
         rows, 2, figsize=(2 * _PANEL[0], rows * _PANEL[1]), sharex=True, squeeze=False
     )
     flat = [ax for row in axes for ax in row]
+    for ax in flat:
+        # full tick values, never matplotlib's offset notation
+        ax.ticklabel_format(useOffset=False)
     for ax in flat[len(keys) :]:
         ax.axis("off")
     drew_target = drew_second = False
@@ -282,6 +285,9 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
         rows, 2, figsize=(2 * _PANEL[0], rows * _PANEL[1]), sharex=True, squeeze=False
     )
     flat = [ax for row in axes for ax in row]
+    for ax in flat:
+        # full tick values, never matplotlib's offset notation
+        ax.ticklabel_format(useOffset=False)
     for ax in flat[len(panels) :]:
         ax.axis("off")  # keep the empty slot so every panel stays the same size
     drew_tail = drew_boundary = drew_target = False
