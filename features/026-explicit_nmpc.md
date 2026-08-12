@@ -109,7 +109,10 @@ install is a descriptive error.
 The trained policy is callable with named input values in the model's own
 units and returns the control values in theirs.
 `explicit_nmpc_closed_loop` runs it closed loop against the declared model,
-one `dynamic_simulation` step per sample. With `compare` the horizon
+one `dynamic_simulation` step per sample. Each action is clamped to the
+declared control's bounds before it is applied, the way an actuator
+holds an out-of-range command at its limit, and the report's moves are
+the applied values. With `compare` the horizon
 problem is also solved at each state the policy visits, so the report
 carries one state trajectory and, per sample, the policy's applied
 control beside the control the solver takes at that same state: the two
@@ -173,7 +176,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   and applied-control trajectory per sample, its summary stating the
   policy's closed-loop cost computed from that trajectory and stored
   nowhere else. `x0` and a supplied disturbance realization are
-  honored, and the loop is deterministic without one. With `compare`
+  honored, and the loop is deterministic without one. An action outside
+  a control's bounds is clamped to them before the plant step, and the
+  recorded move is the applied value. With `compare`
   the horizon problem is solved at each visited state and the report
   also carries the solver's control there: one state trajectory, two
   control sequences.
