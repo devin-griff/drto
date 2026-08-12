@@ -23,7 +23,7 @@ units. Inputs, outputs, and gradient labels are min-max scaled by the
 sampled boxes and the control bounds; the Sobolev loss adds ``gamma``
 times the squared error of the network's Jacobian against the stored
 derivatives. Every run trains the full budget and keeps the weights
-with the best validation value error; the defaults are the
+with the best validation loss. The defaults are the
 configuration the package's own study measured best. Training and the
 policy run on torch, an optional dependency.
 """
@@ -475,6 +475,7 @@ def _jacobian(torch, model, x, create_graph=True):
 def explicit_nmpc_train(
     data,
     validation=0.2,
+    validation_loss="sobolev",
     sobolev=True,
     gamma=1.0,
     hidden=(100, 100, 100),
@@ -499,6 +500,13 @@ def explicit_nmpc_train(
     validation : ExplicitNmpcDataset, str, or float
         The validation set, a path to one, or a fraction split off
         ``data``, shuffled under the dataset's own seed.
+    validation_loss : str
+        The metric the kept checkpoint and the ``seeds`` winner are
+        chosen by, evaluated on the validation set every 10 epochs.
+        ``"sobolev"``, the default, is the training loss (the value
+        error plus ``gamma`` times the gradient term, weighted alike),
+        one definition across both phases. ``"value"`` is the value
+        error alone. With ``sobolev=False`` the two coincide.
     sobolev : bool
         Add ``gamma`` times the squared error of the network's Jacobian
         against the stored derivatives to the loss.
@@ -529,12 +537,12 @@ def explicit_nmpc_train(
         ``None`` is the plain loss. ``"information"`` weights both terms
         by each point's stored information matrix in scaled control units,
         every matrix divided by the dataset's mean trace so ``gamma``
-        keeps its scale; the validation value error is weighted the
+        keeps its scale; the validation metric is weighted the
         same way. Errors then count for more where the cost surface is
         steep and for less where it is flat.
     seeds : int
-        Networks trained from distinct initializations; the best by
-        validation value error is kept.
+        Networks trained from distinct initializations. The best by
+        the validation loss is kept.
     device : str
         ``"auto"`` picks cuda when torch sees it; any torch device
         string passes through.
@@ -553,6 +561,11 @@ def explicit_nmpc_train(
         raise ValueError(
             f"drto: {fn} got schedule='{schedule}'; the choices are " f"cosine, flat."
         )
+    if validation_loss not in ("sobolev", "value"):
+        raise ValueError(
+            f"drto: {fn} got validation_loss='{validation_loss}'. The "
+            f"choices are sobolev, value."
+        )
     if weighting not in (None, "information"):
         raise ValueError(
             f"drto: {fn} got weighting='{weighting}'; the choices are "
@@ -560,6 +573,7 @@ def explicit_nmpc_train(
         )
     weighted = weighting == "information"
     dataset = _resolve_dataset(data, "data")
+    val_sobolev = validation_loss == "sobolev" and sobolev
     x, u, J, H = _arrays(dataset, sobolev, fn, information=weighted)
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
@@ -567,6 +581,7 @@ def explicit_nmpc_train(
         n_val = max(1, round(validation * len(x)))
         val_idx, train_idx = order[:n_val], order[n_val:]
         x_val, u_val = x[val_idx], u[val_idx]
+        J_val = J[val_idx] if J is not None else None
         H_val = H[val_idx] if H is not None else None
         x, u = x[train_idx], u[train_idx]
         if J is not None:
@@ -575,7 +590,9 @@ def explicit_nmpc_train(
             H = H[train_idx]
     else:
         vset = _resolve_dataset(validation, "validation")
-        x_val, u_val, _, H_val = _arrays(vset, False, fn, information=weighted)
+        x_val, u_val, J_val, H_val = _arrays(
+            vset, val_sobolev, fn, information=weighted
+        )
     if weighted:
         # one normalization for both sets, so gamma keeps its scale
         norm = float(np.mean(np.trace(H, axis1=1, axis2=2))) / H.shape[1]
@@ -590,6 +607,7 @@ def explicit_nmpc_train(
 
     x, u, x_val, u_val = t(x), t(u), t(x_val), t(u_val)
     J = t(J) if J is not None else None
+    J_val = t(J_val) if J_val is not None else None
     H = t(H) if H is not None else None
     H_val = t(H_val) if H is not None else None
 
@@ -614,7 +632,7 @@ def explicit_nmpc_train(
             else None
         )
         clipping = clip
-        history = {"epoch": [], "train_loss": [], "val_mse": []}
+        history = {"epoch": [], "train_loss": [], "val_loss": []}
         best, best_state = float("inf"), None
         for epoch in range(epochs):
             if epoch == phase2 and fine_tune:
@@ -645,9 +663,20 @@ def explicit_nmpc_train(
                 continue
             with torch.no_grad():
                 val = value_error(model(x_val), u_val, H_val).item()
+            if val_sobolev:
+                jac = _jacobian(torch, model, x_val, create_graph=False)
+                with torch.no_grad():
+                    E = jac - J_val
+                    if H_val is None:
+                        gterm = torch.mean(E**2)
+                    else:
+                        gterm = torch.mean(
+                            torch.einsum("boi,bop,bpi->b", E, H_val, E)
+                        ) / (E.shape[1] * E.shape[2])
+                    val += gamma * float(gterm)
             history["epoch"].append(epoch + 1)
             history["train_loss"].append(float(loss.item()))
-            history["val_mse"].append(val)
+            history["val_loss"].append(val)
             del loss
             if val < best:
                 best = val
@@ -655,7 +684,7 @@ def explicit_nmpc_train(
         if best_overall is None or best < best_overall[0]:
             best_overall = (best, best_state, history)
 
-    val_mse, state, history = best_overall
+    val_loss, state, history = best_overall
     meta = {
         "inputs": list(dataset.config["inputs"]),
         "ranges": {k: list(v) for k, v in dataset.config["ranges"].items()},
@@ -664,7 +693,7 @@ def explicit_nmpc_train(
         "activation": activation,
         "weighting": weighting,
         "history": history,
-        "validation_error": val_mse,
+        "validation_error": val_loss,
     }
     return ExplicitNMPC(meta, state)
 
@@ -675,7 +704,7 @@ class ExplicitNMPC:
     Call it with a mapping of input names to values and it returns the
     first control action per control, unscaled. ``history`` is the kept
     run's per-epoch record, and ``validation_error`` its best
-    validation value error. ``save`` and ``load`` round-trip the
+    validation loss. ``save`` and ``load`` round-trip the
     policy, history included, through one torch file.
     """
 

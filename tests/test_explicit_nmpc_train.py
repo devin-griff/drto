@@ -112,8 +112,8 @@ def test_seeds_keep_the_best_by_validation():
 def test_the_history_is_recorded():
     policy = quick(epochs=100)
     assert policy.history["epoch"][-1] == 100
-    assert len(policy.history["val_mse"]) == len(policy.history["epoch"])
-    assert policy.validation_error == min(policy.history["val_mse"])
+    assert len(policy.history["val_loss"]) == len(policy.history["epoch"])
+    assert policy.validation_error == min(policy.history["val_loss"])
 
 
 def test_a_validation_dataset_is_used_as_given():
@@ -219,3 +219,32 @@ def test_weight_decay_shrinks_the_weights():
         return sum(float((w**2).sum()) for w in policy._model.parameters())
 
     assert norm(decayed) < norm(plain)
+
+
+# ----------------------------------------------------------------------
+# the validation loss
+# ----------------------------------------------------------------------
+def test_the_validation_loss_option():
+    a = quick(validation_loss="value")
+    b = quick(validation_loss="sobolev")
+    # the training trajectories are identical, so at every checkpoint the
+    # sobolev metric is the value metric plus the gradient term
+    assert b.history["val_loss"][0] > a.history["val_loss"][0]
+    with pytest.raises(ValueError, match="sobolev, value"):
+        quick(validation_loss="both")
+
+
+def test_the_sobolev_validation_loss_needs_gradient_labels():
+    train = toy_dataset(seed=0)
+    val = toy_dataset(gradients=False, seed=1)
+    with pytest.raises(ValueError, match="carries none"):
+        drto.explicit_nmpc_train(train, validation=val, epochs=10)
+    policy = drto.explicit_nmpc_train(
+        train,
+        validation=val,
+        validation_loss="value",
+        epochs=50,
+        hidden=(8,),
+        schedule="flat",
+    )
+    assert policy.validation_error > 0
