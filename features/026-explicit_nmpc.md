@@ -191,7 +191,8 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   returns controls in model units; `save`/`load` round-trips it, the
   training history included.
 - `explicit_nmpc_closed_loop` steps the declared model under the policy and
-  returns a readable report in the feature 010 shape holding the state
+  returns a readable report in the feature 014 shape, the recorded
+  bounds included, holding the state
   and applied-control trajectory per sample, its summary stating the
   policy's closed-loop cost computed from that trajectory and stored
   nowhere else. `x0` and a supplied disturbance realization are

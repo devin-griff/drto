@@ -17,6 +17,12 @@ The helper is registry-driven already: everything it draws comes from
 - Everything reads from the registry: the declared horizon's sample grid,
   the declared states and controls, the steady-state pairings for the
   dotted setpoint lines, and the stage-cost equality for the cost variable.
+- `plot_states` and `plot_controls` draw each variable's declared
+  bounds as grey dashed lines, on a model from the Vars and on a loop
+  history from the bounds it records. The window stays pinned to the
+  data, so a bound draws only where it falls inside the view and a
+  distant bound never flattens the trajectory. A finite bound adds one
+  "bound" legend entry.
   If the model carries a terminal segment (`drto_ih`), its points draw
   open, mapped back to real time through `t = tN + atanh(tau)/gamma`.
 - `plot_states(..., element_boundaries=True)` adds squares at the

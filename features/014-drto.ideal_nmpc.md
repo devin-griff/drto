@@ -116,7 +116,8 @@ physical.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the
-realizations, with the declared names and targets. `drto.plot_states` and
+realizations, with the declared names, targets, and bounds (each
+recorded label's declared (lo, hi), which the plots draw). `drto.plot_states` and
 `drto.plot_controls` accept it and draw the actual closed-loop
 trajectories the same way they draw a model's, the implemented moves as
 the staircase they physically are.
