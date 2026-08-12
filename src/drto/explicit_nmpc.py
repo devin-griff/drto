@@ -19,8 +19,8 @@ uniform design runs without it.
 
 ``drto.explicit_nmpc_train`` fits the control policy to a dataset and
 returns it as :class:`ExplicitNMPC`, callable in the model's own
-units. Inputs, outputs, and gradient labels are min-max scaled by the
-sampled boxes and the control bounds; the Sobolev loss adds ``gamma``
+units. The inputs are min-max scaled by the sampled boxes, and each
+control by the span its labels occupy; the Sobolev loss adds ``gamma``
 times the squared error of the network's Jacobian against the stored
 derivatives. Every run trains the full budget and keeps the weights
 with the best validation loss. The defaults are the
@@ -382,8 +382,17 @@ def _resolve_dataset(data, what):
     )
 
 
-def _arrays(dataset, gradients, fn):
-    """The dataset as scaled arrays: x, u, and the Jacobian."""
+def _arrays(dataset, gradients, fn, u_scale=None):
+    """The dataset as scaled arrays: x, u, the Jacobian, and the
+    control scale.
+
+    The inputs scale by their sampled boxes. Each control scales by
+    ``u_scale``, or, when it is None, by the span this dataset's own
+    labels occupy, floored at one thousandth of the control's bound
+    range so a near-constant control keeps a finite scale. Pass the
+    training set's scale for a validation set, so both sets measure
+    in the same units.
+    """
     import numpy as np
 
     cfg = dataset.config
@@ -399,8 +408,15 @@ def _arrays(dataset, gradients, fn):
     x = np.array([[p["x"][k] for k in names] for p in dataset.points])
     u = np.array([[p["u0"][k] for k in u_names] for p in dataset.points])
     x_lo, x_hi = np.array([cfg["ranges"][k] for k in names]).T
-    u_lo, u_hi = np.array([u_bounds[k] for k in u_names]).T
-    rx, ru = x_hi - x_lo, u_hi - u_lo
+    rx = x_hi - x_lo
+    if u_scale is None:
+        b_lo, b_hi = np.array([u_bounds[k] for k in u_names]).T
+        span = np.maximum(u.max(axis=0) - u.min(axis=0), 1e-3 * (b_hi - b_lo))
+        u_scale = {
+            k: [float(lo), float(sp)] for k, lo, sp in zip(u_names, u.min(axis=0), span)
+        }
+    u_lo = np.array([u_scale[k][0] for k in u_names])
+    ru = np.array([u_scale[k][1] for k in u_names])
     J = None
     if gradients:
         if any("du0_dx" not in p for p in dataset.points):
@@ -417,7 +433,7 @@ def _arrays(dataset, gradients, fn):
             ]
         )
         J = J * rx[None, None, :] / ru[None, :, None]
-    return (x - x_lo) / rx, (u - u_lo) / ru, J
+    return (x - x_lo) / rx, (u - u_lo) / ru, J, u_scale
 
 
 def _network(torch, hidden, activation, n_in, n_out):
@@ -581,7 +597,7 @@ def explicit_nmpc_train(
     dataset = _resolve_dataset(data, "data")
     val_sobolev = validation_loss == "sobolev"
     need_j = training_loss == "sobolev" or val_sobolev
-    x, u, J = _arrays(dataset, need_j, fn)
+    x, u, J, u_scale = _arrays(dataset, need_j, fn)
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
         order = rng.permutation(len(x))
@@ -594,7 +610,7 @@ def explicit_nmpc_train(
             J = J[train_idx]
     else:
         vset = _resolve_dataset(validation, "validation")
-        x_val, u_val, J_val = _arrays(vset, val_sobolev, fn)
+        x_val, u_val, J_val, _ = _arrays(vset, val_sobolev, fn, u_scale=u_scale)
 
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -627,8 +643,8 @@ def explicit_nmpc_train(
             lo, hi = cfg["ranges"][k]
             xs.append((float(stored_x[k]) - lo) / (hi - lo))
         for k in u_names:
-            lo, hi = cfg["u_bounds"][k]
-            us.append((float(stored_u[k]) - lo) / (hi - lo))
+            lo, span = u_scale[k]
+            us.append((float(stored_u[k]) - lo) / span)
         anchor = (t([xs]), t([us]))
 
     def value_error(model_out, target):
@@ -694,6 +710,7 @@ def explicit_nmpc_train(
         "inputs": list(dataset.config["inputs"]),
         "ranges": {k: list(v) for k, v in dataset.config["ranges"].items()},
         "u_bounds": {k: list(v) for k, v in dataset.config["u_bounds"].items()},
+        "u_scale": {k: list(v) for k, v in u_scale.items()},
         "hidden": list(hidden),
         "activation": activation,
         "steady_state_enforced": bool(steady_state_enforced),
@@ -752,9 +769,15 @@ class ExplicitNMPC:
             xs.append((float(values[k]) - lo) / (hi - lo))
         with torch.no_grad():
             y = self._model(torch.tensor([xs], dtype=torch.float64))[0]
+        # policies saved before the label-span scaling trained on the
+        # bound range, which the fallback reproduces exactly
+        scale = self.meta.get("u_scale") or {
+            k: [lo, hi - lo] for k, (lo, hi) in self.meta["u_bounds"].items()
+        }
         out = {}
-        for j, (name, (lo, hi)) in enumerate(self.meta["u_bounds"].items()):
-            out[name] = lo + float(y[j]) * (hi - lo)
+        for j, name in enumerate(self.meta["u_bounds"]):
+            lo, span = scale[name]
+            out[name] = lo + float(y[j]) * span
         return out
 
     def __repr__(self):

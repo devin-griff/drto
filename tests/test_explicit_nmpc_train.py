@@ -224,3 +224,35 @@ def test_the_sobolev_validation_loss_needs_gradient_labels():
         schedule="flat",
     )
     assert policy.validation_error > 0
+
+
+# ----------------------------------------------------------------------
+# the control scaling
+# ----------------------------------------------------------------------
+def test_controls_scale_by_the_labels_span():
+    policy = quick(epochs=20)
+    data = toy_dataset()
+    for name in U_BOX:
+        us = [p["u0"][name] for p in data.points]
+        lo, span = policy.meta["u_scale"][name]
+        assert lo == pytest.approx(min(us))
+        assert span == pytest.approx(max(us) - min(us))
+
+
+def test_a_constant_control_keeps_a_floored_scale():
+    data = toy_dataset()
+    for p in data.points:
+        p["u0"]["u2"] = -2.0
+    data.config["u_ss"]["u2"] = -2.0
+    policy = drto.explicit_nmpc_train(
+        data,
+        training_loss="value",
+        validation_loss="value",
+        epochs=20,
+        hidden=(8,),
+        schedule="flat",
+    )
+    lo, span = policy.meta["u_scale"]["u2"]
+    # u2's bounds span 5.0, and the floor is one thousandth of that
+    assert lo == pytest.approx(-2.0)
+    assert span == pytest.approx(5e-3)
