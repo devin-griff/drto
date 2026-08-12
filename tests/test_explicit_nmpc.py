@@ -174,51 +174,10 @@ def test_the_json_round_trips(tmp_path):
 
 
 # ----------------------------------------------------------------------
-# the stored information matrices
+# the recorded steady targets
 # ----------------------------------------------------------------------
-def test_information_needs_pounce():
-    m = assembled_model()
-    with pytest.raises(ValueError, match="information=False"):
-        drto.explicit_nmpc_data(
-            m, n=1, gradients=False, information=True, solver="ipopt"
-        )
-
-
 @needs_pounce
-def test_information_is_stored_and_round_trips(tmp_path):
-    out = tmp_path / "d.json"
-    d = drto.explicit_nmpc_data(
-        assembled_model(), n=2, information=True, seed=0, path=str(out)
-    )
-    for p in d.points:
-        assert set(p["information"]) == {"u"} and set(p["information"]["u"]) == {"u"}
-        assert p["information"]["u"]["u"] > 0
-    back = drto.ExplicitNmpcDataset.load(str(out))
-    assert back.points[0]["information"] == d.points[0]["information"]
-
-
-def test_information_warnings_are_suppressed_and_counted(monkeypatch):
-    import warnings as w
-
-    import pyomo_pounce
-
-    real = pyomo_pounce.information
-
-    def noisy(m, wrt=None, **kw):
-        w.warn("information: member has curvature below the noise scale")
-        w.warn("information: member is held by its bound at the optimum")
-        w.warn("information: the direction is NOT projected")
-        w.warn("information: something else entirely")
-        return real(m, wrt=wrt, **kw)
-
-    monkeypatch.setattr(pyomo_pounce, "information", noisy)
-    with w.catch_warnings(record=True) as leaked:
-        w.simplefilter("always")
-        d = drto.explicit_nmpc_data(assembled_model(), n=2, information=True, seed=0)
-    assert not [x for x in leaked if "information:" in str(x.message)]
-    counts = d.config["information_warnings"]
-    assert counts["unidentified curvature"] == 2
-    assert counts["pinned member"] == 2
-    assert counts["unprojected constraint"] == 2
-    assert counts["other"] == 2
-    assert "Information warnings" in repr(d)
+def test_the_steady_targets_are_recorded():
+    d = drto.explicit_nmpc_data(assembled_model(), n=1, seed=0)
+    assert d.config["x_ss"] == {"z_hat": 0.3}
+    assert d.config["u_ss"] == {"u": 0.3}

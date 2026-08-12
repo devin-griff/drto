@@ -28,7 +28,6 @@ configuration the package's own study measured best. Training and the
 policy run on torch, an optional dependency.
 """
 import json
-import warnings
 from dataclasses import dataclass, field
 
 from pyomo.core import Objective, value
@@ -52,14 +51,6 @@ from drto.warm_start import warm_start_dynamic
 
 #: The designs explicit_nmpc_data draws by.
 _DESIGNS = ("sobol", "lhs", "uniform")
-
-#: The kinds of per-point warning pounce's information raises, by a
-#: marker in the message; anything else counts as "other".
-_INFO_WARNINGS = (
-    ("unidentified curvature", "noise scale"),
-    ("pinned member", "held by its bound"),
-    ("unprojected constraint", "NOT projected"),
-)
 
 
 class ExplicitNmpcDataset:
@@ -90,10 +81,6 @@ class ExplicitNmpcDataset:
             f"failures {len(self.failures)}, method {c.get('method')}, "
             f"inputs {', '.join(c.get('inputs', ())) or '(none)'}"
         )
-        counts = c.get("information_warnings") or {}
-        if counts:
-            noted = ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))
-            summary += f". Information warnings: {noted}"
         return summary
 
     def save(self, path):
@@ -196,6 +183,48 @@ def _first_moves(reg):
     return out
 
 
+def _steady_targets(reg, fn):
+    """The steady target value per sampled Param and per control.
+
+    Each initial-condition Param takes the value of the steady_state
+    target paired with the state it pins, and each control the value
+    of its steady_state_control target. A Param or control with no
+    pairing is skipped, so the dicts hold what the declarations cover.
+    """
+    x_ss, u_ss = {}, {}
+    if not reg.has_declaration("horizon"):
+        return x_ss, u_ss
+    time = reg.components("horizon")[0]
+    t0 = reg.declarations("horizon")[0]["samples"][0]
+    owner = {}
+    for z in reg.components("state"):
+        pos, subs = _time_index(z, time)
+        for idx in z:
+            o, tt = _split_index(idx, pos, len(subs))
+            if tt == t0:
+                owner[id(z[idx])] = (z, o)
+    ss = list(reg.declarations("steady_state"))
+    for con in reg.components("initial_condition"):
+        for cd in con.values() if con.is_indexed() else (con,):
+            sd, param = _side_matching(cd, _is_var_member, fn, "a state member")
+            if id(sd) not in owner:
+                continue
+            z, o = owner[id(sd)]
+            try:
+                tgt = _target(ss, z, "steady_state", fn)
+            except ValueError:
+                continue
+            x_ss[param.name] = float(value(tgt[o] if o else tgt))
+    uss = list(reg.declarations("steady_state_control"))
+    for u in reg.components("control"):
+        try:
+            tgt = _target(uss, u, "steady_state_control", fn)
+        except ValueError:
+            continue
+        u_ss[u.name] = float(value(tgt))
+    return x_ss, u_ss
+
+
 def explicit_nmpc_data(
     m,
     n=1000,
@@ -203,7 +232,6 @@ def explicit_nmpc_data(
     inputs=None,
     ranges=None,
     gradients=True,
-    information=False,
     solver="pounce",
     seed=0,
     path=None,
@@ -229,11 +257,6 @@ def explicit_nmpc_data(
     gradients : bool
         Record the derivative of each first action with respect to each
         sampled Param, read from the pounce factorization.
-    information : bool
-        Record each labeled point's information matrix — the reduced
-        Hessian over the first moves — read from the same factorization
-        through pounce's ``information``: one query per solve,
-        symmetric, in control units.
     solver : str
         The labeling solver's name.
     seed : int
@@ -245,6 +268,10 @@ def explicit_nmpc_data(
     -------
     ExplicitNmpcDataset
         The labeled points, the failures, and the generation record.
+        When the model declares ``steady_state`` and
+        ``steady_state_control``, the record includes the targets'
+        values as ``x_ss`` and ``u_ss``, which
+        ``steady_state_enforced`` training reads.
     """
     fn = "explicit_nmpc_data"
     if gradients and solver != "pounce":
@@ -252,12 +279,6 @@ def explicit_nmpc_data(
             f"drto: {fn} reads the gradients from the pounce factorization; "
             f"got solver='{solver}'. Pass gradients=False, or solve with "
             f"pounce."
-        )
-    if information and solver != "pounce":
-        raise ValueError(
-            f"drto: {fn} reads the information matrices from the pounce "
-            f"factorization; got solver='{solver}'. Pass "
-            f"information=False, or solve with pounce."
         )
     reg = info(m)
     pairs = _sampled_params(reg, inputs, ranges, fn)
@@ -272,7 +293,8 @@ def explicit_nmpc_data(
     factory = SolverFactory(solver)
 
     cube = _design(method, n, len(pairs), seed)
-    points, failures, info_warnings = [], [], {}
+    x_ss, u_ss = _steady_targets(reg, fn)
+    points, failures = [], []
     for row in cube:
         draw = {}
         for (param, (lo, hi)), r in zip(pairs, row):
@@ -301,29 +323,6 @@ def explicit_nmpc_data(
                 }
                 for u in moves
             }
-        if information:
-            import pyomo_pounce
-
-            if not hasattr(pyomo_pounce, "information"):
-                raise RuntimeError(
-                    "drto: information=True reads the information matrix "
-                    "through pyomo_pounce.information, which this "
-                    "pyomo-pounce does not carry; upgrade pyomo-pounce."
-                )
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                block = pyomo_pounce.information(m, wrt=moves)
-            for w in caught:
-                text = str(w.message)
-                kind = next((k for k, mark in _INFO_WARNINGS if mark in text), "other")
-                info_warnings[kind] = info_warnings.get(kind, 0) + 1
-            point["information"] = {
-                ui.parent_component().name: {
-                    uj.parent_component().name: float(block.matrix[i][j])
-                    for j, uj in enumerate(moves)
-                }
-                for i, ui in enumerate(moves)
-            }
         points.append(point)
 
     dataset = ExplicitNmpcDataset(
@@ -332,13 +331,15 @@ def explicit_nmpc_data(
             "method": method,
             "seed": seed,
             "gradients": bool(gradients),
-            "information": bool(information),
             "solver": solver,
             "inputs": [p.name for p, _ in pairs],
             "ranges": {p.name: list(box) for p, box in pairs},
             # the control bounds, which the training scales outputs by
             "u_bounds": {u.parent_component().name: [u.lb, u.ub] for u in moves},
-            **({"information_warnings": info_warnings} if information else {}),
+            # the declared steady targets, which steady_state_enforced
+            # training reads
+            **({"x_ss": x_ss} if x_ss else {}),
+            **({"u_ss": u_ss} if u_ss else {}),
         },
         points,
         failures,
@@ -381,9 +382,8 @@ def _resolve_dataset(data, what):
     )
 
 
-def _arrays(dataset, gradients, fn, information=False):
-    """The dataset as scaled arrays: x, u, the Jacobian, the information
-    matrices."""
+def _arrays(dataset, gradients, fn):
+    """The dataset as scaled arrays: x, u, and the Jacobian."""
     import numpy as np
 
     cfg = dataset.config
@@ -405,9 +405,10 @@ def _arrays(dataset, gradients, fn, information=False):
     if gradients:
         if any("du0_dx" not in p for p in dataset.points):
             raise ValueError(
-                f"drto: {fn}: sobolev=True needs the gradient labels, and "
-                f"this dataset carries none; regenerate it with "
-                f"gradients=True, or train with sobolev=False."
+                f"drto: {fn}: the 'sobolev' loss needs the gradient labels, "
+                f"and this dataset carries none. Regenerate it with "
+                f"gradients=True, or pass training_loss='value' and "
+                f"validation_loss='value'."
             )
         J = np.array(
             [
@@ -416,23 +417,7 @@ def _arrays(dataset, gradients, fn, information=False):
             ]
         )
         J = J * rx[None, None, :] / ru[None, :, None]
-    H = None
-    if information:
-        if any("information" not in p for p in dataset.points):
-            raise ValueError(
-                f"drto: {fn}: weighting='information' needs the stored "
-                f"information matrices, and this dataset carries none; "
-                f"regenerate it with information=True."
-            )
-        H = np.array(
-            [
-                [[p["information"][ui][uj] for uj in u_names] for ui in u_names]
-                for p in dataset.points
-            ]
-        )
-        # scaled control units: H-tilde = Du H Du
-        H = H * ru[None, :, None] * ru[None, None, :]
-    return (x - x_lo) / rx, (u - u_lo) / ru, J, H
+    return (x - x_lo) / rx, (u - u_lo) / ru, J
 
 
 def _network(torch, hidden, activation, n_in, n_out):
@@ -453,6 +438,27 @@ def _network(torch, hidden, activation, n_in, n_out):
         width = h
     layers.append(torch.nn.Linear(width, n_out))
     return torch.nn.Sequential(*layers).double()
+
+
+def _anchor(torch, net, x_ss, u_ss):
+    """The policy as the net plus the offset pinning the equilibrium.
+
+    The two net terms cancel at ``x_ss``, so the output equals
+    ``u_ss`` there exactly, whatever the weights. Both points are
+    buffers in scaled units, so ``state_dict`` round-trips them.
+    """
+
+    class Anchored(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.net = net
+            self.register_buffer("x_ss", x_ss)
+            self.register_buffer("u_ss", u_ss)
+
+        def forward(self, x):
+            return self.u_ss + self.net(x) - self.net(self.x_ss)
+
+    return Anchored()
 
 
 def _jacobian(torch, model, x, create_graph=True):
@@ -476,10 +482,11 @@ def explicit_nmpc_train(
     data,
     validation=0.2,
     validation_loss="sobolev",
-    sobolev=True,
+    training_loss="sobolev",
     gamma=1.0,
     hidden=(100, 100, 100),
     activation="tanh",
+    steady_state_enforced=True,
     lr=1e-3,
     schedule="cosine",
     lr_min=1e-5,
@@ -487,7 +494,6 @@ def explicit_nmpc_train(
     weight_decay=0.0,
     epochs=50000,
     fine_tune=0.2,
-    weighting=None,
     seeds=1,
     device="auto",
 ):
@@ -503,19 +509,27 @@ def explicit_nmpc_train(
     validation_loss : str
         The metric the kept checkpoint and the ``seeds`` winner are
         chosen by, evaluated on the validation set every 10 epochs.
-        ``"sobolev"``, the default, is the training loss (the value
-        error plus ``gamma`` times the gradient term, weighted alike),
-        one definition across both phases. ``"value"`` is the value
-        error alone. With ``sobolev=False`` the two coincide.
-    sobolev : bool
-        Add ``gamma`` times the squared error of the network's Jacobian
-        against the stored derivatives to the loss.
+        ``"sobolev"``, the default, is the value error plus ``gamma``
+        times the gradient term, one definition across both phases.
+        ``"value"`` is the value error alone. The choice is independent
+        of ``training_loss``.
+    training_loss : str
+        The loss the run minimizes. ``"sobolev"``, the default, adds
+        ``gamma`` times the squared error of the policy's Jacobian
+        against the stored derivatives to the value error. ``"value"``
+        fits the values alone.
     gamma : float
         The gradient term's weight.
     hidden : tuple of int
         The hidden layer widths.
     activation : str
         ``"tanh"``, ``"relu"``, ``"silu"``, or ``"sigmoid"``.
+    steady_state_enforced : bool
+        Build the policy as the net plus the constant offset that
+        makes it return the recorded steady control at the recorded
+        steady state exactly, whatever the weights. Needs the
+        ``x_ss`` and ``u_ss`` the dataset records when the model
+        declares ``steady_state`` and ``steady_state_control``.
     lr : float
         The learning rate, the cosine schedule's starting rate.
     schedule : str
@@ -533,13 +547,6 @@ def explicit_nmpc_train(
     fine_tune : float
         The final fraction of the budget trained on the value error
         alone, at a flat 1e-4; ``0`` disables the phase.
-    weighting : str, optional
-        ``None`` is the plain loss. ``"information"`` weights both terms
-        by each point's stored information matrix in scaled control units,
-        every matrix divided by the dataset's mean trace so ``gamma``
-        keeps its scale; the validation metric is weighted the
-        same way. Errors then count for more where the cost surface is
-        steep and for less where it is flat.
     seeds : int
         Networks trained from distinct initializations. The best by
         the validation loss is kept.
@@ -566,15 +573,15 @@ def explicit_nmpc_train(
             f"drto: {fn} got validation_loss='{validation_loss}'. The "
             f"choices are sobolev, value."
         )
-    if weighting not in (None, "information"):
+    if training_loss not in ("sobolev", "value"):
         raise ValueError(
-            f"drto: {fn} got weighting='{weighting}'; the choices are "
-            f"None, information."
+            f"drto: {fn} got training_loss='{training_loss}'. The "
+            f"choices are sobolev, value."
         )
-    weighted = weighting == "information"
     dataset = _resolve_dataset(data, "data")
-    val_sobolev = validation_loss == "sobolev" and sobolev
-    x, u, J, H = _arrays(dataset, sobolev, fn, information=weighted)
+    val_sobolev = validation_loss == "sobolev"
+    need_j = training_loss == "sobolev" or val_sobolev
+    x, u, J = _arrays(dataset, need_j, fn)
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
         order = rng.permutation(len(x))
@@ -582,22 +589,12 @@ def explicit_nmpc_train(
         val_idx, train_idx = order[:n_val], order[n_val:]
         x_val, u_val = x[val_idx], u[val_idx]
         J_val = J[val_idx] if J is not None else None
-        H_val = H[val_idx] if H is not None else None
         x, u = x[train_idx], u[train_idx]
         if J is not None:
             J = J[train_idx]
-        if H is not None:
-            H = H[train_idx]
     else:
         vset = _resolve_dataset(validation, "validation")
-        x_val, u_val, J_val, H_val = _arrays(
-            vset, val_sobolev, fn, information=weighted
-        )
-    if weighted:
-        # one normalization for both sets, so gamma keeps its scale
-        norm = float(np.mean(np.trace(H, axis1=1, axis2=2))) / H.shape[1]
-        H = H / norm
-        H_val = H_val / norm
+        x_val, u_val, J_val = _arrays(vset, val_sobolev, fn)
 
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -608,20 +605,42 @@ def explicit_nmpc_train(
     x, u, x_val, u_val = t(x), t(u), t(x_val), t(u_val)
     J = t(J) if J is not None else None
     J_val = t(J_val) if J_val is not None else None
-    H = t(H) if H is not None else None
-    H_val = t(H_val) if H is not None else None
 
-    def value_error(model_out, target, W):
-        e = model_out - target
-        if W is None:
-            return torch.mean(e**2)
-        return torch.mean(torch.einsum("bi,bij,bj->b", e, W, e)) / e.shape[1]
+    anchor = None
+    if steady_state_enforced:
+        cfg = dataset.config
+        stored_x, stored_u = cfg.get("x_ss") or {}, cfg.get("u_ss") or {}
+        names, u_names = list(cfg["inputs"]), list(cfg["u_bounds"])
+        missing = [k for k in names if k not in stored_x]
+        missing += [k for k in u_names if k not in stored_u]
+        if missing:
+            raise ValueError(
+                f"drto: {fn}: steady_state_enforced=True needs the steady "
+                f"targets the dataset records at generation, and this one "
+                f"has none for {', '.join(missing)}. Regenerate it with "
+                f"drto.explicit_nmpc_data on a model declaring "
+                f"steady_state and steady_state_control, or pass "
+                f"steady_state_enforced=False."
+            )
+        xs, us = [], []
+        for k in names:
+            lo, hi = cfg["ranges"][k]
+            xs.append((float(stored_x[k]) - lo) / (hi - lo))
+        for k in u_names:
+            lo, hi = cfg["u_bounds"][k]
+            us.append((float(stored_u[k]) - lo) / (hi - lo))
+        anchor = (t([xs]), t([us]))
+
+    def value_error(model_out, target):
+        return torch.mean((model_out - target) ** 2)
 
     phase2 = epochs - int(epochs * fine_tune)
     best_overall = None
     for seed in range(seeds):
         torch.manual_seed(seed)
         model = _network(torch, hidden, activation, x.shape[1], u.shape[1])
+        if anchor is not None:
+            model = _anchor(torch, model, *anchor)
         model = model.to(device)
         opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         sched = (
@@ -641,17 +660,10 @@ def explicit_nmpc_train(
                 )
                 sched, clipping = None, None
             opt.zero_grad()
-            loss = value_error(model(x), u, H)
-            if sobolev and epoch < phase2:
+            loss = value_error(model(x), u)
+            if training_loss == "sobolev" and epoch < phase2:
                 jac = _jacobian(torch, model, x)
-                E = jac - J
-                if H is None:
-                    gterm = torch.mean(E**2)
-                else:
-                    gterm = torch.mean(torch.einsum("boi,bop,bpi->b", E, H, E)) / (
-                        E.shape[1] * E.shape[2]
-                    )
-                loss = loss + gamma * gterm
+                loss = loss + gamma * torch.mean((jac - J) ** 2)
             loss.backward()
             if clipping is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clipping)
@@ -662,18 +674,11 @@ def explicit_nmpc_train(
                 del loss
                 continue
             with torch.no_grad():
-                val = value_error(model(x_val), u_val, H_val).item()
+                val = value_error(model(x_val), u_val).item()
             if val_sobolev:
                 jac = _jacobian(torch, model, x_val, create_graph=False)
                 with torch.no_grad():
-                    E = jac - J_val
-                    if H_val is None:
-                        gterm = torch.mean(E**2)
-                    else:
-                        gterm = torch.mean(
-                            torch.einsum("boi,bop,bpi->b", E, H_val, E)
-                        ) / (E.shape[1] * E.shape[2])
-                    val += gamma * float(gterm)
+                    val += gamma * float(torch.mean((jac - J_val) ** 2))
             history["epoch"].append(epoch + 1)
             history["train_loss"].append(float(loss.item()))
             history["val_loss"].append(val)
@@ -691,7 +696,7 @@ def explicit_nmpc_train(
         "u_bounds": {k: list(v) for k, v in dataset.config["u_bounds"].items()},
         "hidden": list(hidden),
         "activation": activation,
-        "weighting": weighting,
+        "steady_state_enforced": bool(steady_state_enforced),
         "history": history,
         "validation_error": val_loss,
     }
@@ -711,13 +716,17 @@ class ExplicitNMPC:
     def __init__(self, meta, state):
         torch = _torch()
         self.meta = meta
+        n_in, n_out = len(meta["inputs"]), len(meta["u_bounds"])
         self._model = _network(
-            torch,
-            tuple(meta["hidden"]),
-            meta["activation"],
-            len(meta["inputs"]),
-            len(meta["u_bounds"]),
+            torch, tuple(meta["hidden"]), meta["activation"], n_in, n_out
         )
+        if meta.get("steady_state_enforced"):
+            self._model = _anchor(
+                torch,
+                self._model,
+                torch.zeros((1, n_in), dtype=torch.float64),
+                torch.zeros((1, n_out), dtype=torch.float64),
+            )
         self._model.load_state_dict(state)
         self._model.eval()
 

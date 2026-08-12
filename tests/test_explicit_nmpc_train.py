@@ -35,6 +35,7 @@ def toy_dataset(n=64, gradients=True, u_bounds=True, seed=0):
                 for i, uk in enumerate(U_BOX)
             }
         points.append(point)
+    us_mid = A @ np.array([0.5, 0.5])
     config = {
         "n": n,
         "method": "uniform",
@@ -42,6 +43,9 @@ def toy_dataset(n=64, gradients=True, u_bounds=True, seed=0):
         "gradients": gradients,
         "inputs": list(X_BOX),
         "ranges": {k: list(v) for k, v in X_BOX.items()},
+        # the steady targets: the map's value at the box midpoint
+        "x_ss": {k: (lo + hi) / 2 for k, (lo, hi) in X_BOX.items()},
+        "u_ss": {k: float(u_lo[i] + us_mid[i] * ru[i]) for i, k in enumerate(U_BOX)},
     }
     if u_bounds:
         config["u_bounds"] = {k: list(v) for k, v in U_BOX.items()}
@@ -126,7 +130,8 @@ def test_a_validation_dataset_is_used_as_given():
 
 def test_every_protocol_option_runs():
     quick(schedule="cosine", clip=None, fine_tune=0.0, activation="silu")
-    quick(sobolev=False, gamma=0.0)
+    quick(training_loss="value", validation_loss="value", gamma=0.0)
+    quick(steady_state_enforced=False)
 
 
 # ----------------------------------------------------------------------
@@ -150,62 +155,33 @@ def test_save_load_round_trips(tmp_path):
 
 
 # ----------------------------------------------------------------------
-# the hessian weighting
+# the enforced steady state
 # ----------------------------------------------------------------------
-def toy_with_information(scale=1.0, vary=False, n=64):
-    # diagonal 1/range^2 blocks: the identity in scaled control units
-    d = toy_dataset(n=n)
-    ru = {k: hi - lo for k, (lo, hi) in U_BOX.items()}
-    for i, p in enumerate(d.points):
-        c = scale * (1.0 + (i / n if vary else 0.0))
-        p["information"] = {
-            "u1": {"u1": c / ru["u1"] ** 2, "u2": 0.0},
-            "u2": {"u1": 0.0, "u2": c / ru["u2"] ** 2},
-        }
-    d.config["information"] = True
-    return d
+def test_the_steady_state_is_enforced_exactly(tmp_path):
+    policy = quick(epochs=50)
+    d = toy_dataset()
+    x_ss, u_ss = d.config["x_ss"], d.config["u_ss"]
+    got = policy(x_ss)
+    for k in u_ss:
+        assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
+    # the offset survives the round trip through a file
+    policy.save(str(tmp_path / "p.pt"))
+    back = drto.ExplicitNMPC.load(str(tmp_path / "p.pt"))
+    got = back(x_ss)
+    for k in u_ss:
+        assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
 
 
-def test_weighting_needs_stored_information():
-    with pytest.raises(ValueError, match="information=True"):
-        drto.explicit_nmpc_train(toy_dataset(), weighting="information", epochs=10)
+def test_enforcement_needs_the_recorded_targets():
+    d = toy_dataset()
+    del d.config["x_ss"]
+    with pytest.raises(ValueError, match="steady targets"):
+        drto.explicit_nmpc_train(d, epochs=10)
 
 
-def test_a_bad_weighting_value_errors():
-    with pytest.raises(ValueError, match="None, information"):
-        quick(weighting="curvature")
-
-
-def test_identity_information_reproduces_the_plain_loss():
-    # a constant multiple of the scaled-units identity normalizes to
-    # the identity:
-    # the losses are equal, and a short run matches the plain one to
-    # floating-point accumulation (the summation orders differ)
-    plain = quick(epochs=50)
-    weighted = drto.explicit_nmpc_train(
-        toy_with_information(scale=7.0),
-        weighting="information",
-        epochs=50,
-        hidden=(16,),
-        lr=1e-2,
-        schedule="flat",
-    )
-    assert weighted.history["train_loss"][0] == pytest.approx(
-        plain.history["train_loss"][0], rel=1e-9
-    )
-    assert weighted.validation_error == pytest.approx(plain.validation_error, rel=1e-6)
-
-
-def test_varying_information_trains_and_is_recorded():
-    policy = drto.explicit_nmpc_train(
-        toy_with_information(vary=True),
-        weighting="information",
-        epochs=200,
-        hidden=(8,),
-        schedule="flat",
-    )
-    assert policy.meta["weighting"] == "information"
-    assert policy.validation_error > 0
+def test_a_bad_training_loss_errors():
+    with pytest.raises(ValueError, match="sobolev, value"):
+        quick(training_loss="both")
 
 
 # ----------------------------------------------------------------------
