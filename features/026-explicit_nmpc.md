@@ -119,7 +119,12 @@ units and returns the control values in theirs.
 one `dynamic_simulation` step per sample. Each action is clamped to the
 declared control's bounds before it is applied, the way an actuator
 holds an out-of-range command at its limit, and the report's moves are
-the applied values. With `compare` the horizon
+the applied values. The plant clone sheds the domain and bounds of
+every variable the loop does not fix. A square simulation cannot
+steer away from a bound, so the step converges wherever the dynamics
+land and the report records an excursion outside the controller's
+box. A plant step that still fails raises an error naming the visited
+state and the applied action. With `compare` the horizon
 problem is also solved at each state the policy visits, so the report
 carries one state trajectory and, per sample, the policy's applied
 control beside the control the solver takes at that same state: the two
@@ -189,7 +194,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   nowhere else. `x0` and a supplied disturbance realization are
   honored, and the loop is deterministic without one. An action outside
   a control's bounds is clamped to them before the plant step, and the
-  recorded move is the applied value. With `compare`
+  recorded move is the applied value. The plant simulation carries no
+  state bounds, and a policy that drives a state past the controller's
+  bound simulates, the report recording the excursion. With `compare`
   the horizon problem is solved at each visited state and the report
   also carries the solver's control there: one state trajectory, two
   control sequences.
