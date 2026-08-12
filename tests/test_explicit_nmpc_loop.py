@@ -185,3 +185,33 @@ def test_the_report_records_the_bounds():
     report = drto.explicit_nmpc_closed_loop(policy, m, samples=1, x0={"z": 0.5})
     assert report.state_bounds["z"] == (0, 1)
     assert report.control_bounds["u"] == (0, 1)
+
+
+@needs_pounce
+def test_a_failed_compare_solve_is_recorded_not_raised():
+    m = assembled_model()
+    policy = fitted(m)
+    # z carries bounds (0, 1) on the horizon problem, and the plant does
+    # not: starting outside them, the first horizon solve has no
+    # feasible point, and the trajectory returns inside
+    report = drto.explicit_nmpc_closed_loop(
+        policy, m, samples=4, x0={"z": 1.6}, compare=True
+    )
+    assert len(report.times) == 5
+    assert report.solver_failures
+    failed = [v for v in report.solver_moves["u"] if v != v]
+    assert len(failed) == len(report.solver_failures)
+    assert "did not solve" in str(report)
+
+
+@needs_pounce
+def test_the_plots_mark_a_failed_compare_sample():
+    m = assembled_model()
+    policy = fitted(m)
+    report = drto.explicit_nmpc_closed_loop(
+        policy, m, samples=4, x0={"z": 1.6}, compare=True
+    )
+    axes = drto.plot_controls(report)
+    fig = axes[0].figure
+    labels = [t.get_text() for leg in fig.legends for t in leg.get_texts()]
+    assert "no solver solution" in labels

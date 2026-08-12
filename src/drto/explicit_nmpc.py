@@ -819,12 +819,15 @@ class ExplicitNmpcReport(NmpcHistory):
     Everything :class:`drto.NmpcHistory` records, plus ``stage_costs``,
     the stage cost at each visited sample, and, when the comparison ran,
     ``solver_moves``: the control the horizon solve takes at the same
-    visited states, beside the policy's applied ``moves``. The summary
-    states the closed-loop cost, the stage costs summed; it is computed
-    here and stored nowhere else.
+    visited states, beside the policy's applied ``moves``. Where that
+    solve did not return optimal, the entry is nan and the sample's
+    time is recorded in ``solver_failures``. The summary states the
+    closed-loop cost, the stage costs summed; it is computed here and
+    stored nowhere else.
     """
 
     solver_moves: dict = field(default_factory=dict)
+    solver_failures: list = field(default_factory=list)
     stage_costs: list = field(default_factory=list)
 
     def __str__(self):
@@ -837,6 +840,11 @@ class ExplicitNmpcReport(NmpcHistory):
         )
         if self.solver_moves:
             text += ". The solver's controls are recorded at the visited states"
+            if self.solver_failures:
+                text += (
+                    f", except at {len(self.solver_failures)} where the "
+                    f"horizon problem did not solve"
+                )
         return text
 
 
@@ -936,15 +944,17 @@ def explicit_nmpc_closed_loop(
         The solver for the plant steps and the compare solves.
     compare : bool
         Also solve the horizon problem at each visited state and record
-        the control it takes there, beside the policy's.
+        the control it takes there, beside the policy's. A visited
+        state the horizon problem does not solve at records nan and
+        the sample's time, and the loop continues.
 
     Returns
     -------
     ExplicitNmpcReport
         The visited trajectory, the applied controls, the per-sample
         stage costs, and, with ``compare``, the solver's controls at
-        the same states. ``drto.plot_states`` and ``drto.plot_controls``
-        draw it.
+        the same states and the samples it failed at.
+        ``drto.plot_states`` and ``drto.plot_controls`` draw it.
     """
     fn = "explicit_nmpc_closed_loop"
     reg = info(m)
@@ -1041,22 +1051,33 @@ def explicit_nmpc_closed_loop(
         report.realizations[w.local_name] = []
     cost_vars = _stage_cost_vars(regp, t0, fn)
 
+    compared = False
     for k in range(samples):
         action = policy({h.name: value(h) for h in c_hooks})
         if compare:
             if k > 0:
-                warm_start_dynamic(m)
+                # the previous solve's values warm start the next one, and
+                # a failed solve leaves none worth starting from
+                if compared:
+                    warm_start_dynamic(m)
+                else:
+                    cold_start_dynamic(m)
             options = (
-                dict(_WARM_START_OPTIONS) if k > 0 and solver in _WARM_SOLVERS else {}
+                dict(_WARM_START_OPTIONS)
+                if k > 0 and compared and solver in _WARM_SOLVERS
+                else {}
             )
             res = opt.solve(m, options=options)
-            if res.solver.termination_condition != TerminationCondition.optimal:
-                raise RuntimeError(
-                    f"drto: {fn}: the compare solve failed at sample {k} "
-                    f"({res.solver.termination_condition})."
-                )
-            for u in m_controls:
-                report.solver_moves[u.local_name].append(value(_first_move(u)))
+            compared = res.solver.termination_condition == TerminationCondition.optimal
+            if compared:
+                for u in m_controls:
+                    report.solver_moves[u.local_name].append(value(_first_move(u)))
+            else:
+                # the policy visited a state the horizon problem cannot be
+                # posed at: record the gap and keep stepping the plant
+                report.solver_failures.append(t0 + k * dt)
+                for u in m_controls:
+                    report.solver_moves[u.local_name].append(float("nan"))
         for u, pu, (lo, hi) in zip(m_controls, p_controls, u_bounds):
             move = float(action[u.name])
             if lo is not None and move < lo:

@@ -206,7 +206,15 @@ def _bound_lines(ax, lo, hi):
 
 
 def _draw_history(
-    history, keys, series, targets, t_max, staircase, second=None, bounds=None
+    history,
+    keys,
+    series,
+    targets,
+    t_max,
+    staircase,
+    second=None,
+    bounds=None,
+    failures=None,
 ):
     """Draw a history's recorded trajectories, one fixed-size panel each.
 
@@ -215,7 +223,9 @@ def _draw_history(
     physically are, each held over its sample. Setpoint lines come from
     the recorded targets. ``second`` lays a second recorded series on
     the same panels, dashed (the solver's controls at the visited
-    states, when a closed-loop report carries them).
+    states, when a closed-loop report carries them). ``failures`` are
+    the times that second series has no value at, marked with a red x
+    on the actual trajectory.
     """
     rows = max(1, math.ceil(len(keys) / 2))
     fig, axes = plt.subplots(
@@ -227,7 +237,7 @@ def _draw_history(
         ax.ticklabel_format(useOffset=False)
     for ax in flat[len(keys) :]:
         ax.axis("off")
-    drew_target = drew_second = drew_bound = False
+    drew_target = drew_second = drew_bound = drew_failure = False
     times = history.times
     for ax, key in zip(flat, keys):
         vals = series[key]
@@ -244,6 +254,11 @@ def _draw_history(
             pts = [(t, v) for t, v in zip(times, v2 + [v2[-1]]) if t <= t_max]
             ax.step(*zip(*pts), where="post", color="C1", linestyle="--")
             drew_second = True
+            at = dict(zip(times, vals))
+            marks = [(t, at[t]) for t in (failures or ()) if t in at and t <= t_max]
+            if marks:
+                ax.plot(*zip(*marks), "x", color="red", markersize=5, linestyle="")
+                drew_failure = True
         target = targets.get(key)
         if target is not None:
             ax.axhline(target, color="C0", linestyle=":")
@@ -266,6 +281,9 @@ def _draw_history(
             _mlines.Line2D([], [], color="C1", linestyle="--", drawstyle="steps-post")
         )
         labels.append("solver")
+    if drew_failure:
+        handles.append(_mlines.Line2D([], [], marker="x", color="red", linestyle=""))
+        labels.append("no solver solution")
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
@@ -501,6 +519,7 @@ def plot_controls(m, controls=None, t_max=50):
             t_max,
             True,
             second=getattr(m, "solver_moves", None),
+            failures=getattr(m, "solver_failures", None),
             bounds=getattr(m, "control_bounds", None),
         )
     reg = drto.info(m)
