@@ -188,7 +188,26 @@ def _history_keys(recorded, selection, what):
     return keys
 
 
-def _draw_history(history, keys, series, targets, t_max, staircase, second=None):
+def _bound_lines(ax, lo, hi):
+    """Draw the bound lines, the window pinned to the data.
+
+    The limits are captured before the lines land and restored after,
+    so a distant bound sits outside the window instead of stretching
+    it. Call after the panel's data is drawn.
+    """
+    levels = [b for b in (lo, hi) if b is not None]
+    if not levels:
+        return False
+    lim = ax.get_ylim()
+    for b in levels:
+        ax.axhline(b, color="grey", linewidth=0.8, linestyle="--")
+    ax.set_ylim(lim)
+    return True
+
+
+def _draw_history(
+    history, keys, series, targets, t_max, staircase, second=None, bounds=None
+):
     """Draw a history's recorded trajectories, one fixed-size panel each.
 
     The actual values draw the way a model's draw: states as filled
@@ -208,7 +227,7 @@ def _draw_history(history, keys, series, targets, t_max, staircase, second=None)
         ax.ticklabel_format(useOffset=False)
     for ax in flat[len(keys) :]:
         ax.axis("off")
-    drew_target = drew_second = False
+    drew_target = drew_second = drew_bound = False
     times = history.times
     for ax, key in zip(flat, keys):
         vals = series[key]
@@ -229,6 +248,8 @@ def _draw_history(history, keys, series, targets, t_max, staircase, second=None)
         if target is not None:
             ax.axhline(target, color="C0", linestyle=":")
             drew_target = True
+        pair = (bounds or {}).get(key) or (None, None)
+        drew_bound = _bound_lines(ax, *pair) or drew_bound
         ax.set_title(key)
     for ax in flat[max(0, len(keys) - 2) : len(keys)]:
         ax.set_xlabel("time")
@@ -248,6 +269,11 @@ def _draw_history(history, keys, series, targets, t_max, staircase, second=None)
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
+    if drew_bound:
+        handles.append(
+            _mlines.Line2D([], [], color="grey", linewidth=0.8, linestyle="--")
+        )
+        labels.append("bound")
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
@@ -290,7 +316,7 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
         ax.ticklabel_format(useOffset=False)
     for ax in flat[len(panels) :]:
         ax.axis("off")  # keep the empty slot so every panel stays the same size
-    drew_tail = drew_boundary = drew_target = False
+    drew_tail = drew_boundary = drew_target = drew_bound = False
     for ax, (comp, other, label) in zip(flat, panels):
         pos, _ = _time_pos(comp, time)
         values = [pyo.value(_at(comp, other, t, pos)) for t in samples]
@@ -326,6 +352,11 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
                     ax.plot(*zip(*boundary), "s", mfc="none", color="C0")
                     drew_boundary = True
             ax.axvline(tN, color="grey", linewidth=0.8)
+        member = _at(comp, other, samples[0], pos)
+        drew_bound = (
+            _bound_lines(ax, getattr(member, "lb", None), getattr(member, "ub", None))
+            or drew_bound
+        )
         ax.set_title(label)
     for ax in flat[max(0, len(panels) - 2) : len(panels)]:
         ax.set_xlabel("time")
@@ -350,6 +381,11 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
+    if drew_bound:
+        handles.append(
+            _mlines.Line2D([], [], color="grey", linewidth=0.8, linestyle="--")
+        )
+        labels.append("bound")
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
@@ -386,7 +422,15 @@ def plot_states(m, states=None, t_max=50, element_boundaries=False):
 
     if isinstance(m, NmpcHistory):
         keys = _history_keys(m.states, states, "state")
-        return _draw_history(m, keys, m.states, m.state_targets, t_max, False)
+        return _draw_history(
+            m,
+            keys,
+            m.states,
+            m.state_targets,
+            t_max,
+            False,
+            bounds=getattr(m, "state_bounds", None),
+        )
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("state"), states, "state", time)
@@ -457,6 +501,7 @@ def plot_controls(m, controls=None, t_max=50):
             t_max,
             True,
             second=getattr(m, "solver_moves", None),
+            bounds=getattr(m, "control_bounds", None),
         )
     reg = drto.info(m)
     time = reg.components("horizon")[0]

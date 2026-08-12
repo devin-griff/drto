@@ -1020,24 +1020,26 @@ def explicit_nmpc_closed_loop(
 
     report = ExplicitNmpcReport()
     report.times.append(t0)
-    for label, hook, tgt in zip(labels, c_hooks, targets):
+    for label, hook, tgt, (vd, _h) in zip(labels, c_hooks, targets, pins):
         report.states[label] = [value(hook)]
         report.state_targets[label] = tgt
+        report.state_bounds[label] = (vd.lb, vd.ub)
     m_controls = list(reg.components("control"))
     p_controls = list(regp.components("control"))
     ucss = list(reg.declarations("steady_state_control"))
-    for u in m_controls:
+    u_bounds = [(_first_move(u).lb, _first_move(u).ub) for u in m_controls]
+    for u, ub in zip(m_controls, u_bounds):
         report.moves[u.local_name] = []
         report.control_targets[u.local_name] = value(
             _target(ucss, u, "steady_state_control", fn)
         )
+        report.control_bounds[u.local_name] = ub
         if compare:
             report.solver_moves[u.local_name] = []
     p_dist = list(regp.components("disturbance"))
     for w in p_dist:
         report.realizations[w.local_name] = []
     cost_vars = _stage_cost_vars(regp, t0, fn)
-    u_bounds = [(_first_move(u).lb, _first_move(u).ub) for u in m_controls]
 
     for k in range(samples):
         action = policy({h.name: value(h) for h in c_hooks})

@@ -162,3 +162,36 @@ def test_ticks_never_use_offset_notation():
     assert not ax.yaxis.get_major_formatter().get_useOffset()
     (ax,) = drto.plot_states(_valued(ready_model()))
     assert not ax.yaxis.get_major_formatter().get_useOffset()
+
+
+def test_bounds_draw_within_the_data_window():
+    h = _history()
+    h.state_bounds = {"z": (0.0, 1.0)}
+    (ax,) = drto.plot_states(h)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "bound" in labels
+    levels = sorted(
+        line.get_ydata()[0]
+        for line in ax.get_lines()
+        if line.get_linestyle() == "--" and len(set(line.get_ydata())) == 1
+    )
+    assert levels == [0.0, 1.0]
+    # the axis window comes from the data, not the bounds
+    assert ax.get_ylim()[1] < 1.0
+
+
+def test_model_plots_draw_the_declared_bounds():
+    m = _valued(ready_model())
+    (ax,) = drto.plot_controls(m)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "bound" in labels
+    levels = sorted(
+        line.get_ydata()[0]
+        for line in ax.get_lines()
+        if line.get_linestyle() == "--" and len(set(line.get_ydata())) == 1
+    )
+    assert levels == [0.0, 1.0]
+    # an unbounded state draws no bound line
+    (ax,) = drto.plot_states(m)
+    labels = [t.get_text() for t in ax.figure.legends[0].texts]
+    assert "bound" not in labels

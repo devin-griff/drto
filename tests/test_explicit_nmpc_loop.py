@@ -173,3 +173,15 @@ def test_the_plant_simulates_past_a_state_bound():
         policy, m, samples=2, x0={"z": 0.9}, disturbances={"w": [0.5, 0.5]}
     )
     assert max(report.states["z"]) > 1.0
+
+
+@needs_pounce
+def test_the_report_records_the_bounds():
+    m = assembled_model()
+
+    def policy(x):
+        return {"u": 0.5}
+
+    report = drto.explicit_nmpc_closed_loop(policy, m, samples=1, x0={"z": 0.5})
+    assert report.state_bounds["z"] == (0, 1)
+    assert report.control_bounds["u"] == (0, 1)
