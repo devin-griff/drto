@@ -146,3 +146,15 @@ def test_the_plots_draw_the_report():
     fig = axes[0].figure
     labels = [t.get_text() for leg in fig.legends for t in leg.get_texts()]
     assert "solver" in labels
+
+
+@needs_pounce
+def test_an_out_of_bounds_action_is_clamped():
+    m = assembled_model()
+
+    def policy(x):
+        return {"u": 5.0}
+
+    report = drto.explicit_nmpc_closed_loop(policy, m, samples=2, x0={"z": 0.5})
+    # u carries bounds (0, 1): the applied and recorded move is the bound
+    assert report.moves["u"] == pytest.approx([1.0, 1.0])

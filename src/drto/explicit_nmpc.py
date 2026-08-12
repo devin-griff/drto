@@ -836,6 +836,10 @@ def explicit_nmpc_closed_loop(
 ):
     """Run the fitted policy closed loop against the declared model.
 
+    Each action is clamped to the declared control's bounds before it
+    is applied, the way an actuator holds an out-of-range command at
+    its limit, and ``moves`` records the applied values.
+
     Parameters
     ----------
     policy : ExplicitNMPC
@@ -959,6 +963,7 @@ def explicit_nmpc_closed_loop(
     for w in p_dist:
         report.realizations[w.local_name] = []
     cost_vars = _stage_cost_vars(regp, t0, fn)
+    u_bounds = [(_first_move(u).lb, _first_move(u).ub) for u in m_controls]
 
     for k in range(samples):
         action = policy({h.name: value(h) for h in c_hooks})
@@ -976,8 +981,12 @@ def explicit_nmpc_closed_loop(
                 )
             for u in m_controls:
                 report.solver_moves[u.local_name].append(value(_first_move(u)))
-        for u, pu in zip(m_controls, p_controls):
+        for u, pu, (lo, hi) in zip(m_controls, p_controls, u_bounds):
             move = float(action[u.name])
+            if lo is not None and move < lo:
+                move = lo
+            if hi is not None and move > hi:
+                move = hi
             report.moves[u.local_name].append(move)
             for vd in _members(pu):
                 vd.set_value(move)
