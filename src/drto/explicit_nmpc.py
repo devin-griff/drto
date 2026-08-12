@@ -814,9 +814,13 @@ def _policy_plant(m, fn):
     The controls are fixed (the loop writes each step's move), the
     objective is the constant zero, the terminal constructs leave, and
     each stage cost keeps only its first member, which evaluates the
-    visited sample's cost once the step is simulated.
+    visited sample's cost once the step is simulated. Every unfixed
+    variable loses its domain and bounds. A square simulation cannot
+    steer away from a bound, so a kept bound could only turn a state
+    excursion into an infeasible step, and the loop's job is to record
+    where the policy actually drives the plant.
     """
-    from pyomo.core import Objective
+    from pyomo.core import Objective, Reals, Var
 
     plant = m.clone()
     regp = info(plant)
@@ -838,6 +842,12 @@ def _policy_plant(m, fn):
     for u in regp.components("control"):
         for vd in _members(u):
             vd.fix()
+    for vd in plant.component_data_objects(Var, descend_into=True):
+        if vd.fixed:
+            continue
+        vd.domain = Reals
+        vd.setlb(None)
+        vd.setub(None)
     for obj in plant.component_data_objects(Objective, active=True):
         obj.deactivate()
     plant.add_component(_PLANT_OBJECTIVE, Objective(expr=0.0))
@@ -867,7 +877,10 @@ def explicit_nmpc_closed_loop(
 
     Each action is clamped to the declared control's bounds before it
     is applied, the way an actuator holds an out-of-range command at
-    its limit, and ``moves`` records the applied values.
+    its limit, and ``moves`` records the applied values. The plant
+    carries no state bounds, so a step converges wherever the dynamics
+    land and the report records an excursion outside the controller's
+    box.
 
     Parameters
     ----------
@@ -1027,9 +1040,17 @@ def explicit_nmpc_closed_loop(
                 vd.set_value(realized)
         res = opt.solve(plant)
         if res.solver.termination_condition != TerminationCondition.optimal:
+            state = ", ".join(
+                f"{label} {value(hook):.6g}" for label, hook in zip(labels, c_hooks)
+            )
+            applied = ", ".join(
+                f"{u.local_name} {report.moves[u.local_name][-1]:.6g}"
+                for u in m_controls
+            )
             raise RuntimeError(
                 f"drto: {fn}: the plant solve failed at sample {k} "
-                f"({res.solver.termination_condition})."
+                f"({res.solver.termination_condition}). Visited state "
+                f"{state}. Applied action {applied}."
             )
         report.stage_costs.append(sum(value(cv) for cv in cost_vars))
         for c_hook, p_hook, src, label in zip(c_hooks, p_hooks, p_read, labels):
