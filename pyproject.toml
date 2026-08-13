@@ -33,10 +33,10 @@ classifiers = [
 dependencies = ["pyomo>=6.8.1", "pyomo-cvp>=0.7.0", "numpy"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "pyomo-ripopt", "pyomo-pounce>=0.8.0", "networkx", "scipy", "pint", "matplotlib", "torch"]
+dev = ["pytest", "pytest-cov", "pyomo-ripopt", "pyomo-pounce>=0.10.0", "networkx", "scipy", "pint", "matplotlib", "torch"]
 # networkx and scipy serve pyomo.contrib.incidence_analysis, which the
 # pyomo-pounce initialization pipeline stands on
-pounce = ["pyomo-pounce>=0.8.0", "networkx", "scipy"]
+pounce = ["pyomo-pounce>=0.10.0", "networkx", "scipy"]
 plot = ["matplotlib"]
 # the explicit-NMPC training and policy (feature 026)
 torch = ["torch"]

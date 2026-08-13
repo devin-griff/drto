@@ -253,3 +253,12 @@ def test_a_missing_asl_library_names_both_installers(monkeypatch):
     m = spanning_model()
     with pytest.raises(RuntimeError, match="pyomo download-extensions"):
         drto.scale(m)
+
+
+def test_the_pounce_names_take_the_direct_path():
+    from drto.scaling import _POUNCE_SOLVERS, _READS_SUFFIX
+
+    # both names reach the same solver, and both forward the Suffix, so
+    # neither builds a scaled clone
+    assert _POUNCE_SOLVERS == ("pounce_v2", "pounce")
+    assert all(name in _READS_SUFFIX for name in _POUNCE_SOLVERS)

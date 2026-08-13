@@ -47,6 +47,7 @@ from drto.ideal_nmpc import (
 )
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
+from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
 #: The designs approximate_nmpc_data draws by.
@@ -232,7 +233,7 @@ def approximate_nmpc_data(
     inputs=None,
     ranges=None,
     gradients=True,
-    solver="pounce",
+    solver="pounce_v2",
     seed=0,
     path=None,
 ):
@@ -274,11 +275,11 @@ def approximate_nmpc_data(
         ``steady_state_enforced`` training reads.
     """
     fn = "approximate_nmpc_data"
-    if gradients and solver != "pounce":
+    if gradients and solver not in _POUNCE_SOLVERS:
         raise ValueError(
             f"drto: {fn} reads the gradients from the pounce factorization; "
             f"got solver='{solver}'. Pass gradients=False, or solve with "
-            f"pounce."
+            f"{' or '.join(_POUNCE_SOLVERS)}."
         )
     reg = info(m)
     pairs = _sampled_params(reg, inputs, ranges, fn)
@@ -286,7 +287,7 @@ def approximate_nmpc_data(
     if not moves:
         raise ValueError(f"drto: {fn} needs declared controls to label.")
 
-    if solver == "pounce":
+    if solver in _POUNCE_SOLVERS:
         import pyomo_pounce
 
         pyomo_pounce.declare_sens_param(*(p for p, _ in pairs))
@@ -916,7 +917,7 @@ def _stage_cost_vars(reg, t0, fn):
 
 
 def approximate_nmpc_closed_loop(
-    policy, m, samples=50, x0=None, disturbances=None, solver="pounce", compare=False
+    policy, m, samples=50, x0=None, disturbances=None, solver="pounce_v2", compare=False
 ):
     """Run the fitted policy closed loop against the declared model.
 
@@ -1009,7 +1010,7 @@ def approximate_nmpc_closed_loop(
             )
         plan[name] = list(val)
 
-    if solver == "pounce":
+    if solver in _POUNCE_SOLVERS:
         import pyomo_pounce  # noqa: F401
     opt = SolverFactory(solver)
 
