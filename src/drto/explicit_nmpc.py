@@ -500,8 +500,6 @@ def explicit_nmpc_train(
     validation_loss="sobolev",
     training_loss="sobolev",
     gamma=1.0,
-    sobolev_huber=True,
-    huber_delta=0.1,
     hidden=(100, 100, 100),
     activation="tanh",
     steady_state_enforced=True,
@@ -538,18 +536,6 @@ def explicit_nmpc_train(
         fits the values alone.
     gamma : float
         The gradient term's weight.
-    sobolev_huber : bool
-        Take the gradient term's residual through the Huber loss
-        entrywise rather than squaring it, so no entry pushes the
-        weights harder than ``huber_delta``. The parametric
-        sensitivities of a constrained problem run over orders of
-        magnitude, and squaring lets a handful of samples own the
-        term. ``False`` squares the residual, the paper's loss.
-    huber_delta : float
-        The Huber threshold in scaled units, read when
-        ``sobolev_huber``. Below it the residual is weighted exactly as
-        the square was, so ``gamma`` means the same under either form,
-        and above it the penalty is linear.
     hidden : tuple of int
         The hidden layer widths.
     activation : str
@@ -608,11 +594,6 @@ def explicit_nmpc_train(
             f"drto: {fn} got training_loss='{training_loss}'. The "
             f"choices are sobolev, value."
         )
-    if sobolev_huber and not huber_delta > 0:
-        raise ValueError(
-            f"drto: {fn} got huber_delta={huber_delta}. The Huber "
-            f"threshold is positive."
-        )
     dataset = _resolve_dataset(data, "data")
     val_sobolev = validation_loss == "sobolev"
     need_j = training_loss == "sobolev" or val_sobolev
@@ -669,16 +650,6 @@ def explicit_nmpc_train(
     def value_error(model_out, target):
         return torch.mean((model_out - target) ** 2)
 
-    def gradient_error(jacobian, target):
-        if sobolev_huber:
-            # torch's huber halves the quadratic branch, so doubling it
-            # leaves a below-threshold residual weighted as the square
-            # was and gamma meaning the same under either form
-            return 2 * torch.nn.functional.huber_loss(
-                jacobian, target, delta=huber_delta
-            )
-        return torch.mean((jacobian - target) ** 2)
-
     phase2 = epochs - int(epochs * fine_tune)
     best_overall = None
     for seed in range(seeds):
@@ -708,7 +679,7 @@ def explicit_nmpc_train(
             loss = value_error(model(x), u)
             if training_loss == "sobolev" and epoch < phase2:
                 jac = _jacobian(torch, model, x)
-                loss = loss + gamma * gradient_error(jac, J)
+                loss = loss + gamma * torch.mean((jac - J) ** 2)
             loss.backward()
             if clipping is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clipping)
@@ -723,7 +694,7 @@ def explicit_nmpc_train(
             if val_sobolev:
                 jac = _jacobian(torch, model, x_val, create_graph=False)
                 with torch.no_grad():
-                    val += gamma * float(gradient_error(jac, J_val))
+                    val += gamma * float(torch.mean((jac - J_val) ** 2))
             history["epoch"].append(epoch + 1)
             history["train_loss"].append(float(loss.item()))
             history["val_loss"].append(val)
