@@ -50,6 +50,10 @@ _PANEL = (5.0, 3.2)
 #: member up to this many total panels; past it, select members by name.
 _MAX_PANELS = 12
 
+#: Inches reserved above the panels for the figure legend, so the gap
+#: under it is the same whatever the row count.
+_LEGEND_BAND = 0.55
+
 _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
 
@@ -309,7 +313,7 @@ def _draw_history(
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0, 1, 1 - _LEGEND_BAND / fig.get_figheight()))
     return flat[: len(keys)]
 
 
@@ -421,7 +425,7 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0, 1, 1 - _LEGEND_BAND / fig.get_figheight()))
     return flat[: len(panels)]
 
 

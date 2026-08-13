@@ -245,3 +245,18 @@ def test_parity_takes_a_validation_dataset_and_falls_back_to_one_series():
     axes = drto.plot_parity(policy, data)
     which = [t.get_text() for t in axes[0].get_legend().get_texts()]
     assert len(which) == 1 and which[0].startswith("sampled")
+
+
+def test_the_legend_band_is_the_same_at_every_row_count():
+    def above(n):
+        h = drto.NmpcHistory()
+        h.times = [0, 1, 2]
+        h.states = {f"z{i}": [0.2, 0.4, 0.5] for i in range(n)}
+        h.state_targets = {f"z{i}": 0.5 for i in range(n)}
+        axes = drto.plot_states(h)
+        fig = axes[0].figure
+        top = max(ax.get_position().y1 for ax in axes)
+        return (1 - top) * fig.get_figheight()
+
+    one, three = above(2), above(6)
+    assert one == pytest.approx(three, abs=0.02)
