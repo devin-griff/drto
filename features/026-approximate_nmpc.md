@@ -59,6 +59,9 @@ report = drto.approximate_nmpc_closed_loop(
     solver="pounce",
     compare=True,       # also solve at each visited state; record the solver's control
 )
+
+axes = drto.plot_history(policy)   # the run's two loss curves
+axes = drto.plot_parity(policy, data)  # each control against the solver's label
 ```
 
 `approximate_nmpc_data` draws the sampled Params from their box and labels
@@ -101,7 +104,10 @@ phases. `"value"` is the value error alone, the metric the paper
 reports. The choice is independent of `training_loss`. `seeds` trains
 that many networks and keeps the best by the same metric. The kept policy
 carries its run's per-epoch training loss and validation loss as
-`policy.history`.
+`policy.history`, and, when the validation set was split off by
+fraction, the points it was split to as `policy.meta`'s
+`validation_index`, so a caller can tell the two sets apart without
+reproducing the split.
 
 With `steady_state_enforced`, the default, the policy is the network
 plus a constant offset: u(x) = u_ss + N(x) - N(x_ss), in the scaled
@@ -215,5 +221,14 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   states on the same axes, the two distinguished. A sample the compare
   solve failed at is marked on the applied trajectory and named in the
   legend.
+- `drto.plot_history` draws the kept run's training and validation
+  losses on one log-scaled panel against the epoch each checkpoint was
+  taken at.
+- `drto.plot_parity` draws one panel per control, the label on the
+  horizontal axis and the policy's action on the vertical, with the
+  line where the two agree. Training and validation points draw in
+  different markers and each series carries its coefficient of
+  determination. The split comes from `validation_index`, or from a
+  supplied validation dataset, and without either one series draws.
 - The Klatt-Engell example's data generation, training, and figure are
   reproduced through these functions.
