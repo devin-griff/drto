@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""Feature 026: drto.explicit_nmpc_train and the ExplicitNMPC policy."""
+"""Feature 026: drto.approximate_nmpc_train and the ApproximateNMPC policy."""
 import sys
 
 import numpy as np
@@ -49,13 +49,13 @@ def toy_dataset(n=64, gradients=True, u_bounds=True, seed=0):
     }
     if u_bounds:
         config["u_bounds"] = {k: list(v) for k, v in U_BOX.items()}
-    return drto.ExplicitNmpcDataset(config, points, [])
+    return drto.ApproximateNmpcDataset(config, points, [])
 
 
 def quick(**kw):
     args = dict(epochs=300, hidden=(16,), lr=1e-2, schedule="flat", seeds=1)
     args.update(kw)
-    return drto.explicit_nmpc_train(toy_dataset(), **args)
+    return drto.approximate_nmpc_train(toy_dataset(), **args)
 
 
 # ----------------------------------------------------------------------
@@ -64,17 +64,17 @@ def quick(**kw):
 def test_missing_torch_names_the_install(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", None)
     with pytest.raises(RuntimeError, match="pip install torch"):
-        drto.explicit_nmpc_train(toy_dataset())
+        drto.approximate_nmpc_train(toy_dataset())
 
 
 def test_sobolev_needs_gradient_labels():
     with pytest.raises(ValueError, match="carries none"):
-        drto.explicit_nmpc_train(toy_dataset(gradients=False), epochs=10)
+        drto.approximate_nmpc_train(toy_dataset(gradients=False), epochs=10)
 
 
 def test_a_dataset_without_control_bounds_errors():
     with pytest.raises(ValueError, match="no control bounds"):
-        drto.explicit_nmpc_train(toy_dataset(u_bounds=False), epochs=10)
+        drto.approximate_nmpc_train(toy_dataset(u_bounds=False), epochs=10)
 
 
 def test_bad_options_error():
@@ -122,7 +122,7 @@ def test_the_history_is_recorded():
 
 def test_a_validation_dataset_is_used_as_given():
     vset = toy_dataset(n=16, seed=5)
-    policy = drto.explicit_nmpc_train(
+    policy = drto.approximate_nmpc_train(
         toy_dataset(), validation=vset, epochs=100, hidden=(8,), schedule="flat"
     )
     assert policy.validation_error < 1.0
@@ -147,7 +147,7 @@ def test_save_load_round_trips(tmp_path):
     policy = quick(epochs=100)
     out = tmp_path / "policy.pt"
     policy.save(str(out))
-    back = drto.ExplicitNMPC.load(str(out))
+    back = drto.ApproximateNMPC.load(str(out))
     probe = {"a_hat": 0.7, "b_hat": 1.3}
     assert back(probe) == policy(probe)
     assert back.history == policy.history
@@ -166,7 +166,7 @@ def test_the_steady_state_is_enforced_exactly(tmp_path):
         assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
     # the offset survives the round trip through a file
     policy.save(str(tmp_path / "p.pt"))
-    back = drto.ExplicitNMPC.load(str(tmp_path / "p.pt"))
+    back = drto.ApproximateNMPC.load(str(tmp_path / "p.pt"))
     got = back(x_ss)
     for k in u_ss:
         assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
@@ -176,7 +176,7 @@ def test_enforcement_needs_the_recorded_targets():
     d = toy_dataset()
     del d.config["x_ss"]
     with pytest.raises(ValueError, match="steady targets"):
-        drto.explicit_nmpc_train(d, epochs=10)
+        drto.approximate_nmpc_train(d, epochs=10)
 
 
 def test_a_bad_training_loss_errors():
@@ -214,8 +214,8 @@ def test_the_sobolev_validation_loss_needs_gradient_labels():
     train = toy_dataset(seed=0)
     val = toy_dataset(gradients=False, seed=1)
     with pytest.raises(ValueError, match="carries none"):
-        drto.explicit_nmpc_train(train, validation=val, epochs=10)
-    policy = drto.explicit_nmpc_train(
+        drto.approximate_nmpc_train(train, validation=val, epochs=10)
+    policy = drto.approximate_nmpc_train(
         train,
         validation=val,
         validation_loss="value",
@@ -244,7 +244,7 @@ def test_a_constant_control_keeps_a_floored_scale():
     for p in data.points:
         p["u0"]["u2"] = -2.0
     data.config["u_ss"]["u2"] = -2.0
-    policy = drto.explicit_nmpc_train(
+    policy = drto.approximate_nmpc_train(
         data,
         training_loss="value",
         validation_loss="value",

@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""Feature 026: drto.explicit_nmpc_closed_loop."""
+"""Feature 026: drto.approximate_nmpc_closed_loop."""
 import matplotlib
 
 matplotlib.use("Agg")
@@ -60,8 +60,8 @@ def assembled_model():
 
 def fitted(m):
     """A quickly trained policy on the model's own labels."""
-    data = drto.explicit_nmpc_data(m, n=8, seed=0)
-    return drto.explicit_nmpc_train(
+    data = drto.approximate_nmpc_data(m, n=8, seed=0)
+    return drto.approximate_nmpc_train(
         data, epochs=300, hidden=(16,), lr=1e-2, schedule="flat"
     )
 
@@ -73,7 +73,7 @@ def fitted(m):
 def test_the_loop_records_the_trajectory():
     m = assembled_model()
     policy = fitted(m)
-    report = drto.explicit_nmpc_closed_loop(policy, m, samples=4)
+    report = drto.approximate_nmpc_closed_loop(policy, m, samples=4)
     assert len(report.times) == 5
     assert len(report.states["z"]) == 5
     assert len(report.moves["u"]) == 4
@@ -86,9 +86,9 @@ def test_the_loop_records_the_trajectory():
 def test_x0_is_honored_and_the_loop_is_deterministic():
     m = assembled_model()
     policy = fitted(m)
-    a = drto.explicit_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.7})
+    a = drto.approximate_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.7})
     assert a.states["z"][0] == pytest.approx(0.7)
-    b = drto.explicit_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.7})
+    b = drto.approximate_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.7})
     assert a.states["z"] == pytest.approx(b.states["z"])
     assert a.moves["u"] == pytest.approx(b.moves["u"])
 
@@ -98,27 +98,27 @@ def test_a_disturbance_realization_is_honored():
     m = assembled_model()
     policy = fitted(m)
     seq = [0.05, -0.05, 0.0]
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=3, x0={"z": 0.5}, disturbances={"w": seq}
     )
     assert report.realizations["w"] == pytest.approx(seq)
-    quiet = drto.explicit_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.5})
+    quiet = drto.approximate_nmpc_closed_loop(policy, m, samples=3, x0={"z": 0.5})
     assert report.states["z"][1] != pytest.approx(quiet.states["z"][1])
 
 
 def test_guards():
     m = assembled_model()
     with pytest.raises(ValueError, match="not a pinned state"):
-        drto.explicit_nmpc_closed_loop(None, m, samples=1, x0={"y": 0.5})
+        drto.approximate_nmpc_closed_loop(None, m, samples=1, x0={"y": 0.5})
     with pytest.raises(ValueError, match="one per sample"):
-        drto.explicit_nmpc_closed_loop(None, m, samples=3, disturbances={"w": [0.1]})
+        drto.approximate_nmpc_closed_loop(None, m, samples=3, disturbances={"w": [0.1]})
 
 
 @needs_pounce
 def test_compare_records_the_solver_controls():
     m = assembled_model()
     policy = fitted(m)
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=3, x0={"z": 0.8}, compare=True
     )
     assert len(report.solver_moves["u"]) == 3
@@ -135,7 +135,7 @@ def test_compare_records_the_solver_controls():
 def test_the_plots_draw_the_report():
     m = assembled_model()
     policy = fitted(m)
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=3, x0={"z": 0.8}, compare=True
     )
     axes = drto.plot_states(report)
@@ -155,7 +155,7 @@ def test_an_out_of_bounds_action_is_clamped():
     def policy(x):
         return {"u": 5.0}
 
-    report = drto.explicit_nmpc_closed_loop(policy, m, samples=2, x0={"z": 0.5})
+    report = drto.approximate_nmpc_closed_loop(policy, m, samples=2, x0={"z": 0.5})
     # u carries bounds (0, 1): the applied and recorded move is the bound
     assert report.moves["u"] == pytest.approx([1.0, 1.0])
 
@@ -169,7 +169,7 @@ def test_the_plant_simulates_past_a_state_bound():
 
     # u at its bound plus a positive disturbance settles z toward 1.5,
     # across the state's declared upper bound of 1
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=2, x0={"z": 0.9}, disturbances={"w": [0.5, 0.5]}
     )
     assert max(report.states["z"]) > 1.0
@@ -182,7 +182,7 @@ def test_the_report_records_the_bounds():
     def policy(x):
         return {"u": 0.5}
 
-    report = drto.explicit_nmpc_closed_loop(policy, m, samples=1, x0={"z": 0.5})
+    report = drto.approximate_nmpc_closed_loop(policy, m, samples=1, x0={"z": 0.5})
     assert report.state_bounds["z"] == (0, 1)
     assert report.control_bounds["u"] == (0, 1)
 
@@ -194,7 +194,7 @@ def test_a_failed_compare_solve_is_recorded_not_raised():
     # z carries bounds (0, 1) on the horizon problem, and the plant does
     # not: starting outside them, the first horizon solve has no
     # feasible point, and the trajectory returns inside
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=4, x0={"z": 1.6}, compare=True
     )
     assert len(report.times) == 5
@@ -208,7 +208,7 @@ def test_a_failed_compare_solve_is_recorded_not_raised():
 def test_the_plots_mark_a_failed_compare_sample():
     m = assembled_model()
     policy = fitted(m)
-    report = drto.explicit_nmpc_closed_loop(
+    report = drto.approximate_nmpc_closed_loop(
         policy, m, samples=4, x0={"z": 1.6}, compare=True
     )
     axes = drto.plot_controls(report)

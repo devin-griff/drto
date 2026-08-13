@@ -29,13 +29,13 @@ from drto.declarations import (
     tracking_stage_cost,
     tracking_terminal_cost,
 )
-from drto.explicit_nmpc import (
-    ExplicitNMPC,
-    ExplicitNmpcDataset,
-    ExplicitNmpcReport,
-    explicit_nmpc_closed_loop,
-    explicit_nmpc_data,
-    explicit_nmpc_train,
+from drto.approximate_nmpc import (
+    ApproximateNMPC,
+    ApproximateNmpcDataset,
+    ApproximateNmpcReport,
+    approximate_nmpc_closed_loop,
+    approximate_nmpc_data,
+    approximate_nmpc_train,
 )
 from drto.info import Info, info
 from drto.initialize_steady_state import SteadyStateInitReport, initialize_steady_state
@@ -82,12 +82,12 @@ __all__ = [
     "plot_stage_cost",
     "initialize_steady_state",
     "SteadyStateInitReport",
-    "explicit_nmpc_data",
-    "explicit_nmpc_train",
-    "explicit_nmpc_closed_loop",
-    "ExplicitNmpcReport",
-    "ExplicitNmpcDataset",
-    "ExplicitNMPC",
+    "approximate_nmpc_data",
+    "approximate_nmpc_train",
+    "approximate_nmpc_closed_loop",
+    "ApproximateNmpcReport",
+    "ApproximateNmpcDataset",
+    "ApproximateNMPC",
     "horizon",
     "state",
     "dynamics",

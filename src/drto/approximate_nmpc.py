@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""Explicit NMPC: data generation and training (feature 026).
+"""Approximate NMPC: data generation and training (feature 026).
 
-``drto.explicit_nmpc_data`` samples the assembled optimization into a
+``drto.approximate_nmpc_data`` samples the assembled optimization into a
 labeled dataset. Each draw writes values into the sampled Params,
 cold-starts the model, solves once, and records the first control
 action per declared control, the objective, and, when asked, the
@@ -17,8 +17,8 @@ own ``n``; ``uniform`` is independent draws. The Sobol and Latin
 hypercube generators come from scipy, an optional dependency; the
 uniform design runs without it.
 
-``drto.explicit_nmpc_train`` fits the control policy to a dataset and
-returns it as :class:`ExplicitNMPC`, callable in the model's own
+``drto.approximate_nmpc_train`` fits the control policy to a dataset and
+returns it as :class:`ApproximateNMPC`, callable in the model's own
 units. The inputs are min-max scaled by the sampled boxes, and each
 control by the span its labels occupy; the Sobolev loss adds ``gamma``
 times the squared error of the network's Jacobian against the stored
@@ -49,11 +49,11 @@ from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 from drto.warm_start import warm_start_dynamic
 
-#: The designs explicit_nmpc_data draws by.
+#: The designs approximate_nmpc_data draws by.
 _DESIGNS = ("sobol", "lhs", "uniform")
 
 
-class ExplicitNmpcDataset:
+class ApproximateNmpcDataset:
     """A labeled dataset: the sampled values, the labels, the failures.
 
     ``points`` is a list of dicts, one per labeled draw, with keys
@@ -77,7 +77,7 @@ class ExplicitNmpcDataset:
     def __repr__(self):
         c = self.config
         summary = (
-            f"drto explicit-NMPC dataset: points {len(self.points)}, "
+            f"drto approximate-NMPC dataset: points {len(self.points)}, "
             f"failures {len(self.failures)}, method {c.get('method')}, "
             f"inputs {', '.join(c.get('inputs', ())) or '(none)'}"
         )
@@ -112,7 +112,7 @@ def _design(method, n, dim, seed):
         return np.random.default_rng(seed).uniform(size=(n, dim))
     if method not in _DESIGNS:
         raise ValueError(
-            f"drto: explicit_nmpc_data got method='{method}'; the designs "
+            f"drto: approximate_nmpc_data got method='{method}'; the designs "
             f"are {', '.join(_DESIGNS)}."
         )
     try:
@@ -225,7 +225,7 @@ def _steady_targets(reg, fn):
     return x_ss, u_ss
 
 
-def explicit_nmpc_data(
+def approximate_nmpc_data(
     m,
     n=1000,
     method="sobol",
@@ -266,14 +266,14 @@ def explicit_nmpc_data(
 
     Returns
     -------
-    ExplicitNmpcDataset
+    ApproximateNmpcDataset
         The labeled points, the failures, and the generation record.
         When the model declares ``steady_state`` and
         ``steady_state_control``, the record includes the targets'
         values as ``x_ss`` and ``u_ss``, which
         ``steady_state_enforced`` training reads.
     """
-    fn = "explicit_nmpc_data"
+    fn = "approximate_nmpc_data"
     if gradients and solver != "pounce":
         raise ValueError(
             f"drto: {fn} reads the gradients from the pounce factorization; "
@@ -325,7 +325,7 @@ def explicit_nmpc_data(
             }
         points.append(point)
 
-    dataset = ExplicitNmpcDataset(
+    dataset = ApproximateNmpcDataset(
         {
             "n": n,
             "method": method,
@@ -365,7 +365,7 @@ def _torch():
         import torch
     except ImportError as err:
         raise RuntimeError(
-            "drto: the explicit-NMPC training and policy run on torch "
+            "drto: the approximate-NMPC training and policy run on torch "
             "(pip install torch)."
         ) from err
     return torch
@@ -373,11 +373,11 @@ def _torch():
 
 def _resolve_dataset(data, what):
     if isinstance(data, str):
-        return ExplicitNmpcDataset.load(data)
-    if isinstance(data, ExplicitNmpcDataset):
+        return ApproximateNmpcDataset.load(data)
+    if isinstance(data, ApproximateNmpcDataset):
         return data
     raise TypeError(
-        f"drto: explicit_nmpc_train takes {what} as an ExplicitNmpcDataset "
+        f"drto: approximate_nmpc_train takes {what} as an ApproximateNmpcDataset "
         f"or a path; got {type(data).__name__}."
     )
 
@@ -402,7 +402,7 @@ def _arrays(dataset, gradients, fn, u_scale=None):
         raise ValueError(
             f"drto: {fn}: the dataset records no control bounds, which "
             f"the output scaling needs; regenerate it with "
-            f"drto.explicit_nmpc_data."
+            f"drto.approximate_nmpc_data."
         )
     u_names = list(u_bounds)
     x = np.array([[p["x"][k] for k in names] for p in dataset.points])
@@ -439,7 +439,7 @@ def _arrays(dataset, gradients, fn, u_scale=None):
 def _network(torch, hidden, activation, n_in, n_out):
     if activation not in _ACTIVATIONS:
         raise ValueError(
-            f"drto: explicit_nmpc_train got activation='{activation}'; "
+            f"drto: approximate_nmpc_train got activation='{activation}'; "
             f"the choices are {', '.join(_ACTIVATIONS)}."
         )
     act = {
@@ -494,7 +494,7 @@ def _jacobian(torch, model, x, create_graph=True):
     return torch.stack(rows, dim=1)
 
 
-def explicit_nmpc_train(
+def approximate_nmpc_train(
     data,
     validation=0.2,
     validation_loss="sobolev",
@@ -517,9 +517,9 @@ def explicit_nmpc_train(
 
     Parameters
     ----------
-    data : ExplicitNmpcDataset or str
+    data : ApproximateNmpcDataset or str
         The training dataset, or a path to one.
-    validation : ExplicitNmpcDataset, str, or float
+    validation : ApproximateNmpcDataset, str, or float
         The validation set, a path to one, or a fraction split off
         ``data``, shuffled under the dataset's own seed.
     validation_loss : str
@@ -572,11 +572,11 @@ def explicit_nmpc_train(
 
     Returns
     -------
-    ExplicitNMPC
+    ApproximateNMPC
         The fitted policy, callable in model units, carrying its
         training history and validation error.
     """
-    fn = "explicit_nmpc_train"
+    fn = "approximate_nmpc_train"
     torch = _torch()
     import numpy as np
 
@@ -634,7 +634,7 @@ def explicit_nmpc_train(
                 f"drto: {fn}: steady_state_enforced=True needs the steady "
                 f"targets the dataset records at generation, and this one "
                 f"has none for {', '.join(missing)}. Regenerate it with "
-                f"drto.explicit_nmpc_data on a model declaring "
+                f"drto.approximate_nmpc_data on a model declaring "
                 f"steady_state and steady_state_control, or pass "
                 f"steady_state_enforced=False."
             )
@@ -717,10 +717,10 @@ def explicit_nmpc_train(
         "history": history,
         "validation_error": val_loss,
     }
-    return ExplicitNMPC(meta, state)
+    return ApproximateNMPC(meta, state)
 
 
-class ExplicitNMPC:
+class ApproximateNMPC:
     """The fitted control policy, callable in the model's own units.
 
     Call it with a mapping of input names to values and it returns the
@@ -782,7 +782,7 @@ class ExplicitNMPC:
 
     def __repr__(self):
         return (
-            f"drto explicit-NMPC policy: inputs "
+            f"drto approximate-NMPC policy: inputs "
             f"{', '.join(self.meta['inputs'])} -> controls "
             f"{', '.join(self.meta['u_bounds'])}, validation error "
             f"{self.meta['validation_error']:.3e}"
@@ -813,7 +813,7 @@ _PLANT_OBJECTIVE = "_drto_policy_plant_objective"
 
 
 @dataclass
-class ExplicitNmpcReport(NmpcHistory):
+class ApproximateNmpcReport(NmpcHistory):
     """The policy's closed loop, in the loop-history shape.
 
     Everything :class:`drto.NmpcHistory` records, plus ``stage_costs``,
@@ -832,7 +832,7 @@ class ExplicitNmpcReport(NmpcHistory):
 
     def __str__(self):
         text = (
-            f"drto explicit-NMPC closed loop: "
+            f"drto approximate-NMPC closed loop: "
             f"{max(0, len(self.times) - 1)} samples, closed-loop cost "
             f"{sum(self.stage_costs):.6g} (the stage cost summed over the "
             f"visited samples). States {', '.join(self.states) or '(none)'}. "
@@ -910,7 +910,7 @@ def _stage_cost_vars(reg, t0, fn):
     return out
 
 
-def explicit_nmpc_closed_loop(
+def approximate_nmpc_closed_loop(
     policy, m, samples=50, x0=None, disturbances=None, solver="pounce", compare=False
 ):
     """Run the fitted policy closed loop against the declared model.
@@ -924,7 +924,7 @@ def explicit_nmpc_closed_loop(
 
     Parameters
     ----------
-    policy : ExplicitNMPC
+    policy : ApproximateNMPC
         The fitted policy.
     m : Block
         The assembled optimization the policy was sampled from. With
@@ -950,13 +950,13 @@ def explicit_nmpc_closed_loop(
 
     Returns
     -------
-    ExplicitNmpcReport
+    ApproximateNmpcReport
         The visited trajectory, the applied controls, the per-sample
         stage costs, and, with ``compare``, the solver's controls at
         the same states and the samples it failed at.
         ``drto.plot_states`` and ``drto.plot_controls`` draw it.
     """
-    fn = "explicit_nmpc_closed_loop"
+    fn = "approximate_nmpc_closed_loop"
     reg = info(m)
     if not reg.has_declaration("horizon"):
         raise ValueError(f"drto: {fn} requires the horizon declaration.")
@@ -1028,7 +1028,7 @@ def explicit_nmpc_closed_loop(
     c_hooks = [h for _vd, h in pins]
     p_hooks = [h for _vd, h in p_pins]
 
-    report = ExplicitNmpcReport()
+    report = ApproximateNmpcReport()
     report.times.append(t0)
     for label, hook, tgt, (vd, _h) in zip(labels, c_hooks, targets, pins):
         report.states[label] = [value(hook)]

@@ -94,17 +94,17 @@ The estimation-side surface:
    :members:
 ```
 
-## Explicit NMPC
+## Approximate NMPC
 
 ```{eval-rst}
-.. autofunction:: drto.explicit_nmpc_data
-.. autoclass:: drto.ExplicitNmpcDataset
+.. autofunction:: drto.approximate_nmpc_data
+.. autoclass:: drto.ApproximateNmpcDataset
    :members:
-.. autofunction:: drto.explicit_nmpc_train
-.. autoclass:: drto.ExplicitNMPC
+.. autofunction:: drto.approximate_nmpc_train
+.. autoclass:: drto.ApproximateNMPC
    :members:
-.. autofunction:: drto.explicit_nmpc_closed_loop
-.. autoclass:: drto.ExplicitNmpcReport
+.. autofunction:: drto.approximate_nmpc_closed_loop
+.. autoclass:: drto.ApproximateNmpcReport
    :members:
 ```
 
