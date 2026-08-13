@@ -1,4 +1,4 @@
-# Explicit NMPC
+# Approximate NMPC
 
 **Status:** ![ready](https://img.shields.io/badge/ready-blue)
 
@@ -14,7 +14,7 @@ import drto
 
 # ... declared model m, transforms applied (the assembled optimization) ...
 
-data = drto.explicit_nmpc_data(
+data = drto.approximate_nmpc_data(
     m,
     n=1000,             # draws
     method="sobol",     # "sobol" | "lhs" | "uniform"
@@ -26,7 +26,7 @@ data = drto.explicit_nmpc_data(
     path=None,          # JSON written when given
 )
 
-policy = drto.explicit_nmpc_train(
+policy = drto.approximate_nmpc_train(
     data,               # dataset, or a path
     validation=0.2,     # dataset, path, or a fraction split off `data`
     validation_loss="sobolev",  # "sobolev" | "value": the checkpoint metric
@@ -49,9 +49,9 @@ policy = drto.explicit_nmpc_train(
 
 u0 = policy({"ca_hat": 0.8, "cb_hat": 0.5, "tr_hat": 134.1, "tk_hat": 130.0})
 policy.save("policy.pt")
-policy = drto.ExplicitNMPC.load("policy.pt")
+policy = drto.ApproximateNMPC.load("policy.pt")
 
-report = drto.explicit_nmpc_closed_loop(
+report = drto.approximate_nmpc_closed_loop(
     policy, m,
     samples=50,         # closed-loop steps
     x0=None,            # initial state; default the initial-condition Params' values
@@ -61,7 +61,7 @@ report = drto.explicit_nmpc_closed_loop(
 )
 ```
 
-`explicit_nmpc_data` draws the sampled Params from their box and labels
+`approximate_nmpc_data` draws the sampled Params from their box and labels
 each draw with one solve: the first control action, the objective, and,
 with `gradients`, the action's derivative with respect to every sampled
 Param, read from the converged factorization the way
@@ -78,7 +78,7 @@ declares `steady_state` and `steady_state_control`, the dataset
 records the targets' values as `x_ss` and `u_ss`, which
 `steady_state_enforced` training reads.
 
-`explicit_nmpc_train` fits the network on min-max-scaled inputs and
+`approximate_nmpc_train` fits the network on min-max-scaled inputs and
 outputs. The inputs scale by the sampled boxes. Each control scales
 by the span its labels occupy over the training set, floored at one
 thousandth of the control's bound range, so a control commanding a
@@ -116,7 +116,7 @@ optional dependency, and a missing install is a descriptive error.
 
 The trained policy is callable with named input values in the model's own
 units and returns the control values in theirs.
-`explicit_nmpc_closed_loop` runs it closed loop against the declared model,
+`approximate_nmpc_closed_loop` runs it closed loop against the declared model,
 one `dynamic_simulation` step per sample. Each action is clamped to the
 declared control's bounds before it is applied, the way an actuator
 holds an out-of-range command at its limit, and the report's moves are
@@ -137,7 +137,7 @@ not repeated here.
 
 ## Benefit hypothesis
 
-An explicit controller replaces each online solve with a function
+A fitted controller replaces each online solve with a function
 evaluation, so NMPC can run where a solver cannot: an embedded target,
 a sampling rate the solve cannot meet, or a platform that carries no
 solver. The offline cost is the labeled dataset, one solve per point,
@@ -154,7 +154,7 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
 
 ## Acceptance criteria
 
-- `explicit_nmpc_data` draws by all three methods, seeded and
+- `approximate_nmpc_data` draws by all three methods, seeded and
   reproducible. The first `m` points of a Sobol pool of `n > m` are the
   same as a Sobol pool of `m`; an LHS of `n` has exactly one point in
   each of `n` equal bins per coordinate. Default ranges come from the
@@ -169,11 +169,11 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   targets' values recorded in the dataset as `x_ss` and `u_ss`. A
   non-optimal solve is recorded as a failure and
   excluded. `path` writes JSON that round-trips through the loader.
-- `explicit_nmpc_train` honors every listed option; the `"sobolev"`
+- `approximate_nmpc_train` honors every listed option; the `"sobolev"`
   training or validation loss on a dataset without gradients is a
   descriptive error, and torch missing
   is a descriptive error naming the install, for training and for
-  `ExplicitNMPC.load` alike. A `validation` fraction splits off the
+  `ApproximateNMPC.load` alike. A `validation` fraction splits off the
   dataset reproducibly under the seed; a dataset or path supplied is
   used as given. The controls scale by their labels' span over the
   training set, recorded in the policy's metadata, with a
@@ -192,7 +192,7 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
 - The trained policy is callable with named inputs in model units and
   returns controls in model units; `save`/`load` round-trips it, the
   training history included.
-- `explicit_nmpc_closed_loop` steps the declared model under the policy and
+- `approximate_nmpc_closed_loop` steps the declared model under the policy and
   returns a readable report in the feature 014 shape, the recorded
   bounds included, holding the state
   and applied-control trajectory per sample, its summary stating the

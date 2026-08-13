@@ -37,7 +37,7 @@ alongside the CHANGELOG section rename.
 | [023 drto.scale](023-drto.scale.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 | [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [025 drto.soft_bounds](025-drto.soft_bounds.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
-| [026 Explicit NMPC](026-explicit_nmpc.md) | ![ready](https://img.shields.io/badge/ready-blue) |
+| [026 Approximate NMPC](026-approximate_nmpc.md) | ![ready](https://img.shields.io/badge/ready-blue) |
 
 ## Template
 
