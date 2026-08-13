@@ -205,6 +205,19 @@ def _bound_lines(ax, lo, hi):
     return True
 
 
+def _series_names(history):
+    """The legend's names for the drawn series.
+
+    A report from ``drto.approximate_nmpc_closed_loop`` carries the
+    solver's controls beside the policy's, so its two series are the
+    fitted policy and the horizon solves it is compared against. Every
+    other history is the solver's own loop.
+    """
+    if hasattr(history, "solver_moves"):
+        return "Approximate NMPC", "NMPC comparison", "no NMPC solution"
+    return "actual", "solver", "no solver solution"
+
+
 def _draw_history(
     history,
     keys,
@@ -275,15 +288,16 @@ def _draw_history(
             else _mlines.Line2D([], [], marker="o", color="C0", linestyle="")
         )
     ]
-    labels = ["actual"]
+    drawn, compared, unsolved = _series_names(history)
+    labels = [drawn]
     if drew_second:
         handles.append(
             _mlines.Line2D([], [], color="C1", linestyle="--", drawstyle="steps-post")
         )
-        labels.append("solver")
+        labels.append(compared)
     if drew_failure:
         handles.append(_mlines.Line2D([], [], marker="x", color="red", linestyle=""))
-        labels.append("no solver solution")
+        labels.append(unsolved)
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")

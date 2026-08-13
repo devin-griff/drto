@@ -142,10 +142,10 @@ def test_the_plots_draw_the_report():
     assert len(axes) == 1
     axes = drto.plot_controls(report)
     assert len(axes) == 1
-    # the overlay legend names the solver series
+    # the overlay legend names the two loops by what produced them
     fig = axes[0].figure
     labels = [t.get_text() for leg in fig.legends for t in leg.get_texts()]
-    assert "solver" in labels
+    assert labels[:2] == ["Approximate NMPC", "NMPC comparison"]
 
 
 @needs_pounce
@@ -214,4 +214,4 @@ def test_the_plots_mark_a_failed_compare_sample():
     axes = drto.plot_controls(report)
     fig = axes[0].figure
     labels = [t.get_text() for leg in fig.legends for t in leg.get_texts()]
-    assert "no solver solution" in labels
+    assert "no NMPC solution" in labels
