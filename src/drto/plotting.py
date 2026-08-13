@@ -50,6 +50,10 @@ _PANEL = (5.0, 3.2)
 #: member up to this many total panels; past it, select members by name.
 _MAX_PANELS = 12
 
+#: Inches reserved above the panels for the figure legend, so the gap
+#: under it is the same whatever the row count.
+_LEGEND_BAND = 0.55
+
 _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
 
@@ -188,22 +192,69 @@ def _history_keys(recorded, selection, what):
     return keys
 
 
-def _draw_history(history, keys, series, targets, t_max, staircase):
+def _bound_lines(ax, lo, hi):
+    """Draw the bound lines, the window pinned to the data.
+
+    The limits are captured before the lines land and restored after,
+    so a distant bound sits outside the window instead of stretching
+    it. Call after the panel's data is drawn.
+    """
+    levels = [b for b in (lo, hi) if b is not None]
+    if not levels:
+        return False
+    lim = ax.get_ylim()
+    for b in levels:
+        ax.axhline(b, color="grey", linewidth=0.8, linestyle="--")
+    ax.set_ylim(lim)
+    return True
+
+
+def _series_names(history):
+    """The legend's names for the drawn series.
+
+    A report from ``drto.approximate_nmpc_closed_loop`` carries the
+    solver's controls beside the policy's, so its two series are the
+    fitted policy and the horizon solves it is compared against. Every
+    other history is the solver's own loop.
+    """
+    if hasattr(history, "solver_moves"):
+        return "Approximate NMPC", "NMPC comparison", "no NMPC solution"
+    return "actual", "solver", "no solver solution"
+
+
+def _draw_history(
+    history,
+    keys,
+    series,
+    targets,
+    t_max,
+    staircase,
+    second=None,
+    bounds=None,
+    failures=None,
+):
     """Draw a history's recorded trajectories, one fixed-size panel each.
 
     The actual values draw the way a model's draw: states as filled
     points at the sample instants, moves as the staircase they
     physically are, each held over its sample. Setpoint lines come from
-    the recorded targets.
+    the recorded targets. ``second`` lays a second recorded series on
+    the same panels, dashed (the solver's controls at the visited
+    states, when a closed-loop report carries them). ``failures`` are
+    the times that second series has no value at, marked with a red x
+    on the actual trajectory.
     """
     rows = max(1, math.ceil(len(keys) / 2))
     fig, axes = plt.subplots(
         rows, 2, figsize=(2 * _PANEL[0], rows * _PANEL[1]), sharex=True, squeeze=False
     )
     flat = [ax for row in axes for ax in row]
+    for ax in flat:
+        # full tick values, never matplotlib's offset notation
+        ax.ticklabel_format(useOffset=False)
     for ax in flat[len(keys) :]:
         ax.axis("off")
-    drew_target = False
+    drew_target = drew_second = drew_bound = drew_failure = False
     times = history.times
     for ax, key in zip(flat, keys):
         vals = series[key]
@@ -215,10 +266,22 @@ def _draw_history(history, keys, series, targets, t_max, staircase):
         else:
             pts = [(t, v) for t, v in zip(times, vals) if t <= t_max]
             ax.plot(*zip(*pts), "o", color="C0")
+        if second and second.get(key):
+            v2 = second[key]
+            pts = [(t, v) for t, v in zip(times, v2 + [v2[-1]]) if t <= t_max]
+            ax.step(*zip(*pts), where="post", color="C1", linestyle="--")
+            drew_second = True
+            at = dict(zip(times, vals))
+            marks = [(t, at[t]) for t in (failures or ()) if t in at and t <= t_max]
+            if marks:
+                ax.plot(*zip(*marks), "x", color="red", markersize=5, linestyle="")
+                drew_failure = True
         target = targets.get(key)
         if target is not None:
             ax.axhline(target, color="C0", linestyle=":")
             drew_target = True
+        pair = (bounds or {}).get(key) or (None, None)
+        drew_bound = _bound_lines(ax, *pair) or drew_bound
         ax.set_title(key)
     for ax in flat[max(0, len(keys) - 2) : len(keys)]:
         ax.set_xlabel("time")
@@ -229,14 +292,28 @@ def _draw_history(history, keys, series, targets, t_max, staircase):
             else _mlines.Line2D([], [], marker="o", color="C0", linestyle="")
         )
     ]
-    labels = ["actual"]
+    drawn, compared, unsolved = _series_names(history)
+    labels = [drawn]
+    if drew_second:
+        handles.append(
+            _mlines.Line2D([], [], color="C1", linestyle="--", drawstyle="steps-post")
+        )
+        labels.append(compared)
+    if drew_failure:
+        handles.append(_mlines.Line2D([], [], marker="x", color="red", linestyle=""))
+        labels.append(unsolved)
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
+    if drew_bound:
+        handles.append(
+            _mlines.Line2D([], [], color="grey", linewidth=0.8, linestyle="--")
+        )
+        labels.append("bound")
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0, 1, 1 - _LEGEND_BAND / fig.get_figheight()))
     return flat[: len(keys)]
 
 
@@ -270,9 +347,12 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
         rows, 2, figsize=(2 * _PANEL[0], rows * _PANEL[1]), sharex=True, squeeze=False
     )
     flat = [ax for row in axes for ax in row]
+    for ax in flat:
+        # full tick values, never matplotlib's offset notation
+        ax.ticklabel_format(useOffset=False)
     for ax in flat[len(panels) :]:
         ax.axis("off")  # keep the empty slot so every panel stays the same size
-    drew_tail = drew_boundary = drew_target = False
+    drew_tail = drew_boundary = drew_target = drew_bound = False
     for ax, (comp, other, label) in zip(flat, panels):
         pos, _ = _time_pos(comp, time)
         values = [pyo.value(_at(comp, other, t, pos)) for t in samples]
@@ -308,6 +388,11 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
                     ax.plot(*zip(*boundary), "s", mfc="none", color="C0")
                     drew_boundary = True
             ax.axvline(tN, color="grey", linewidth=0.8)
+        member = _at(comp, other, samples[0], pos)
+        drew_bound = (
+            _bound_lines(ax, getattr(member, "lb", None), getattr(member, "ub", None))
+            or drew_bound
+        )
         ax.set_title(label)
     for ax in flat[max(0, len(panels) - 2) : len(panels)]:
         ax.set_xlabel("time")
@@ -332,10 +417,15 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
     if drew_target:
         handles.append(_mlines.Line2D([], [], color="C0", linestyle=":"))
         labels.append("setpoint")
+    if drew_bound:
+        handles.append(
+            _mlines.Line2D([], [], color="grey", linewidth=0.8, linestyle="--")
+        )
+        labels.append("bound")
     fig.legend(
         handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0)
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0, 1, 1 - _LEGEND_BAND / fig.get_figheight()))
     return flat[: len(panels)]
 
 
@@ -368,7 +458,15 @@ def plot_states(m, states=None, t_max=50, element_boundaries=False):
 
     if isinstance(m, NmpcHistory):
         keys = _history_keys(m.states, states, "state")
-        return _draw_history(m, keys, m.states, m.state_targets, t_max, False)
+        return _draw_history(
+            m,
+            keys,
+            m.states,
+            m.state_targets,
+            t_max,
+            False,
+            bounds=getattr(m, "state_bounds", None),
+        )
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("state"), states, "state", time)
@@ -423,13 +521,25 @@ def plot_controls(m, controls=None, t_max=50):
 
     Handed an :class:`drto.NmpcHistory` instead of a model, draws the
     implemented moves as the staircase they physically are, each held
-    over its sample; ``controls`` then selects the recorded labels.
+    over its sample; ``controls`` then selects the recorded labels. A
+    closed-loop report carrying the solver's controls draws them on the
+    same panels, dashed.
     """
     from drto.ideal_nmpc import NmpcHistory
 
     if isinstance(m, NmpcHistory):
         keys = _history_keys(m.moves, controls, "control")
-        return _draw_history(m, keys, m.moves, m.control_targets, t_max, True)
+        return _draw_history(
+            m,
+            keys,
+            m.moves,
+            m.control_targets,
+            t_max,
+            True,
+            second=getattr(m, "solver_moves", None),
+            failures=getattr(m, "solver_failures", None),
+            bounds=getattr(m, "control_bounds", None),
+        )
     reg = drto.info(m)
     time = reg.components("horizon")[0]
     panels = _select(reg.components("control"), controls, "control", time)
@@ -442,3 +552,104 @@ def plot_controls(m, controls=None, t_max=50):
         boundary_squares=False,
         staircase=True,
     )
+
+
+def plot_history(policy):
+    """Plot a fitted policy's training and validation losses, one panel.
+
+    Both curves come from ``policy.history``, on a log scale against the
+    epoch each checkpoint was taken at. Returns the panel axes.
+    """
+    fig, ax = plt.subplots(figsize=_PANEL)
+    h = policy.history
+    ax.semilogy(h["epoch"], h["train_loss"], color="C0", label="training loss")
+    ax.semilogy(h["epoch"], h["val_loss"], color="C1", label="validation loss")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("loss")
+    ax.legend()
+    fig.tight_layout()
+    return [ax]
+
+
+def _r_squared(y, y_hat):
+    """One minus the residual sum of squares over the total."""
+    mean = sum(y) / len(y)
+    total = sum((v - mean) ** 2 for v in y)
+    residual = sum((v - w) ** 2 for v, w in zip(y, y_hat))
+    return 1.0 - residual / total if total else float("nan")
+
+
+def plot_parity(policy, data, validation=None):
+    """Plot a fitted policy's actions against the solver's, one panel each.
+
+    Each panel draws one control, the label on the horizontal axis and
+    the policy's action on the vertical, with the line where the two
+    agree. Training points draw as circles and validation points as
+    triangles, and each series carries its coefficient of determination
+    in the legend. The split comes from ``policy.validation_index``, the
+    points the training held out, unless a ``validation`` dataset is
+    given, in which case its points are the second series. Without
+    either, one series draws. Returns the panel axes.
+    """
+    points = list(getattr(data, "points", data))
+    held = policy.meta.get("validation_index")
+    if validation is not None:
+        series = [
+            (points, "o", "training"),
+            (list(getattr(validation, "points", validation)), "^", "validation"),
+        ]
+    elif held:
+        held = set(held)
+        series = [
+            ([p for i, p in enumerate(points) if i not in held], "o", "training"),
+            ([p for i, p in enumerate(points) if i in held], "^", "validation"),
+        ]
+    else:
+        series = [(points, "o", "sampled")]
+
+    names = list(policy.meta["inputs"])
+    controls = list(policy.meta["u_bounds"])
+    drawn = [
+        (
+            marker,
+            which,
+            [[p["u0"][c] for c in controls] for p in group],
+            [
+                [policy({k: p["x"][k] for k in names})[c] for c in controls]
+                for p in group
+            ],
+        )
+        for group, marker, which in series
+        if group
+    ]
+    fig, axes = plt.subplots(
+        1,
+        len(controls),
+        figsize=(len(controls) * _PANEL[0], _PANEL[1] + 0.6),
+        squeeze=False,
+    )
+    flat = [ax for row in axes for ax in row]
+    for j, (ax, name) in enumerate(zip(flat, controls)):
+        ax.ticklabel_format(useOffset=False)
+        low = high = None
+        for marker, which, label, pred in drawn:
+            y = [row[j] for row in label]
+            y_hat = [row[j] for row in pred]
+            ax.scatter(
+                y,
+                y_hat,
+                s=16,
+                marker=marker,
+                alpha=0.6,
+                label=f"{which}, $R^2$ = {_r_squared(y, y_hat):.5f}",
+            )
+            low = min(y) if low is None else min(low, min(y))
+            high = max(y) if high is None else max(high, max(y))
+        if low is not None:
+            ax.plot([low, high], [low, high], color="0.4", linewidth=0.8, zorder=0)
+        ax.set_title(name)
+        ax.set_xlabel("solver")
+        ax.set_ylabel("policy")
+        ax.legend(loc="upper left", fontsize=8)
+    fig.tight_layout()
+    return flat

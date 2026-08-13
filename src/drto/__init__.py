@@ -29,11 +29,13 @@ from drto.declarations import (
     tracking_stage_cost,
     tracking_terminal_cost,
 )
-from drto.explicit_nmpc import (
-    ExplicitNMPC,
-    ExplicitNmpcDataset,
-    explicit_nmpc_data,
-    explicit_nmpc_train,
+from drto.approximate_nmpc import (
+    ApproximateNMPC,
+    ApproximateNmpcDataset,
+    ApproximateNmpcReport,
+    approximate_nmpc_closed_loop,
+    approximate_nmpc_data,
+    approximate_nmpc_train,
 )
 from drto.info import Info, info
 from drto.initialize_steady_state import SteadyStateInitReport, initialize_steady_state
@@ -44,7 +46,13 @@ from drto.scaling import scale, scaled_solve
 from drto.warm_start import WarmStartReport, warm_start_dynamic
 from drto.ideal_nmpc import NmpcHistory, ideal_nmpc
 from drto.objective import build_objective
-from drto.plotting import plot_controls, plot_stage_cost, plot_states
+from drto.plotting import (
+    plot_controls,
+    plot_history,
+    plot_parity,
+    plot_stage_cost,
+    plot_states,
+)
 
 # importing registers the drto.* transformations
 from drto import dynamic_optimization as _dynamic_optimization  # noqa: F401
@@ -78,12 +86,16 @@ __all__ = [
     "plot_states",
     "plot_controls",
     "plot_stage_cost",
+    "plot_history",
+    "plot_parity",
     "initialize_steady_state",
     "SteadyStateInitReport",
-    "explicit_nmpc_data",
-    "explicit_nmpc_train",
-    "ExplicitNmpcDataset",
-    "ExplicitNMPC",
+    "approximate_nmpc_data",
+    "approximate_nmpc_train",
+    "approximate_nmpc_closed_loop",
+    "ApproximateNmpcReport",
+    "ApproximateNmpcDataset",
+    "ApproximateNMPC",
     "horizon",
     "state",
     "dynamics",

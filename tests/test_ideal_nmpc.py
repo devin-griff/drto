@@ -133,6 +133,8 @@ def test_loop_settles_and_records():
     assert h.states["z"][0] == pytest.approx(0.2)
     assert h.states["z"][-1] == pytest.approx(0.5, abs=1e-4)
     assert h.moves["u"][-1] == pytest.approx(0.5, abs=1e-3)
+    assert h.state_bounds["z"] == (-1, 2)
+    assert h.control_bounds["u"] == (0, 1)
     assert h.state_targets["z"] == pytest.approx(0.5)
     assert h.control_targets["u"] == pytest.approx(0.5)
     assert h.realizations["w"] == [0.0] * 8

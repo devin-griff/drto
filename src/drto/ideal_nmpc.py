@@ -80,8 +80,10 @@ class NmpcHistory:
     at those instants; ``moves`` and ``realizations`` map each control
     and disturbance to its per-step values, one shorter than ``times``.
     The targets are the declared steady-state pairings' values, the
-    plots' setpoint lines. Under ``tee=True``, ``logs`` holds every
-    solve's output in loop order as ``(step, side, text)``.
+    plots' setpoint lines. ``state_bounds`` and ``control_bounds`` map
+    each label to the declared (lo, hi), the plots' bound lines. Under
+    ``tee=True``, ``logs`` holds every solve's output in loop order as
+    ``(step, side, text)``.
     """
 
     times: list = field(default_factory=list)
@@ -91,6 +93,8 @@ class NmpcHistory:
     realizations: dict = field(default_factory=dict)
     state_targets: dict = field(default_factory=dict)
     control_targets: dict = field(default_factory=dict)
+    state_bounds: dict = field(default_factory=dict)
+    control_bounds: dict = field(default_factory=dict)
 
     def __str__(self):
         return (
@@ -454,18 +458,21 @@ def ideal_nmpc(
 
     history = NmpcHistory()
     history.times.append(t0)
-    for label, hook, tgt in zip(labels, c_hooks, targets):
+    for label, hook, tgt, (vd, _h) in zip(labels, c_hooks, targets, c_pins):
         history.states[label] = [pyo.value(hook)]
         history.state_targets[label] = tgt
+        history.state_bounds[label] = (vd.lb, vd.ub)
 
     c_controls = list(info(ctrl).components("control"))
     p_controls = list(info(plant).components("control"))
     ucss = list(info(ctrl).declarations("steady_state_control"))
-    for u in c_controls:
+    for u, mu in zip(c_controls, reg_m.components("control")):
         history.moves[u.local_name] = []
         history.control_targets[u.local_name] = pyo.value(
             _target(ucss, u, "steady_state_control", fn)
         )
+        first = _first_move(mu)
+        history.control_bounds[u.local_name] = (first.lb, first.ub)
     p_dist = list(info(plant).components("disturbance"))
     for w in p_dist:
         history.realizations[w.local_name] = []

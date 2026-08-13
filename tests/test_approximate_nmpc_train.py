@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""Feature 026: drto.explicit_nmpc_train and the ExplicitNMPC policy."""
+"""Feature 026: drto.approximate_nmpc_train and the ApproximateNMPC policy."""
 import sys
 
 import numpy as np
@@ -35,6 +35,7 @@ def toy_dataset(n=64, gradients=True, u_bounds=True, seed=0):
                 for i, uk in enumerate(U_BOX)
             }
         points.append(point)
+    us_mid = A @ np.array([0.5, 0.5])
     config = {
         "n": n,
         "method": "uniform",
@@ -42,16 +43,19 @@ def toy_dataset(n=64, gradients=True, u_bounds=True, seed=0):
         "gradients": gradients,
         "inputs": list(X_BOX),
         "ranges": {k: list(v) for k, v in X_BOX.items()},
+        # the steady targets: the map's value at the box midpoint
+        "x_ss": {k: (lo + hi) / 2 for k, (lo, hi) in X_BOX.items()},
+        "u_ss": {k: float(u_lo[i] + us_mid[i] * ru[i]) for i, k in enumerate(U_BOX)},
     }
     if u_bounds:
         config["u_bounds"] = {k: list(v) for k, v in U_BOX.items()}
-    return drto.ExplicitNmpcDataset(config, points, [])
+    return drto.ApproximateNmpcDataset(config, points, [])
 
 
 def quick(**kw):
     args = dict(epochs=300, hidden=(16,), lr=1e-2, schedule="flat", seeds=1)
     args.update(kw)
-    return drto.explicit_nmpc_train(toy_dataset(), **args)
+    return drto.approximate_nmpc_train(toy_dataset(), **args)
 
 
 # ----------------------------------------------------------------------
@@ -60,17 +64,17 @@ def quick(**kw):
 def test_missing_torch_names_the_install(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", None)
     with pytest.raises(RuntimeError, match="pip install torch"):
-        drto.explicit_nmpc_train(toy_dataset())
+        drto.approximate_nmpc_train(toy_dataset())
 
 
 def test_sobolev_needs_gradient_labels():
     with pytest.raises(ValueError, match="carries none"):
-        drto.explicit_nmpc_train(toy_dataset(gradients=False), epochs=10)
+        drto.approximate_nmpc_train(toy_dataset(gradients=False), epochs=10)
 
 
 def test_a_dataset_without_control_bounds_errors():
     with pytest.raises(ValueError, match="no control bounds"):
-        drto.explicit_nmpc_train(toy_dataset(u_bounds=False), epochs=10)
+        drto.approximate_nmpc_train(toy_dataset(u_bounds=False), epochs=10)
 
 
 def test_bad_options_error():
@@ -112,13 +116,13 @@ def test_seeds_keep_the_best_by_validation():
 def test_the_history_is_recorded():
     policy = quick(epochs=100)
     assert policy.history["epoch"][-1] == 100
-    assert len(policy.history["val_mse"]) == len(policy.history["epoch"])
-    assert policy.validation_error == min(policy.history["val_mse"])
+    assert len(policy.history["val_loss"]) == len(policy.history["epoch"])
+    assert policy.validation_error == min(policy.history["val_loss"])
 
 
 def test_a_validation_dataset_is_used_as_given():
     vset = toy_dataset(n=16, seed=5)
-    policy = drto.explicit_nmpc_train(
+    policy = drto.approximate_nmpc_train(
         toy_dataset(), validation=vset, epochs=100, hidden=(8,), schedule="flat"
     )
     assert policy.validation_error < 1.0
@@ -126,7 +130,8 @@ def test_a_validation_dataset_is_used_as_given():
 
 def test_every_protocol_option_runs():
     quick(schedule="cosine", clip=None, fine_tune=0.0, activation="silu")
-    quick(sobolev=False, gamma=0.0)
+    quick(training_loss="value", validation_loss="value", gamma=0.0)
+    quick(steady_state_enforced=False)
 
 
 # ----------------------------------------------------------------------
@@ -142,7 +147,7 @@ def test_save_load_round_trips(tmp_path):
     policy = quick(epochs=100)
     out = tmp_path / "policy.pt"
     policy.save(str(out))
-    back = drto.ExplicitNMPC.load(str(out))
+    back = drto.ApproximateNMPC.load(str(out))
     probe = {"a_hat": 0.7, "b_hat": 1.3}
     assert back(probe) == policy(probe)
     assert back.history == policy.history
@@ -150,59 +155,104 @@ def test_save_load_round_trips(tmp_path):
 
 
 # ----------------------------------------------------------------------
-# the hessian weighting
+# the enforced steady state
 # ----------------------------------------------------------------------
-def toy_with_information(scale=1.0, vary=False, n=64):
-    # diagonal 1/range^2 blocks: the identity in scaled control units
-    d = toy_dataset(n=n)
-    ru = {k: hi - lo for k, (lo, hi) in U_BOX.items()}
-    for i, p in enumerate(d.points):
-        c = scale * (1.0 + (i / n if vary else 0.0))
-        p["information"] = {
-            "u1": {"u1": c / ru["u1"] ** 2, "u2": 0.0},
-            "u2": {"u1": 0.0, "u2": c / ru["u2"] ** 2},
-        }
-    d.config["information"] = True
-    return d
+def test_the_steady_state_is_enforced_exactly(tmp_path):
+    policy = quick(epochs=50)
+    d = toy_dataset()
+    x_ss, u_ss = d.config["x_ss"], d.config["u_ss"]
+    got = policy(x_ss)
+    for k in u_ss:
+        assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
+    # the offset survives the round trip through a file
+    policy.save(str(tmp_path / "p.pt"))
+    back = drto.ApproximateNMPC.load(str(tmp_path / "p.pt"))
+    got = back(x_ss)
+    for k in u_ss:
+        assert got[k] == pytest.approx(u_ss[k], abs=1e-12)
 
 
-def test_weighting_needs_stored_information():
-    with pytest.raises(ValueError, match="information=True"):
-        drto.explicit_nmpc_train(toy_dataset(), weighting="information", epochs=10)
+def test_enforcement_needs_the_recorded_targets():
+    d = toy_dataset()
+    del d.config["x_ss"]
+    with pytest.raises(ValueError, match="steady targets"):
+        drto.approximate_nmpc_train(d, epochs=10)
 
 
-def test_a_bad_weighting_value_errors():
-    with pytest.raises(ValueError, match="None, information"):
-        quick(weighting="curvature")
+def test_a_bad_training_loss_errors():
+    with pytest.raises(ValueError, match="sobolev, value"):
+        quick(training_loss="both")
 
 
-def test_identity_information_reproduces_the_plain_loss():
-    # a constant multiple of the scaled-units identity normalizes to
-    # the identity:
-    # the losses are equal, and a short run matches the plain one to
-    # floating-point accumulation (the summation orders differ)
-    plain = quick(epochs=50)
-    weighted = drto.explicit_nmpc_train(
-        toy_with_information(scale=7.0),
-        weighting="information",
+# ----------------------------------------------------------------------
+# weight decay
+# ----------------------------------------------------------------------
+def test_weight_decay_shrinks_the_weights():
+    plain = quick(weight_decay=0.0)
+    decayed = quick(weight_decay=1.0)
+
+    def norm(policy):
+        return sum(float((w**2).sum()) for w in policy._model.parameters())
+
+    assert norm(decayed) < norm(plain)
+
+
+# ----------------------------------------------------------------------
+# the validation loss
+# ----------------------------------------------------------------------
+def test_the_validation_loss_option():
+    a = quick(validation_loss="value")
+    b = quick(validation_loss="sobolev")
+    # the training trajectories are identical, so at every checkpoint the
+    # sobolev metric is the value metric plus the gradient term
+    assert b.history["val_loss"][0] > a.history["val_loss"][0]
+    with pytest.raises(ValueError, match="sobolev, value"):
+        quick(validation_loss="both")
+
+
+def test_the_sobolev_validation_loss_needs_gradient_labels():
+    train = toy_dataset(seed=0)
+    val = toy_dataset(gradients=False, seed=1)
+    with pytest.raises(ValueError, match="carries none"):
+        drto.approximate_nmpc_train(train, validation=val, epochs=10)
+    policy = drto.approximate_nmpc_train(
+        train,
+        validation=val,
+        validation_loss="value",
         epochs=50,
-        hidden=(16,),
-        lr=1e-2,
-        schedule="flat",
-    )
-    assert weighted.history["train_loss"][0] == pytest.approx(
-        plain.history["train_loss"][0], rel=1e-9
-    )
-    assert weighted.validation_error == pytest.approx(plain.validation_error, rel=1e-6)
-
-
-def test_varying_information_trains_and_is_recorded():
-    policy = drto.explicit_nmpc_train(
-        toy_with_information(vary=True),
-        weighting="information",
-        epochs=200,
         hidden=(8,),
         schedule="flat",
     )
-    assert policy.meta["weighting"] == "information"
     assert policy.validation_error > 0
+
+
+# ----------------------------------------------------------------------
+# the control scaling
+# ----------------------------------------------------------------------
+def test_controls_scale_by_the_labels_span():
+    policy = quick(epochs=20)
+    data = toy_dataset()
+    for name in U_BOX:
+        us = [p["u0"][name] for p in data.points]
+        lo, span = policy.meta["u_scale"][name]
+        assert lo == pytest.approx(min(us))
+        assert span == pytest.approx(max(us) - min(us))
+
+
+def test_a_constant_control_keeps_a_floored_scale():
+    data = toy_dataset()
+    for p in data.points:
+        p["u0"]["u2"] = -2.0
+    data.config["u_ss"]["u2"] = -2.0
+    policy = drto.approximate_nmpc_train(
+        data,
+        training_loss="value",
+        validation_loss="value",
+        epochs=20,
+        hidden=(8,),
+        schedule="flat",
+    )
+    lo, span = policy.meta["u_scale"]["u2"]
+    # u2's bounds span 5.0, and the floor is one thousandth of that
+    assert lo == pytest.approx(-2.0)
+    assert span == pytest.approx(5e-3)
