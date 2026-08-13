@@ -534,3 +534,104 @@ def plot_controls(m, controls=None, t_max=50):
         boundary_squares=False,
         staircase=True,
     )
+
+
+def plot_history(policy):
+    """Plot a fitted policy's training and validation losses, one panel.
+
+    Both curves come from ``policy.history``, on a log scale against the
+    epoch each checkpoint was taken at. Returns the panel axes.
+    """
+    fig, ax = plt.subplots(figsize=_PANEL)
+    h = policy.history
+    ax.semilogy(h["epoch"], h["train_loss"], color="C0", label="training loss")
+    ax.semilogy(h["epoch"], h["val_loss"], color="C1", label="validation loss")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("loss")
+    ax.legend()
+    fig.tight_layout()
+    return [ax]
+
+
+def _r_squared(y, y_hat):
+    """One minus the residual sum of squares over the total."""
+    mean = sum(y) / len(y)
+    total = sum((v - mean) ** 2 for v in y)
+    residual = sum((v - w) ** 2 for v, w in zip(y, y_hat))
+    return 1.0 - residual / total if total else float("nan")
+
+
+def plot_parity(policy, data, validation=None):
+    """Plot a fitted policy's actions against the solver's, one panel each.
+
+    Each panel draws one control, the label on the horizontal axis and
+    the policy's action on the vertical, with the line where the two
+    agree. Training points draw as circles and validation points as
+    triangles, and each series carries its coefficient of determination
+    in the legend. The split comes from ``policy.validation_index``, the
+    points the training held out, unless a ``validation`` dataset is
+    given, in which case its points are the second series. Without
+    either, one series draws. Returns the panel axes.
+    """
+    points = list(getattr(data, "points", data))
+    held = policy.meta.get("validation_index")
+    if validation is not None:
+        series = [
+            (points, "o", "training"),
+            (list(getattr(validation, "points", validation)), "^", "validation"),
+        ]
+    elif held:
+        held = set(held)
+        series = [
+            ([p for i, p in enumerate(points) if i not in held], "o", "training"),
+            ([p for i, p in enumerate(points) if i in held], "^", "validation"),
+        ]
+    else:
+        series = [(points, "o", "sampled")]
+
+    names = list(policy.meta["inputs"])
+    controls = list(policy.meta["u_bounds"])
+    drawn = [
+        (
+            marker,
+            which,
+            [[p["u0"][c] for c in controls] for p in group],
+            [
+                [policy({k: p["x"][k] for k in names})[c] for c in controls]
+                for p in group
+            ],
+        )
+        for group, marker, which in series
+        if group
+    ]
+    fig, axes = plt.subplots(
+        1,
+        len(controls),
+        figsize=(len(controls) * _PANEL[0], _PANEL[1] + 0.6),
+        squeeze=False,
+    )
+    flat = [ax for row in axes for ax in row]
+    for j, (ax, name) in enumerate(zip(flat, controls)):
+        ax.ticklabel_format(useOffset=False)
+        low = high = None
+        for marker, which, label, pred in drawn:
+            y = [row[j] for row in label]
+            y_hat = [row[j] for row in pred]
+            ax.scatter(
+                y,
+                y_hat,
+                s=16,
+                marker=marker,
+                alpha=0.6,
+                label=f"{which}, $R^2$ = {_r_squared(y, y_hat):.5f}",
+            )
+            low = min(y) if low is None else min(low, min(y))
+            high = max(y) if high is None else max(high, max(y))
+        if low is not None:
+            ax.plot([low, high], [low, high], color="0.4", linewidth=0.8, zorder=0)
+        ax.set_title(name)
+        ax.set_xlabel("solver")
+        ax.set_ylabel("policy")
+        ax.legend(loc="upper left", fontsize=8)
+    fig.tight_layout()
+    return flat

@@ -195,3 +195,53 @@ def test_model_plots_draw_the_declared_bounds():
     (ax,) = drto.plot_states(m)
     labels = [t.get_text() for t in ax.figure.legends[0].texts]
     assert "bound" not in labels
+
+
+# ── a fitted policy instead of a model (feature 026) ─────────────────────────
+
+
+def _policy_and_data():
+    """A quickly fitted policy on the toy dataset, and that dataset."""
+    from test_approximate_nmpc_train import toy_dataset
+
+    data = toy_dataset(n=40)
+    policy = drto.approximate_nmpc_train(
+        data, epochs=40, hidden=(8,), schedule="flat", seeds=1
+    )
+    return policy, data
+
+
+def test_the_history_draws_both_curves():
+    policy, _ = _policy_and_data()
+    (ax,) = drto.plot_history(policy)
+    labels = [line.get_label() for line in ax.get_lines()]
+    assert labels == ["training loss", "validation loss"]
+    assert ax.get_yscale() == "log"
+    assert len(ax.get_lines()[0].get_xdata()) == len(policy.history["epoch"])
+
+
+def test_parity_draws_a_panel_per_control_and_splits_by_the_recorded_index():
+    policy, data = _policy_and_data()
+    held = policy.meta["validation_index"]
+    assert held and len(held) == 8  # a fifth of 40, split off by fraction
+    axes = drto.plot_parity(policy, data)
+    assert [ax.get_title() for ax in axes] == list(data.config["u_bounds"])
+    for ax in axes:
+        which = [t.get_text() for t in ax.get_legend().get_texts()]
+        assert [w.split(",")[0] for w in which] == ["training", "validation"]
+        assert all("R^2" in w for w in which)
+        counts = [len(c.get_offsets()) for c in ax.collections]
+        assert counts == [len(data.points) - len(held), len(held)]
+
+
+def test_parity_takes_a_validation_dataset_and_falls_back_to_one_series():
+    from test_approximate_nmpc_train import toy_dataset
+
+    policy, data = _policy_and_data()
+    axes = drto.plot_parity(policy, data, validation=toy_dataset(n=12, seed=3))
+    counts = [len(c.get_offsets()) for c in axes[0].collections]
+    assert counts == [len(data.points), 12]
+    policy.meta["validation_index"] = None
+    axes = drto.plot_parity(policy, data)
+    which = [t.get_text() for t in axes[0].get_legend().get_texts()]
+    assert len(which) == 1 and which[0].startswith("sampled")

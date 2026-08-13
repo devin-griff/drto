@@ -574,7 +574,9 @@ def approximate_nmpc_train(
     -------
     ApproximateNMPC
         The fitted policy, callable in model units, carrying its
-        training history and validation error.
+        training history, its validation error, and, when the
+        validation set was split off by fraction, the points it was
+        split to, as ``validation_index``.
     """
     fn = "approximate_nmpc_train"
     torch = _torch()
@@ -598,11 +600,13 @@ def approximate_nmpc_train(
     val_sobolev = validation_loss == "sobolev"
     need_j = training_loss == "sobolev" or val_sobolev
     x, u, J, u_scale = _arrays(dataset, need_j, fn)
+    held_out = None
     if isinstance(validation, float):
         rng = np.random.default_rng(dataset.config.get("seed", 0))
         order = rng.permutation(len(x))
         n_val = max(1, round(validation * len(x)))
         val_idx, train_idx = order[:n_val], order[n_val:]
+        held_out = sorted(int(i) for i in val_idx)
         x_val, u_val = x[val_idx], u[val_idx]
         J_val = J[val_idx] if J is not None else None
         x, u = x[train_idx], u[train_idx]
@@ -714,6 +718,7 @@ def approximate_nmpc_train(
         "hidden": list(hidden),
         "activation": activation,
         "steady_state_enforced": bool(steady_state_enforced),
+        "validation_index": held_out,
         "history": history,
         "validation_error": val_loss,
     }

@@ -46,7 +46,13 @@ from drto.scaling import scale, scaled_solve
 from drto.warm_start import WarmStartReport, warm_start_dynamic
 from drto.ideal_nmpc import NmpcHistory, ideal_nmpc
 from drto.objective import build_objective
-from drto.plotting import plot_controls, plot_stage_cost, plot_states
+from drto.plotting import (
+    plot_controls,
+    plot_history,
+    plot_parity,
+    plot_stage_cost,
+    plot_states,
+)
 
 # importing registers the drto.* transformations
 from drto import dynamic_optimization as _dynamic_optimization  # noqa: F401
@@ -80,6 +86,8 @@ __all__ = [
     "plot_states",
     "plot_controls",
     "plot_stage_cost",
+    "plot_history",
+    "plot_parity",
     "initialize_steady_state",
     "SteadyStateInitReport",
     "approximate_nmpc_data",

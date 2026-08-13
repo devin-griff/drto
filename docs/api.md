@@ -114,4 +114,6 @@ The estimation-side surface:
 .. autofunction:: drto.plot_states
 .. autofunction:: drto.plot_controls
 .. autofunction:: drto.plot_stage_cost
+.. autofunction:: drto.plot_history
+.. autofunction:: drto.plot_parity
 ```
