@@ -32,6 +32,8 @@ policy = drto.explicit_nmpc_train(
     validation_loss="sobolev",  # "sobolev" | "value": the checkpoint metric
     training_loss="sobolev",    # "sobolev" | "value": the loss minimized
     gamma=1.0,
+    sobolev_huber=True,  # the gradient residual through Huber, entrywise
+    huber_delta=0.1,     # its threshold in scaled units
     hidden=(100, 100, 100),
     activation="tanh",
     steady_state_enforced=True,  # the policy returns the recorded steady
@@ -86,9 +88,16 @@ sliver of its box still trains at full price. A supplied validation
 set measures in the training set's units, the gradient labels scale
 accordingly, and the policy records the scale. `training_loss`
 picks the loss the run minimizes: `"sobolev"`, the default, adds
-`gamma` times the squared error of the network's Jacobian against the
+`gamma` times the error of the network's Jacobian against the
 stored derivatives to the value error, and `"value"` fits the values
-alone. `fine_tune` trains the final fraction
+alone. With `sobolev_huber`, the default, that Jacobian residual goes
+through the Huber loss entrywise at `huber_delta` rather than being
+squared, so no entry pushes the weights harder than the threshold.
+The parametric sensitivities of a constrained problem run over orders
+of magnitude, and squaring lets a few samples own the term. Below the
+threshold the residual is weighted exactly as the square was, so
+`gamma` means the same under either setting, and `sobolev_huber=False`
+squares it, the paper's eq 17. `fine_tune` trains the final fraction
 of the budget on the value error alone. `weight_decay` passes AdamW's
 decoupled L2 penalty on the weights, applied in the Sobolev and
 fine-tune phases alike. Every run trains the full
@@ -181,9 +190,15 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   range. `weight_decay` applies AdamW's decoupled penalty in
   both phases; the default `0.0` reproduces the unpenalized run. Runs
   are reproducible under a seed, and with `seeds > 1` the network
-  kept is the best by the validation loss. `validation_loss` honors
+  kept is the best by the validation loss. `sobolev_huber` bounds
+  what one sample contributes to the gradient term: doubling a
+  sample's derivative labels quadruples a squared term and grows a
+  Huber one with the residual, every residual below `huber_delta`
+  gives the squared term back exactly, and a non-positive threshold
+  is a descriptive error. `validation_loss` honors
   both choices. Under `"sobolev"` the metric adds `gamma` times the
-  gradient error, and a supplied validation dataset without gradient
+  gradient error under the same `sobolev_huber` setting as the
+  training loss, and a supplied validation dataset without gradient
   labels is a descriptive error. Under `"value"` such a dataset
   trains. With `steady_state_enforced` the policy returns the
   recorded steady control at the recorded steady state exactly, the
