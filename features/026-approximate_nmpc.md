@@ -218,9 +218,11 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   directly, the way it draws the loop histories. `drto.plot_controls`
   on the report draws the policy's applied control per sample and, when
   the report carries a `compare` run, the solver's control at the same
-  states on the same axes, the two distinguished. A sample the compare
-  solve failed at is marked on the applied trajectory and named in the
-  legend.
+  states on the same axes, the two distinguished. The legend names
+  them by what produced them, the fitted policy and the horizon solves
+  it is compared against, where a solver-driven loop history keeps its
+  own names. A sample the compare solve failed at is marked on the
+  applied trajectory and named in the legend.
 - `drto.plot_history` draws the kept run's training and validation
   losses on one log-scaled panel against the epoch each checkpoint was
   taken at.
