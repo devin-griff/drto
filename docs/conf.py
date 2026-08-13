@@ -29,6 +29,8 @@ _NOTEBOOKS = [
     "cstr_ideal_nmpc",
     "check_index",
     "sx_infinite_horizon",
+    "klatt_engell",
+    "klatt_engell_approximate_nmpc",
 ]
 _here = Path(__file__).parent
 _nb_dst = _here / "notebooks"

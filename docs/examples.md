@@ -64,6 +64,16 @@ unmodified IDAES models.
   the closed loop in one call: measure, solve, implement, simulate,
   the cold start then warm-started re-solves on persistent scaled
   clones, the hot start driven onto the setpoint in three samples.
+- [The Klatt-Engell CSTR](notebooks/klatt_engell.ipynb) — the van de
+  Vusse reactor of Lueken, Brandner & Lucia (2023) posed on drto's
+  terminal segment: the setpoints the reactor cannot hold, the
+  equilibrium a steady solve selects instead, and one horizon solve
+  with the first action's derivatives read off its factorization.
+- [Approximate NMPC on the Klatt-Engell CSTR](notebooks/klatt_engell_approximate_nmpc.ipynb)
+  — the online solve replaced by a fitted network: Sobol sampling into
+  a labeled dataset, Sobolev training against the stored derivatives,
+  the parity of the fit, and the policy run closed loop against the
+  horizon solves at the same states.
 - [The infinite horizon on the PrOMMiS mixer-settler](notebooks/sx_infinite_horizon.ipynb)
   — rare earth solvent extraction, posed on PrOMMiS's chemistry as an
   index-one model: the states are the inventories the reactions cannot
@@ -90,5 +100,7 @@ notebooks/cstr_warm_start
 notebooks/cstr_advanced_step
 notebooks/cstr_ideal_nmpc
 notebooks/check_index
+notebooks/klatt_engell
+notebooks/klatt_engell_approximate_nmpc
 notebooks/sx_infinite_horizon
 ```
