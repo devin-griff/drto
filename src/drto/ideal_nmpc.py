@@ -47,6 +47,7 @@ from drto.dynamic_optimization import _members, _spread
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 from drto.initialize_steady_state import _attached, initialize_steady_state
+from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
 #: The default recipe for the warm-started solves, under the solvers
@@ -60,7 +61,7 @@ _WARM_START_OPTIONS = {
 
 #: The solvers that read the warm start recipe; any other solver warm
 #: starts on the shifted values alone.
-_WARM_SOLVERS = ("pounce", "ipopt")
+_WARM_SOLVERS = _POUNCE_SOLVERS + ("ipopt",)
 
 #: The mode transforms; the loop applies its own, so the input comes first.
 _TRANSFORMED = (
@@ -195,7 +196,7 @@ def ideal_nmpc(
     disturbances=None,
     seed=None,
     initialize="cold",
-    solver="pounce",
+    solver="pounce_v2",
     warm_start=None,
     tee=False,
 ):
@@ -234,12 +235,13 @@ def ideal_nmpc(
         ``drto.infinite_horizon``); ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
-        ``"pounce"`` and ``"ipopt"`` warm start between steps.
+        ``"pounce"``, ``"pounce_v2"``, and ``"ipopt"`` warm start
+        between steps.
     warm_start : mapping, optional
         Solver options for the warm-started solves, laid over the
         default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
         ``warm_start_bound_push`` and ``warm_start_mult_bound_push``
-        at ``1e-9``) under ``"pounce"`` or ``"ipopt"``; under another
+        at ``1e-9``) under the pounce names or ``"ipopt"``; under another
         solver the mapping is used as given.
     tee : bool
         ``True`` streams every solve's output as the loop runs and
@@ -339,7 +341,7 @@ def ideal_nmpc(
             )
         plan[name] = val
 
-    if solver == "pounce":
+    if solver in _POUNCE_SOLVERS:
         # importing registers the in-process plugin; without it the name
         # falls back to a PATH executable behind pyomo's ASL wrapper,
         # a different solver than the one the drto stack is built on

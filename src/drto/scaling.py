@@ -35,8 +35,12 @@ _FLOOR = 1e-16
 #: The largest exponent a factor may carry.
 _CLAMP = 12
 
+#: The names pounce registers, both reaching the same solver: the
+#: legacy interface and the v2 engine through that same API.
+_POUNCE_SOLVERS = ("pounce_v2", "pounce")
+
 #: Solvers whose interface passes the Suffix through to the solver.
-_READS_SUFFIX = ("pounce", "ipopt", "ipopt_v2")
+_READS_SUFFIX = _POUNCE_SOLVERS + ("ipopt", "ipopt_v2")
 
 
 def _group_key(vardata):
@@ -166,7 +170,7 @@ def _constraint_factors(m, skip):
         m.scaling_factor[con] = 10.0 ** -round(math.log10(largest))
 
 
-def scaled_solve(m, solver="pounce", tee=False, options=None):
+def scaled_solve(m, solver="pounce_v2", tee=False, options=None):
     """Assign the factors and solve, returning the model's own units.
 
     pounce and ipopt read the Suffix under
@@ -195,7 +199,7 @@ def scaled_solve(m, solver="pounce", tee=False, options=None):
     """
     from pyomo.environ import SolverFactory
 
-    if solver == "pounce":
+    if solver in _POUNCE_SOLVERS:
         import pyomo_pounce  # noqa: F401  registers the solver
 
     scale(m)
