@@ -24,9 +24,10 @@ laid over the documented default.
 An active ``scaling_factor`` suffix is honored: every solve on that
 side receives the factors, and the history reads back in the model's
 own units. ``scale`` given a source writes the factors itself,
-forwarding it to ``drto.scale`` once per side, after that side's
-assembly and cold start, and holding them for the whole loop. The initial-condition
-Params are the write points and stay physical.
+forwarding it to ``drto.scale`` once at entry, before the sides are
+built, so the process clone carries them and every internal solve runs
+against them for the whole loop. The initial-condition Params stay
+physical.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
 declared names, and ``drto.plot_states`` / ``drto.plot_controls`` draw
@@ -235,11 +236,12 @@ def ideal_nmpc(
         between steps.
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
-        mapping of units to magnitudes. Given, each side's factors are
-        written with it once, after that side's assembly and cold
-        start, and every solve receives them. The default, ``None``,
-        writes nothing and honors a ``scaling_factor`` Suffix the
-        caller wrote.
+        mapping of units to magnitudes. Given, the factors are written
+        once at entry, before the sides are built, so both sides carry
+        them and every internal solve receives them. A caller choosing
+        ``"point"`` passes the model at the point to measure. The
+        default, ``None``, writes nothing and honors a
+        ``scaling_factor`` Suffix the caller wrote.
     warm_start : mapping, optional
         Solver options for the warm-started solves, laid over the
         default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
@@ -359,6 +361,12 @@ def ideal_nmpc(
     if not opt.available(exception_flag=False):
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
+    # a scale source: the factors first, at entry, so the sides carry
+    # them and every internal solve, the cold starts' included, runs
+    # against them
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
+
     # the steady initialization runs on the input before the sides are
     # built, so the process clone and the controller both inherit it
     if initialize == "steady":
@@ -397,13 +405,6 @@ def ideal_nmpc(
         opts = {} if initialize == "cold" else dict(initialize)
         cold_start_dynamic(m, **opts)
         cold_start_dynamic(process, **opts)
-
-    # a scale source: write each side's factors at the first point it
-    # holds values, after its assembly and cold start, held for the
-    # whole loop rather than re-measured per step
-    if scale is not None:
-        drto_scaling.scale(m, source=scale)
-        drto_scaling.scale(process, source=scale)
 
     # an active scaling_factor suffix: every solve on that side
     # receives the factors, through the solver option for the solvers

@@ -264,11 +264,12 @@ def approximate_nmpc_data(
         The labeling solver's name.
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
-        mapping of units to magnitudes. Given, the model's factors are
-        written with it once, after the first draw's cold start, and
-        every solve receives them: one measurement serves the whole
-        dataset. The default, ``None``, writes nothing and honors a
-        ``scaling_factor`` Suffix the caller wrote.
+        mapping of units to magnitudes. Given, the factors are written
+        once at entry, before the first cold start, and every cold
+        start and solve runs against them: one write serves the whole
+        dataset. A caller choosing ``"point"`` passes the model at the
+        point to measure. The default, ``None``, writes nothing and
+        honors a ``scaling_factor`` Suffix the caller wrote.
     seed : int
         The design's seed.
     path : str, optional
@@ -305,7 +306,15 @@ def approximate_nmpc_data(
     cube = _design(method, n, len(pairs), seed)
     x_ss, u_ss = _steady_targets(reg, fn)
     points, failures = [], []
-    solve_opts = {}
+    # a scale source: the factors first, at entry, so every cold start
+    # and every solve runs against them
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
+    solve_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(m)
+        else {}
+    )
     for i, row in enumerate(cube):
         draw = {}
         for (param, (lo, hi)), r in zip(pairs, row):
@@ -313,14 +322,6 @@ def approximate_nmpc_data(
             param.set_value(v)
             draw[param.name] = v
         cold_start_dynamic(m)
-        if i == 0:
-            # a scale source: write the factors at the first draw's
-            # cold start and hold them, so every sample solves under
-            # the same factors
-            if scale is not None:
-                drto_scaling.scale(m, source=scale)
-            if drto_scaling._suffix_active(m):
-                solve_opts = drto_scaling._scaling_options(solver, fn)
         res = factory.solve(m, options=solve_opts)
         if res.solver.termination_condition != TerminationCondition.optimal:
             failures.append(
@@ -976,8 +977,9 @@ def approximate_nmpc_closed_loop(
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
         mapping of units to magnitudes. Given, the factors are written
-        with it once per model the loop solves, the plant and, with
-        ``compare``, the horizon model, and every solve receives them.
+        once at entry, before the plant is cloned, so the plant carries
+        them and the compare solves run against the same ones. A caller
+        choosing ``"point"`` passes the model at the point to measure.
         The default, ``None``, writes nothing and honors a
         ``scaling_factor`` Suffix the caller wrote.
     compare : bool
@@ -1046,13 +1048,11 @@ def approximate_nmpc_closed_loop(
         import pyomo_pounce  # noqa: F401
     opt = SolverFactory(solver)
 
-    plant = _policy_plant(m, fn)
-    # a scale source: write each solved model's factors at the values
-    # it carries when the loop starts, held for the whole run
+    # a scale source: the factors first, at entry, so the plant clone
+    # carries them and the compare solves run against the same ones
     if scale is not None:
-        drto_scaling.scale(plant, source=scale)
-        if compare:
-            drto_scaling.scale(m, source=scale)
+        drto_scaling.scale(m, source=scale)
+    plant = _policy_plant(m, fn)
     plant_opts = (
         drto_scaling._scaling_options(solver, fn)
         if drto_scaling._suffix_active(plant)
