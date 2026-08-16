@@ -11,10 +11,13 @@ the magnitude its own members hold, and a constraint's from its largest
 Jacobian entry once the variables are scaled, so a model carrying its
 physics' units needs no hand-written table.
 
-Two properties of the assignment matter more than the arithmetic. The
+Three properties of the assignment matter more than the arithmetic. The
 members of one Var share a factor unless they differ in a string index
 element, so time points and spatial nodes of one quantity are scaled
-alike while species are scaled apart. And the floor sits at machine
+alike while species are scaled apart. A derivative on the terminal
+segment takes the factor of the state it differentiates, since it goes
+to zero at the equilibrium the tail approaches and the magnitude
+measured there is a zero rather than a scale. And the floor sits at machine
 zero: an unscaled variable keeps its bound in its own units, and an
 interior-point method moves a variable near a bound away from it before
 the first step, which on a trace quantity is a displacement of orders of
@@ -23,6 +26,7 @@ magnitude.
 import math
 
 from pyomo.core import Constraint, Objective, Suffix, TransformationFactory, Var
+from pyomo.dae import DerivativeVar
 
 from drto.info import info
 
@@ -55,6 +59,37 @@ def _group_key(vardata):
     if not isinstance(idx, tuple):
         idx = (idx,)
     return (id(vardata.parent_component()), tuple(e for e in idx if isinstance(e, str)))
+
+
+def _tail_derivative_keys(m, reg):
+    """The group each terminal-segment derivative member belongs to.
+
+    A derivative on the terminal segment goes to zero at the equilibrium
+    the tail approaches, so the magnitude measured there is a zero rather
+    than a scale. Each member takes the group of the state it
+    differentiates, keyed the way ``_group_key`` keys that state.
+
+    Discretization reclassifies a ``DerivativeVar`` to ctype ``Var``, so
+    the walk is over ``Var`` with an isinstance check.
+    """
+    copies = {
+        id(record["copy"])
+        for record in reg._segment_records()
+        if record.get("copy") is not None
+    }
+    keys = {}
+    for comp in m.component_objects(Var, active=True, descend_into=True):
+        if not isinstance(comp, DerivativeVar):
+            continue
+        state = comp.get_state_var()
+        if id(state) not in copies:
+            continue
+        for v in comp.values() if comp.is_indexed() else (comp,):
+            idx = v.index()
+            if not isinstance(idx, tuple):
+                idx = (idx,)
+            keys[id(v)] = (id(state), tuple(e for e in idx if isinstance(e, str)))
+    return keys
 
 
 def _pin_components(reg):
@@ -92,12 +127,14 @@ def scale(m):
     """
     reg = info(m)
     skip = _pin_components(reg)
+    tail = _tail_derivative_keys(m, reg)
 
     groups = {}
     for v in m.component_data_objects(Var, descend_into=True):
         if v.fixed or id(v) in skip:
             continue
-        groups.setdefault(_group_key(v), []).append(v)
+        key = tail[id(v)] if id(v) in tail else _group_key(v)
+        groups.setdefault(key, []).append(v)
     if not any(v.value is not None for g in groups.values() for v in g):
         raise ValueError(
             "drto: scale measures the factors at the model's current "

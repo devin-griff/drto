@@ -7,6 +7,7 @@ import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
+from drto.scaling import _CLAMP
 from test_infinite_horizon import ready_model
 
 IH = "drto.infinite_horizon"
@@ -208,6 +209,38 @@ def test_the_endpoint_pins_get_no_entries():
                 continue
             for cd in comp.values() if comp.is_indexed() else (comp,):
                 assert cd not in m.scaling_factor
+
+
+def test_a_segment_derivative_takes_its_state_factor():
+    """The tail's derivatives vanish at the equilibrium it approaches, so
+    their own magnitudes there are zeros rather than scales."""
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m)
+    for v in m.component_data_objects(pyo.Var, descend_into=True):
+        if v.value is None:
+            v.set_value(1e5)
+    # the tail at rest: every segment derivative sits at a numerical zero
+    # while the state it differentiates stays at its own magnitude
+    segment = drto.info(m)._segment_records()
+    copies = {id(r["copy"]) for r in segment if r.get("copy") is not None}
+    derivatives = [
+        c
+        for c in m.component_objects(pyo.Var, active=True, descend_into=True)
+        if isinstance(c, DerivativeVar) and id(c.get_state_var()) in copies
+    ]
+    assert derivatives, "the transform left no segment derivatives to check"
+    for comp in derivatives:
+        for v in comp.values() if comp.is_indexed() else (comp,):
+            v.set_value(1e-16)
+
+    drto.scale(m)
+    for comp in derivatives:
+        state = comp.get_state_var()
+        for v in comp.values() if comp.is_indexed() else (comp,):
+            partner = state[v.index()]
+            assert m.scaling_factor[v] == m.scaling_factor[partner]
+            # measured from its own value it would have taken the clamp
+            assert m.scaling_factor[v] != 10.0**_CLAMP
 
 
 # ----------------------------------------------------------------------
