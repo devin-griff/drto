@@ -36,6 +36,14 @@ clamped to twelve orders of magnitude. A group whose largest value is
 below 1e-16 holds numerical zeros and keeps factor one. Fixed variables
 get no entries: they are not part of the handed problem.
 
+A derivative variable on the terminal segment takes the factor of the
+state it differentiates, reached through `get_state_var` and the pairing
+`infinite_horizon` records, rather than one measured from its own value.
+The segment's derivatives go to zero at the equilibrium the tail
+approaches, so the magnitude measured there is a zero rather than a
+scale, and measuring one gives the group a factor as large as the clamp
+allows.
+
 The floor sits at machine zero rather than at the precision of whatever
 filled the model. A higher floor leaves trace quantities unscaled, and
 an unscaled variable's bound is what the solver's starting point then
@@ -135,6 +143,11 @@ demonstrate.
   imports neither pyomo's extension machinery nor IDAES to find it.
 - A model without values raises a descriptive error saying to
   initialize first.
+- On a model carrying a terminal segment, each of the segment's
+  derivative members carries the factor of the state member it
+  differentiates, rather than one measured from its own value, so a
+  segment sitting at its equilibrium does not drive those groups to the
+  clamp.
 - On a model carrying a terminal segment, the endpoint pin slacks and
   the pin constraints have no entries in the Suffix, so the pin's
   effective weight against the objective is the declared one, unchanged
