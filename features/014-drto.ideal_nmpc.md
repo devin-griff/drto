@@ -55,8 +55,8 @@ through `drto.dynamic_optimization`, its options passed through as given.
 The process is built as the one-sample simulation the loop actually
 solves: straight after the simulation transform, everything past the
 first sampling time leaves the clone, the terminal segment whole, so
-its cold start, its scaled clone, and every plant solve are one
-element's worth regardless of the declared horizon.
+its cold start and every plant solve are one element's worth
+regardless of the declared horizon.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
@@ -108,11 +108,13 @@ step, the side (controller or process), and the solver's text. The
 default is quiet, nothing streamed, nothing kept.
 
 An active `scaling_factor` suffix is honored the way the initializers
-honor it: the loop runs every solve and warm start on one persistent
-scaled clone per side for the whole loop, adopting the cold start's own
-clone when it left one and building it otherwise, and reads the history
-back in the model's own units. The initial-condition Params stay
-physical.
+honor it: every solve on that side receives the factors, and the
+history reads back in the model's own units. The initial-condition
+Params stay physical. `scale=True` writes the factors itself: each
+side's Suffix is measured through `drto.scale` once, after that side's
+assembly and cold start, at the first point it holds values, and held
+for the whole loop rather than re-measured per step. The default,
+`scale=False`, writes nothing and honors what the caller wrote.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the
@@ -147,8 +149,8 @@ single call on the declared model.
   through as given. The process is cut to the first sample straight
   after the simulation transform, before its cold start: no active
   plant member or constraint lies past one sampling time, the terminal
-  segment is gone, and the cold start, the scaled clone, and each
-  plant solve are one element's worth.
+  segment is gone, and the cold start and each plant solve are one
+  element's worth.
 - `initial_condition` writes the given state values into the
   initial-condition Params before the first step; omitted, the Params'
   current values are the first actual state.
@@ -177,11 +179,13 @@ single call on the declared model.
 - `tee=True` streams each solve's output and returns it: the history's
   `logs` holds (step, side, text) for every controller and process
   solve in loop order; the default keeps and prints nothing.
-- With an active `scaling_factor` suffix the loop runs every solve and
-  warm start on one persistent scaled clone per side, the cold start's
-  own clone when it left one and a fresh build otherwise; the history
-  lands in the model's own units, and a scaling-tagged hicks loop
-  reproduces the unscaled loop's history.
+- With an active `scaling_factor` suffix every solve on that side
+  receives the factors; the history lands in the model's own units, and
+  a hicks loop carrying factors reproduces the unscaled loop's history.
+- With `scale=True` the loop measures each side's factors through
+  `drto.scale` once, after that side's assembly and cold start, and
+  every solve receives them; the default `scale=False` writes no
+  factors.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and
   `drto.plot_controls` gain a second input kind: handed a history instead

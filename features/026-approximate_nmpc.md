@@ -22,6 +22,7 @@ data = drto.approximate_nmpc_data(
     ranges=None,        # {param: (lo, hi)}; default the paired state's bounds
     gradients=True,     # store du0/dinput, read from the solve's factorization
     solver="pounce",
+    scale=False,        # measure the factors once, after the first cold start
     seed=0,
     path=None,          # JSON written when given
 )
@@ -57,6 +58,7 @@ report = drto.approximate_nmpc_closed_loop(
     x0=None,            # initial state; default the initial-condition Params' values
     disturbances=None,  # realization per step, as the simulations take it
     solver="pounce",
+    scale=False,        # measure each solved model's factors after its cold start
     compare=True,       # also solve at each visited state; record the solver's control
 )
 
@@ -76,7 +78,11 @@ nested training-set sizes; `lhs` stratifies every coordinate exactly at
 its own `n`; `uniform` is independent draws, the sampling of Lueken,
 Brandner & Lucia (2023). Draws whose solve does not return optimal are
 recorded as failures and carry no labels. The model is cold-started
-before each solve and left at its last solution. When the model
+before each solve and left at its last solution. With `scale=True` the
+factors are measured through `drto.scale` once, after the first draw's
+cold start, and every solve receives them: one measurement serves the
+whole dataset, so every sample solves under the same factors. The
+default writes none. When the model
 declares `steady_state` and `steady_state_control`, the dataset
 records the targets' values as `x_ss` and `u_ss`, which
 `steady_state_enforced` training reads.
@@ -127,7 +133,10 @@ one `dynamic_simulation` step per sample. Each action is clamped to the
 declared control's bounds before it is applied, the way an actuator
 holds an out-of-range command at its limit, and the report's moves are
 the applied values. The plant clone sheds the domain and bounds of
-every variable the loop does not fix. A square simulation cannot
+every variable the loop does not fix. With `scale=True` the factors are
+measured through `drto.scale` once per model the loop solves, the plant
+after its cold start and, with `compare`, the horizon model too; the
+default writes none. A square simulation cannot
 steer away from a bound, so the step converges wherever the dynamics
 land and the report records an excursion outside the controller's
 box. A plant step that still fails raises an error naming the visited
@@ -166,6 +175,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   each of `n` equal bins per coordinate. Default ranges come from the
   pinned states' bounds; `ranges` overrides per Param; `inputs` extends
   the sampled set beyond the initial-condition Params.
+- With `scale=True` the `scaling_factor` Suffix is written through
+  `drto.scale` after the first draw's cold start and held for every
+  labeled solve; the default `scale=False` writes no factors.
 - Each labeled point carries the sampled values, the first control
   action per declared control, the objective, and, with `gradients`,
   the derivative of each first action with respect to each sampled
@@ -214,6 +226,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   control sequences. A compare solve that does not return optimal
   records nan for that sample and the sample's time, and the run
   continues.
+- With `scale=True` the plant's factors are written through
+  `drto.scale` after its cold start and, with `compare`, the horizon
+  model's after its own; the default `scale=False` writes no factors.
 - `drto.plot_states` draws the closed-loop report's state trajectory
   directly, the way it draws the loop histories. `drto.plot_controls`
   on the report draws the policy's applied control per sample and, when
