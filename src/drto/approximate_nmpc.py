@@ -37,8 +37,7 @@ from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
 from drto.dynamic_optimization import _members, _spread
 from drto.ideal_nmpc import (
-    _WARM_SOLVERS,
-    _WARM_START_OPTIONS,
+    _warm_options,
     NmpcHistory,
     _first_move,
     _one_sample,
@@ -1116,11 +1115,7 @@ def approximate_nmpc_closed_loop(
                     warm_start_dynamic(m)
                 else:
                     cold_start_dynamic(m)
-            options = (
-                dict(_WARM_START_OPTIONS)
-                if k > 0 and compared and solver in _WARM_SOLVERS
-                else {}
-            )
+            options = _warm_options(solver) if k > 0 and compared else {}
             res = opt.solve(m, options={**compare_opts, **options})
             compared = res.solver.termination_condition == TerminationCondition.optimal
             if compared:

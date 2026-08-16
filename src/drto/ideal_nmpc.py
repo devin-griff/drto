@@ -17,8 +17,9 @@ declared control targets, and the input becomes the controller through
 ``drto.dynamic_optimization``. The first solve is initialized per the
 ``initialize`` option, the cold start by default on the controller and
 the process alike; every later one warm-starts from the
-shifted previous solution, ipopt alone adding the warm start recipe,
-the ``warm_start`` mapping laid over the documented default.
+shifted previous solution, ipopt adding the warm start recipe and
+pounce ``mu_init=1e-6`` alone, the ``warm_start`` mapping laid over
+the documented default.
 
 An active ``scaling_factor`` suffix is honored: every solve on that
 side receives the factors, and the history reads back in the model's
@@ -53,10 +54,8 @@ from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
 #: The default recipe for the warm-started solves under ipopt, the one
-#: solver measured to gain from it; the ``warm_start`` option lays over
-#: this. pounce regresses under these options, five-fold with no
-#: factors and up to sixty-fold under user-scaling, so the pounce
-#: solvers warm start on the shifted values alone.
+#: solver measured to gain from all of it; the ``warm_start`` option
+#: lays over this.
 _WARM_START_OPTIONS = {
     "warm_start_init_point": "yes",
     "mu_init": 1e-6,
@@ -64,9 +63,25 @@ _WARM_START_OPTIONS = {
     "warm_start_mult_bound_push": 1e-9,
 }
 
-#: The solvers that read the warm start recipe; any other solver warm
-#: starts on the shifted values alone.
+#: The pounce warm default: the shifted start with the barrier already
+#: small, the one recipe option measured to help pounce. The full
+#: recipe regresses it to 867 iterations on the CSTR warm start, and
+#: the regression needs the warm-start switch, the small barrier, and
+#: the 1e-9 pushes together.
+_POUNCE_WARM_OPTIONS = {"mu_init": 1e-6}
+
+#: The solvers that read the full warm start recipe.
 _WARM_SOLVERS = ("ipopt",)
+
+
+def _warm_options(solver):
+    """The warm-started solves' default options for ``solver``."""
+    if solver in _WARM_SOLVERS:
+        return dict(_WARM_START_OPTIONS)
+    if solver in _POUNCE_SOLVERS:
+        return dict(_POUNCE_WARM_OPTIONS)
+    return {}
+
 
 #: The mode transforms; the loop applies its own, so the input comes first.
 _TRANSFORMED = (
@@ -248,9 +263,10 @@ def ideal_nmpc(
         Solver options for the warm-started solves. Under ``"ipopt"``
         they lay over the default recipe (``warm_start_init_point=yes``,
         ``mu_init=1e-6``, ``warm_start_bound_push`` and
-        ``warm_start_mult_bound_push`` at ``1e-9``); under any other
-        solver, pounce included, the mapping is used as given and the
-        default is the shifted values alone.
+        ``warm_start_mult_bound_push`` at ``1e-9``); under the pounce
+        names they lay over ``mu_init=1e-6`` alone; under any other
+        solver the mapping is used as given and the default is the
+        shifted values alone.
     tee : bool
         ``True`` streams every solve's output as the loop runs and
         returns it on the history's ``logs``, one ``(step, side,
@@ -398,7 +414,7 @@ def ideal_nmpc(
 
     # the warm-started solves' options: the recipe under the solvers
     # that read it, the warm_start mapping laid over
-    warm_opts = dict(_WARM_START_OPTIONS) if solver in _WARM_SOLVERS else {}
+    warm_opts = _warm_options(solver)
     warm_opts.update(warm_start or {})
 
     # the controller and the process cold-start alike, so the plant's
