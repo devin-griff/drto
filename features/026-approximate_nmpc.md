@@ -22,7 +22,7 @@ data = drto.approximate_nmpc_data(
     ranges=None,        # {param: (lo, hi)}; default the paired state's bounds
     gradients=True,     # store du0/dinput, read from the solve's factorization
     solver="pounce",
-    scale=None,         # a feature 023 source; factors written once, after the first cold start
+    scale=None,         # a feature 023 source; factors written once, at entry
     seed=0,
     path=None,          # JSON written when given
 )
@@ -58,7 +58,7 @@ report = drto.approximate_nmpc_closed_loop(
     x0=None,            # initial state; default the initial-condition Params' values
     disturbances=None,  # realization per step, as the simulations take it
     solver="pounce",
-    scale=None,         # a feature 023 source; factors written per solved model after its cold start
+    scale=None,         # a feature 023 source; factors written once, at entry
     compare=True,       # also solve at each visited state; record the solver's control
 )
 
@@ -79,9 +79,10 @@ its own `n`; `uniform` is independent draws, the sampling of Lueken,
 Brandner & Lucia (2023). Draws whose solve does not return optimal are
 recorded as failures and carry no labels. The model is cold-started
 before each solve and left at its last solution. `scale` takes a
-feature 023 source and forwards it to `drto.scale`: the factors are
-written once, after the first draw's cold start, and every solve
-receives them, so every sample solves under the same factors. The
+feature 023 source and forwards it to `drto.scale` at entry, before
+the first cold start, so every cold start and every solve runs against
+the factors and every sample solves under the same ones. A caller
+choosing `"point"` passes the model at the point to measure. The
 default, `scale=None`, writes none. When the model
 declares `steady_state` and `steady_state_control`, the dataset
 records the targets' values as `x_ss` and `u_ss`, which
@@ -134,9 +135,10 @@ declared control's bounds before it is applied, the way an actuator
 holds an out-of-range command at its limit, and the report's moves are
 the applied values. The plant clone sheds the domain and bounds of
 every variable the loop does not fix. `scale` takes a feature 023
-source and forwards it to `drto.scale`, once per model the loop solves,
-the plant after its cold start and, with `compare`, the horizon model
-too; the default, `scale=None`, writes none. A square simulation cannot
+source and forwards it to `drto.scale` at entry, before the plant is
+cloned, so the plant carries the factors and, with `compare`, the
+horizon model solves against the same ones; the default, `scale=None`,
+writes none. A square simulation cannot
 steer away from a bound, so the step converges wherever the dynamics
 land and the report records an excursion outside the controller's
 box. A plant step that still fails raises an error naming the visited
