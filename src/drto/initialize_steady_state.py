@@ -58,7 +58,7 @@ class SteadyStateInitReport:
         return "\n".join(lines)
 
 
-def initialize_steady_state(m, controls=None):
+def initialize_steady_state(m, controls=None, scale=None):
     """Initialize ``m`` from its steady state; see the module docstring.
 
     Parameters
@@ -72,6 +72,11 @@ def initialize_steady_state(m, controls=None):
         steady solve holds it at; controls not in the mapping hold the
         values they already have, ``drto.steady_state_simulation``'s
         convention.
+    scale : str or mapping, optional
+        A feature 023 source forwarded to ``drto.scale`` before the
+        pipeline runs, so the factors are in place for its solves. The
+        default writes nothing and leaves a Suffix the caller wrote
+        untouched.
 
     Returns
     -------
@@ -95,6 +100,12 @@ def initialize_steady_state(m, controls=None):
             "drto: initialize_steady_state requires pyomo-pounce "
             "(pip install drto[pounce], or pip install pyomo-pounce)."
         ) from err
+
+    if scale is not None:
+        # the factors first, so the pipeline's solves run against them
+        from drto.scaling import scale as _scale
+
+        _scale(m, source=scale)
 
     reg = info(m)
     if not reg.has_declaration("state"):

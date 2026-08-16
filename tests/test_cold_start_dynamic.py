@@ -33,6 +33,30 @@ def test_states_run_on_the_line_and_derivatives_hold_the_slope():
         assert pyo.value(m.dzdt[t]) == pytest.approx(slope, abs=1e-6)
 
 
+def test_a_scale_source_writes_the_factors_first(monkeypatch):
+    import drto.scaling as sc
+
+    m = seeded()
+    order = []
+    real = sc.scale
+    monkeypatch.setattr(
+        sc, "scale", lambda mm, source: order.append("scale") or real(mm, source=source)
+    )
+    real_info = drto.cold_start.info
+    monkeypatch.setattr(
+        drto.cold_start, "info", lambda mm: order.append("run") or real_info(mm)
+    )
+    drto.cold_start_dynamic(m, scale="bounds")
+    assert order[0] == "scale"
+    assert m.component("scaling_factor") is not None
+
+
+def test_the_default_writes_no_factors():
+    m = seeded()
+    drto.cold_start_dynamic(m)
+    assert m.component("scaling_factor") is None
+
+
 def test_controls_hold_their_targets():
     m = seeded()
     drto.cold_start_dynamic(m)

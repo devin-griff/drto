@@ -49,6 +49,25 @@ def test_steady_path_initializes_in_place():
     assert "block" in str(report) or "initialize" in str(report)
 
 
+def test_a_scale_source_writes_the_factors_first():
+    import pyomo_pounce
+
+    m = steady_authored_model()
+    seen = []
+    real = pyomo_pounce.initialize
+
+    def recording(model, *a, **kw):
+        seen.append(model.component("scaling_factor") is not None)
+        return real(model, *a, **kw)
+
+    pyomo_pounce.initialize = recording
+    try:
+        drto.initialize_steady_state(m, scale="bounds")
+    finally:
+        pyomo_pounce.initialize = real
+    assert seen == [True]
+
+
 def test_dynamic_path_broadcasts_a_reference_control():
     # the inlet idiom: the collapsed copy of a Reference-declared control
     # is a container even over its single member, and the broadcast reads

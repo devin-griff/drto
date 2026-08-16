@@ -86,7 +86,9 @@ def _target(pairings, comp, kind, fn):
     )
 
 
-def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=True):
+def cold_start_dynamic(
+    m, profile="linear", time_constant=None, point_solves=True, scale=None
+):
     """Initialize ``m`` from its declared initial condition to its declared
     steady-state targets; see the module docstring.
 
@@ -97,7 +99,11 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     given; it belongs to the exponential profile only. ``point_solves``
     is the algebra choice: ``True`` (the default) runs the per-point
     solves, ``False`` skips them deliberately, the profiles and targets
-    landing without a solve and the report saying so.
+    landing without a solve and the report saying so. ``scale`` takes a
+    feature 023 source and forwards it to ``drto.scale`` before anything
+    runs, so the factors are in place for the per-point solves; the
+    default writes nothing and leaves a Suffix the caller wrote
+    untouched.
 
     Returns a :class:`ColdStartReport`; values only, nothing added or
     removed, and the fixed flags are untouched.
@@ -123,6 +129,12 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
             raise ValueError(
                 f"drto: {fn}: time_constant must be positive, got " f"{time_constant}."
             )
+    if scale is not None:
+        # the factors first, so the per-point solves run against them
+        from drto.scaling import scale as _scale
+
+        _scale(m, source=scale)
+
     reg = info(m)
     missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
     if missing:
