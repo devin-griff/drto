@@ -34,7 +34,7 @@ alongside the CHANGELOG section rename.
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [019 Registry units](019-registry_units.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [023 drto.scale](023-drto.scale.md) | ![ready](https://img.shields.io/badge/ready-blue) |
+| [023 drto.scale](023-drto.scale.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [025 drto.soft_bounds](025-drto.soft_bounds.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [026 Approximate NMPC](026-approximate_nmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |

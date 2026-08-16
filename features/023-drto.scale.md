@@ -1,6 +1,6 @@
 # drto.scale
 
-**Status:** ![ready](https://img.shields.io/badge/ready-blue)
+**Status:** ![implemented](https://img.shields.io/badge/implemented-yellowgreen)
 
 ## Description
 
@@ -149,9 +149,9 @@ The factors also carry the setpoint solve. The steady reduction of that
 stage is solved through the same rule, which is what gives the trace
 species values worth scaling in the first place.
 
-One call after initialization replaces the per-model scaling work that
-today only the CSTR example's hand-written units-driven factors
-demonstrate.
+One call after initialization replaces the per-model scaling helper
+the CSTR example carried before this feature, thirty lines of
+component-walking code reduced to a source stated at the call.
 
 ## Acceptance criteria
 
