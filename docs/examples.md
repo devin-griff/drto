@@ -43,12 +43,12 @@ unmodified IDAES models.
   saponification CSTR straight from `idaes.models.unit_models`:
   member-subset states, a Port-declared control, the setpoint from the
   steady reduction, and the infinite-horizon controller, every solve
-  through a units-driven scaled clone.
+  through `drto.scaled_solve`.
 - [Cold start on the IDAES CSTR](notebooks/cstr_cold_start.ipynb) —
   `drto.cold_start_dynamic` working the full algebraic cascade, linear
   and exponential profiles through the same solve, with the solver logs.
 - [Warm start on the IDAES CSTR](notebooks/cstr_warm_start.ipynb) —
-  one loop iteration on a persistent scaled model: the solution shifts
+  one loop iteration on one persistent model: the solution shifts
   one sampling time forward, tail included with zero fills, and the
   warm-started solve lands in single digits against the cold
   seventeen.
@@ -62,8 +62,8 @@ unmodified IDAES models.
   with the offending variables named, the index-one forms pass.
 - [Ideal NMPC on the IDAES CSTR](notebooks/cstr_ideal_nmpc.ipynb) —
   the closed loop in one call: measure, solve, implement, simulate,
-  the cold start then warm-started re-solves on persistent scaled
-  clones, the hot start driven onto the setpoint in three samples.
+  the cold start then warm-started re-solves under measured factors,
+  the hot start driven onto the setpoint in three samples.
 - [The Klatt-Engell CSTR](notebooks/klatt_engell.ipynb) — the van de
   Vusse reactor of Lueken, Brandner & Lucia (2023) posed on drto's
   terminal segment: the setpoints the reactor cannot hold, the

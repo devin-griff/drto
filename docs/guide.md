@@ -261,11 +261,10 @@ fails stops the loop with an error naming the step.
 `history.logs` holds one `(step, side, text)` entry per solve in loop
 order. The default is quiet, nothing streamed, nothing kept.
 
-An active `scaling_factor` suffix is honored the way the initializers
-honor it: every solve and warm start runs on one persistent scaled clone
-per side for the whole loop — the cold start's own clone when it left
-one, a fresh build otherwise — and the history lands in the model's own
-units.
+`scale=True` measures each side's scaling factors through `drto.scale`
+once, after that side's assembly and cold start, and every solve
+receives them; the history lands in the model's own units. The default
+writes nothing and honors a `scaling_factor` suffix the caller wrote.
 
 The returned `NmpcHistory` holds the actual closed-loop trajectory —
 times, each declared state's values, the implemented moves, and the
@@ -292,25 +291,26 @@ before any dynamic transform:
 ## How-to: scaling
 
 Badly scaled models (an energy holdup at 1e8 J next to mole fractions)
-are the rule in process systems. The drto contract is one-sided: **tag
-the model once, and every internal solve honors it**. Attach the standard
-Pyomo suffix with a factor per badly scaled variable and constraint:
+are the rule in process systems. `drto.scale` measures a factor per
+variable group and per large constraint from the values the model
+holds, so it runs after an initializer has filled them, and
+`drto.scaled_solve` assigns the factors and solves:
 
 ```python
-m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
-m.scaling_factor[cv.energy_holdup] = 1e-7
-m.scaling_factor[cv.enthalpy_balances] = 1e-7
+drto.initialize_steady_state(m)
+res = drto.scaled_solve(m)
 ```
 
-`cold_start_dynamic` and `initialize_steady_state` then run their
-internal solves on a scaled clone and write every value back in the
-model's own units — the model, its declarations, and its Params never
-leave physical units, and nothing changes in the call. Your own solver
-calls compose the same way with Pyomo's `core.scale_model`:
-`create_using` a scaled clone, solve it, `propagate_solution` back. The
-CSTR example tags units-driven factors (every J-valued variable gets
-1e-7, every W-valued 1e-6) in a ten-line helper and runs every solve
-through it.
+The factors reach the solver through the standard `scaling_factor`
+suffix, and no second model is built: pounce and legacy ipopt read it
+under `nlp_scaling_method=user-scaling`, and ipopt_v2's NL writer
+scales the problem as it writes the file. The model, its declarations,
+and its Params never leave physical units. The loops take the same
+measurement as an option: `scale=True` on `drto.ideal_nmpc`,
+`drto.approximate_nmpc_data`, and `drto.approximate_nmpc_closed_loop`
+measures each solved model once, after its cold start, and holds the
+factors for every solve. A hand-written suffix composes the same way:
+write it and the solves receive it.
 
 ## How-to: IDAES flowsheets
 

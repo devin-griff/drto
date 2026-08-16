@@ -418,21 +418,16 @@ def test_tee_streams_and_returns_every_solves_output(capsys):
 
 
 @needs_ipopt
-def test_the_loop_adopts_the_cold_starts_scaled_clone(monkeypatch):
-    reports, seen = [], []
-    real_cold = loop_module.cold_start_dynamic
-
-    def spy_cold(mm, **kw):
-        r = real_cold(mm, **kw)
-        reports.append(r)
-        return r
+def test_a_suffix_loop_solves_the_models_themselves(monkeypatch):
+    # no clone anywhere: the controller solve is the input model and
+    # the factors travel as the user-scaling option (gh #92)
+    seen = []
 
     class Rec(_Recorder):
         def solve(self, model, **kwds):
             seen.append(model)
             return super().solve(model, **kwds)
 
-    monkeypatch.setattr(loop_module, "cold_start_dynamic", spy_cold)
     rec = Rec(pyo.SolverFactory("ipopt"))
     monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
     m = loop_model()
@@ -440,9 +435,8 @@ def test_the_loop_adopts_the_cold_starts_scaled_clone(monkeypatch):
     for vd in m.z.values():
         m.scaling_factor[vd] = 2.0
     drto.ideal_nmpc(m, steps=1, solver="ipopt")
-    # the solve models are the cold start's own clones, not re-copies
-    assert seen[0] is reports[0].scaled_model
-    assert seen[1] is reports[1].scaled_model
+    assert seen[0] is m
+    assert all(opts.get("nlp_scaling_method") == "user-scaling" for opts in rec.calls)
 
 
 # ── scaling ──────────────────────────────────────────────────────────────────
@@ -463,3 +457,13 @@ def test_scaled_loop_reproduces_the_unscaled_history():
     hu = drto.ideal_nmpc(loop_model(), steps=5, solver="ipopt")
     assert hs.states["z"] == pytest.approx(hu.states["z"], abs=1e-6)
     assert hs.moves["u"] == pytest.approx(hu.moves["u"], abs=1e-6)
+
+
+@needs_ipopt
+def test_scale_writes_the_factors_and_the_default_does_not():
+    m = loop_model()
+    drto.ideal_nmpc(m, steps=1, solver="ipopt", scale=True)
+    assert m.component("scaling_factor") is not None
+    m2 = loop_model()
+    drto.ideal_nmpc(m2, steps=1, solver="ipopt")
+    assert m2.component("scaling_factor") is None

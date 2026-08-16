@@ -24,8 +24,9 @@ the first step, which on a trace quantity is a displacement of orders of
 magnitude.
 """
 import math
+import warnings
 
-from pyomo.core import Constraint, Objective, Suffix, TransformationFactory, Var
+from pyomo.core import Constraint, Objective, Suffix, Var
 from pyomo.dae import DerivativeVar
 
 from drto.info import info
@@ -43,8 +44,41 @@ _CLAMP = 12
 #: legacy interface and the v2 engine through that same API.
 _POUNCE_SOLVERS = ("pounce_v2", "pounce")
 
-#: Solvers whose interface passes the Suffix through to the solver.
+#: Solvers that apply the Suffix's factors. ipopt_v2 is here because
+#: Pyomo's NL-v2 writer consumes the Suffix and scales the problem as
+#: it writes the file, so that solver receives an already-scaled
+#: problem and needs no option.
 _READS_SUFFIX = _POUNCE_SOLVERS + ("ipopt", "ipopt_v2")
+
+#: The subset that reads the factors inside the solver, under
+#: ``nlp_scaling_method=user-scaling``.
+_TAKES_OPTION = _POUNCE_SOLVERS + ("ipopt",)
+
+
+def _suffix_active(m):
+    """Whether ``m`` carries an active ``scaling_factor`` Suffix."""
+    return any(
+        s.local_name == "scaling_factor"
+        for s in m.component_objects(Suffix, active=True)
+    )
+
+
+def _scaling_options(solver, fn):
+    """The options that make ``solver`` apply the Suffix.
+
+    A solver that does not receive the factors gets an empty mapping
+    and a warning naming it, so an unscaled solve is never silent.
+    """
+    if solver in _TAKES_OPTION:
+        return {"nlp_scaling_method": "user-scaling"}
+    if solver not in _READS_SUFFIX:
+        warnings.warn(
+            f"drto: {fn}: solver '{solver}' does not receive the "
+            f"scaling_factor Suffix, so the factors were not applied "
+            f"and the solve runs unscaled.",
+            stacklevel=3,
+        )
+    return {}
 
 
 def _group_key(vardata):
@@ -210,13 +244,16 @@ def _constraint_factors(m, skip):
 def scaled_solve(m, solver="pounce_v2", tee=False, options=None):
     """Assign the factors and solve, returning the model's own units.
 
-    pounce and ipopt read the Suffix under
-    ``nlp_scaling_method=user-scaling`` and solve ``m`` directly:
-    objective and constraint factors travel through the NL file's suffix
-    segments, variable factors are applied as a change of variables
-    inside the solver, and the solution comes back unscaled. Any other
-    solver takes ``core.scale_model``: a scaled clone is built, solved,
-    and its solution propagated back.
+    The factors reach the solver through the Suffix, and no second
+    model is built. pounce and legacy ipopt read it under
+    ``nlp_scaling_method=user-scaling``: objective and constraint
+    factors travel through the NL file's suffix segments, and variable
+    factors are applied as a change of variables inside the solver.
+    ipopt_v2 gets no option, since Pyomo's NL-v2 writer consumes the
+    Suffix and scales the problem as it writes the file. Any other
+    solver does not receive the factors: the solve runs unscaled and a
+    warning says so. Every route solves ``m`` itself and the solution
+    comes back in the model's own units.
 
     Parameters
     ----------
@@ -240,22 +277,6 @@ def scaled_solve(m, solver="pounce_v2", tee=False, options=None):
         import pyomo_pounce  # noqa: F401  registers the solver
 
     scale(m)
-    opts = {"nlp_scaling_method": "user-scaling"}
+    opts = _scaling_options(solver, "scaled_solve")
     opts.update(options or {})
-
-    if solver in _READS_SUFFIX:
-        return SolverFactory(solver).solve(m, tee=tee, options=opts)
-
-    xfrm = TransformationFactory("core.scale_model")
-    clone = xfrm.create_using(m)
-    res = SolverFactory(solver).solve(clone, tee=tee, options=options or {})
-    # propagate_solution rescales the duals through the objective's own
-    # factor, so on a square model with no objective those suffixes go
-    # and the primal values come back alone
-    if next(clone.component_data_objects(Objective, active=True), None) is None:
-        for name in ("dual", "rc", "ipopt_zL_out", "ipopt_zU_out"):
-            comp = clone.component(name)
-            if comp is not None and comp.ctype is Suffix:
-                clone.del_component(comp)
-    xfrm.propagate_solution(clone, m)
-    return res
+    return SolverFactory(solver).solve(m, tee=tee, options=opts)

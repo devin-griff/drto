@@ -246,8 +246,22 @@ def test_a_segment_derivative_takes_its_state_factor():
 # ----------------------------------------------------------------------
 # scaled_solve
 # ----------------------------------------------------------------------
+class _RecordingFactory:
+    """Stands in for SolverFactory, recording the options it is handed."""
+
+    def __init__(self, record):
+        self.record = record
+
+    def __call__(self, name):
+        return self
+
+    def solve(self, model, tee=False, options=None):
+        self.record.update(options or {})
+        return "solved"
+
+
 @needs_ipopt
-def test_the_direct_path_builds_no_clone_and_returns_own_units():
+def test_the_solve_builds_no_clone_and_returns_own_units():
     m = spanning_model()
     m.obj = pyo.Objective(expr=sum(m.cost[t] for t in m.cost))
     res = drto.scaled_solve(m, solver="ipopt")
@@ -256,26 +270,29 @@ def test_the_direct_path_builds_no_clone_and_returns_own_units():
     assert pyo.value(m.n[0, "big"]) == pytest.approx(2e6, rel=1e-6)
 
 
-@needs_ipopt
-def test_both_paths_reach_the_same_solution(monkeypatch):
-    # the fallback is chosen by name, so a solver drto does not list as
-    # reading the Suffix takes the clone: patch the list to send ipopt
-    # down it, and the two paths must agree
-    import drto.scaling as scaling
+def test_ipopt_v2_gets_no_scaling_option(monkeypatch):
+    # the NL-v2 writer consumes the Suffix and scales the problem as it
+    # writes, so the option would name a job already done
+    import pyomo.environ
 
-    direct = spanning_model()
-    direct.obj = pyo.Objective(expr=sum(direct.cost[t] for t in direct.cost))
-    drto.scaled_solve(direct, solver="ipopt")
+    record = {}
+    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    m = spanning_model()
+    drto.scaled_solve(m, solver="ipopt_v2")
+    assert "nlp_scaling_method" not in record
 
-    fallback = spanning_model()
-    fallback.obj = pyo.Objective(expr=sum(fallback.cost[t] for t in fallback.cost))
-    monkeypatch.setattr(scaling, "_READS_SUFFIX", ())
-    drto.scaled_solve(fallback, solver="ipopt")
 
-    for j in ("big", "trace"):
-        assert pyo.value(fallback.n[0, j]) == pytest.approx(
-            pyo.value(direct.n[0, j]), rel=1e-6
-        )
+def test_an_unlisted_solver_warns_and_solves_unscaled(monkeypatch):
+    import pyomo.environ
+
+    record = {}
+    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    m = spanning_model()
+    with pytest.warns(UserWarning, match="factors were not applied"):
+        drto.scaled_solve(m, solver="cbc")
+    assert "nlp_scaling_method" not in record
+    # the factors were still measured onto the model
+    assert len(m.scaling_factor) > 0
 
 
 def test_a_missing_asl_library_names_both_installers(monkeypatch):
@@ -288,10 +305,11 @@ def test_a_missing_asl_library_names_both_installers(monkeypatch):
         drto.scale(m)
 
 
-def test_the_pounce_names_take_the_direct_path():
-    from drto.scaling import _POUNCE_SOLVERS, _READS_SUFFIX
+def test_the_solver_lists_agree():
+    from drto.scaling import _POUNCE_SOLVERS, _READS_SUFFIX, _TAKES_OPTION
 
-    # both names reach the same solver, and both forward the Suffix, so
-    # neither builds a scaled clone
+    # both pounce names reach the same solver and take the option;
+    # ipopt_v2 applies the factors without one, in the NL-v2 writer
     assert _POUNCE_SOLVERS == ("pounce_v2", "pounce")
-    assert all(name in _READS_SUFFIX for name in _POUNCE_SOLVERS)
+    assert all(name in _TAKES_OPTION for name in _POUNCE_SOLVERS)
+    assert "ipopt_v2" in _READS_SUFFIX and "ipopt_v2" not in _TAKES_OPTION

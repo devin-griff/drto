@@ -47,6 +47,7 @@ from drto.ideal_nmpc import (
 )
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
+from drto import scaling as drto_scaling
 from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
@@ -234,6 +235,7 @@ def approximate_nmpc_data(
     ranges=None,
     gradients=True,
     solver="pounce_v2",
+    scale=False,
     seed=0,
     path=None,
 ):
@@ -260,6 +262,12 @@ def approximate_nmpc_data(
         sampled Param, read from the pounce factorization.
     solver : str
         The labeling solver's name.
+    scale : bool
+        ``True`` measures the model's scaling factors through
+        ``drto.scale`` once, after the first draw's cold start, and
+        every solve receives them: one measurement serves the whole
+        dataset. The default writes nothing and honors a
+        ``scaling_factor`` Suffix the caller wrote.
     seed : int
         The design's seed.
     path : str, optional
@@ -296,14 +304,23 @@ def approximate_nmpc_data(
     cube = _design(method, n, len(pairs), seed)
     x_ss, u_ss = _steady_targets(reg, fn)
     points, failures = [], []
-    for row in cube:
+    solve_opts = {}
+    for i, row in enumerate(cube):
         draw = {}
         for (param, (lo, hi)), r in zip(pairs, row):
             v = lo + float(r) * (hi - lo)
             param.set_value(v)
             draw[param.name] = v
         cold_start_dynamic(m)
-        res = factory.solve(m)
+        if i == 0:
+            # scale=True: measure the factors at the first draw's cold
+            # start and hold them, so every sample solves under the
+            # same factors
+            if scale:
+                drto_scaling.scale(m)
+            if drto_scaling._suffix_active(m):
+                solve_opts = drto_scaling._scaling_options(solver, fn)
+        res = factory.solve(m, options=solve_opts)
         if res.solver.termination_condition != TerminationCondition.optimal:
             failures.append(
                 {"x": draw, "termination": str(res.solver.termination_condition)}
@@ -917,7 +934,14 @@ def _stage_cost_vars(reg, t0, fn):
 
 
 def approximate_nmpc_closed_loop(
-    policy, m, samples=50, x0=None, disturbances=None, solver="pounce_v2", compare=False
+    policy,
+    m,
+    samples=50,
+    x0=None,
+    disturbances=None,
+    solver="pounce_v2",
+    scale=False,
+    compare=False,
 ):
     """Run the fitted policy closed loop against the declared model.
 
@@ -948,6 +972,13 @@ def approximate_nmpc_closed_loop(
         no entry is zero, and the loop is deterministic.
     solver : str
         The solver for the plant steps and the compare solves.
+    scale : bool
+        ``True`` measures the scaling factors through ``drto.scale``
+        once per model the loop solves, the plant and, with
+        ``compare``, the horizon model, each at the values it carries
+        when the loop starts, and every solve receives them. The
+        default writes nothing and honors a ``scaling_factor`` Suffix
+        the caller wrote.
     compare : bool
         Also solve the horizon problem at each visited state and record
         the control it takes there, beside the policy's. A visited
@@ -1015,6 +1046,22 @@ def approximate_nmpc_closed_loop(
     opt = SolverFactory(solver)
 
     plant = _policy_plant(m, fn)
+    # scale=True: measure each solved model's factors at the values it
+    # carries when the loop starts, held for the whole run
+    if scale:
+        drto_scaling.scale(plant)
+        if compare:
+            drto_scaling.scale(m)
+    plant_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(plant)
+        else {}
+    )
+    compare_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if compare and drto_scaling._suffix_active(m)
+        else {}
+    )
     regp = info(plant)
     p_pins = _pinned(regp, fn)
     time_p = regp.components("horizon")[0]
@@ -1073,7 +1120,7 @@ def approximate_nmpc_closed_loop(
                 if k > 0 and compared and solver in _WARM_SOLVERS
                 else {}
             )
-            res = opt.solve(m, options=options)
+            res = opt.solve(m, options={**compare_opts, **options})
             compared = res.solver.termination_condition == TerminationCondition.optimal
             if compared:
                 for u in m_controls:
@@ -1099,7 +1146,7 @@ def approximate_nmpc_closed_loop(
             report.realizations[w.local_name].append(realized)
             for vd in _members(w):
                 vd.set_value(realized)
-        res = opt.solve(plant)
+        res = opt.solve(plant, options=plant_opts)
         if res.solver.termination_condition != TerminationCondition.optimal:
             state = ", ".join(
                 f"{label} {value(hook):.6g}" for label, hook in zip(labels, c_hooks)

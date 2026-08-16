@@ -11,10 +11,10 @@ DerivativeVar members hold the profile's slope, the controls (and a
 parameterized control's moves) hold their declared targets, and, with
 pyomo-pounce installed, the algebraic variables solve pointwise from
 every equation except the declared dynamics (``point_solves=False``
-skips them deliberately); with an active
-``scaling_factor`` suffix those solves run on a scaled clone, the
-values propagate back, and the report carries the initialized clone as
-``scaled_model`` for a consumer that wants a persistent scaled model.
+skips them deliberately). The solves run in the model's own units, and
+an active ``scaling_factor`` suffix does not change them: each is a
+square block solved in calculation order, and the suffix stays on the
+model for the NLP solves that follow (gh #92).
 A terminal segment rests at the targets: copies and segment controls
 at the targets, tau derivatives and pin slacks at zero.
 
@@ -56,11 +56,6 @@ class ColdStartReport:
     segment: str = "(none attached)"
     point_solves: str = "skipped (pyomo-pounce not installed)"
     pipeline: object = None
-    #: The initialized scaled clone, when the solves ran scaled (its
-    #: factor map attached as ``component_scaling_factor_map``); the
-    #: closed loop adopts it as its persistent solve model.
-    #: Lives as long as the report does; drop the report to release it.
-    scaled_model: object = None
     notes: list = field(default_factory=list)
 
     def __str__(self):
@@ -102,8 +97,7 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     given; it belongs to the exponential profile only. ``point_solves``
     is the algebra choice: ``True`` (the default) runs the per-point
     solves, ``False`` skips them deliberately, the profiles and targets
-    landing without a solve, the scaled clone never built, and the
-    report saying so.
+    landing without a solve and the report saying so.
 
     Returns a :class:`ColdStartReport`; values only, nothing added or
     removed, and the fixed flags are untouched.
@@ -277,33 +271,23 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     # block once the states and controls are held. An undeclared member
     # of an indexed Var comes from its closures, and its derivative from
     # the discretization equations; a variable only a set-aside balance would
-    # close keeps its value and is reported underconstrained. With an
-    # active scaling_factor suffix the solves run on a scaled clone and
-    # the values propagate back; the model stays in its own units.
+    # close keeps its value and is reported underconstrained. The solves
+    # run in the model's own units; an active scaling_factor suffix does
+    # not change them (gh #92).
     if not point_solves:
         # the deliberate skip: the profiles and targets are the whole
-        # initialization, no clone, no solve
+        # initialization, no solve
         report.point_solves = "skipped (by option)"
         return report
     if not pounce_available:
         return report
-    scaled = any(
-        s.local_name == "scaling_factor"
-        for s in m.component_objects(pyo.Suffix, active=True)
-    )
-    if scaled:
-        xfrm = pyo.TransformationFactory("core.scale_model")
-        solve_m = xfrm.create_using(m, rename=False)
-        solve_reg = info(solve_m)
-    else:
-        solve_m, solve_reg = m, reg
     held = []
     for kind in ("state", "control"):
-        for comp in solve_reg.components(kind):
+        for comp in reg.components(kind):
             held.extend(vd for vd in comp.values() if not vd.fixed)
     rows = []
     for kind in ("dynamics", "initial_condition"):
-        for con in solve_reg.components(kind):
+        for con in reg.components(kind):
             if con.active:
                 rows.append(con)
                 con.deactivate()
@@ -315,10 +299,9 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
     # continuity, the pin), which would otherwise re-solve held copies.
     # The pin slacks then sit in no active constraint and stay at zero, and a
     # variable only the dynamics would close keeps its value, as on the
-    # finite side. The pairing comes from the transform's records, which
-    # a clone carries with its references remapped (gh #27)
+    # finite side. The pairing comes from the transform's records (gh #27)
     set_aside = []
-    for rec in solve_reg._segment_records():
+    for rec in reg._segment_records():
         if rec["kind"] in ("state", "control") and rec["copy"] is not None:
             held.extend(vd for vd in rec["copy"].values() if not vd.fixed)
         if rec["kind"] == "dynamics":
@@ -331,34 +314,10 @@ def cold_start_dynamic(m, profile="linear", time_constant=None, point_solves=Tru
             con.deactivate()
     try:
         report.pipeline = pyomo_pounce.initialize(
-            solve_m, decisions=held, fill=None, project=False
+            m, decisions=held, fill=None, project=False
         )
-        report.point_solves = (
-            "run (pyomo-pounce block solve, scaled clone)"
-            if scaled
-            else "run (pyomo-pounce block solve)"
-        )
+        report.point_solves = "run (pyomo-pounce block solve)"
     finally:
         for con in rows:
             con.activate()
-    if scaled:
-        # values only, copied by position: the clone is this model's
-        # deepcopy, so the var data objects align one to one. Pyomo's
-        # propagate_solution is avoided deliberately: it iterates Var
-        # containers including References, and indexing a Reference
-        # rebuilds members on demand, which resurrects what a model cut
-        # to a window of the horizon removed (the closed loop's
-        # one-sample plant); it also wants an objective to rescale the
-        # clone's solver suffixes, which values-only never needs
-        fmap = solve_m.component_scaling_factor_map
-        for vo, vs in zip(
-            m.component_data_objects(Var, descend_into=True),
-            solve_m.component_data_objects(Var, descend_into=True),
-        ):
-            if vs.value is not None:
-                vo.set_value(
-                    pyo.value(vs) / (fmap[vs] if vs in fmap else 1.0),
-                    skip_validation=True,
-                )
-        report.scaled_model = solve_m
     return report

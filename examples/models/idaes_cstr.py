@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""The IDAES saponification CSTR, declared for drto, with its scaling.
+"""The IDAES saponification CSTR, declared for drto.
 
 The flowsheet is ``idaes.models.unit_models.CSTR`` with the saponification
 property and reaction packages, taken as IDAES wrote it: the true states
@@ -12,15 +12,14 @@ Targets and feedback hooks are Params in the owners' units, filled by the
 caller (the setpoint from ``drto.steady_state_simulation``, the start from
 the setpoint composition knocked back along the stoichiometry, hot).
 
-The scaling rides along: ``tag_scaling`` writes the units-driven
-``scaling_factor`` suffix (every J-valued variable 1e-7, every W-valued
-1e-6; the pin slacks stay unscaled), which the drto initializers honor,
-and ``scaled_solve`` retags, solves a ``core.scale_model`` clone, and maps
-the solution back.
+The flowsheet runs in raw SI, energy holdups near 1e7 J against unit
+flows, and ``drto.scale`` measures its factors from the values an
+initializer leaves, so the notebooks scale it with the package's own
+calls rather than a helper here.
 
 Usage from a notebook in ``examples/``::
 
-    from models.idaes_cstr import F_IN, build, scaled_solve, tag_scaling
+    from models.idaes_cstr import F_IN, build
     m = build(N=10)
 """
 import pyomo.environ as pyo
@@ -263,54 +262,3 @@ def build(N=10, h=1, ncp=3, disturbance=False):
     drto.steady_state_control(fin, m.flow_ss)
     return m
 
-
-
-U = pyo.units
-_cache = {}
-
-
-def scale_factor(u):
-    s = str(u)
-    if s not in _cache:
-        _cache[s] = 1.0
-        for target, sf in ((U.J, 1e-7), (U.W, 1e-6), (U.J / U.s, 1e-6)):
-            try:
-                U.convert_value(1.0, from_units=u, to_units=target)
-                _cache[s] = sf
-                break
-            except Exception:  # incompatible units: unscaled
-                pass
-    return _cache[s]
-
-
-def tag_scaling(model):
-    """Tag every Var and active row with its units-driven factor."""
-    if model.component("scaling_factor") is not None:
-        model.del_component("scaling_factor")
-    model.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
-    for v in model.component_data_objects(pyo.Var, descend_into=True):
-        # the pin slacks enter the objective linearly with weight mu, so
-        # scaling them blows the objective's gradients; near zero anyway,
-        # they stay unscaled
-        if v.parent_component().local_name.endswith(("_pin_up", "_pin_lo")):
-            continue
-        f = scale_factor(U.get_units(v))
-        if f != 1.0:
-            model.scaling_factor[v] = f
-    for c in model.component_data_objects(pyo.Constraint, active=True,
-                                          descend_into=True):
-        try:
-            f = scale_factor(U.get_units(c.body))
-        except Exception:  # a unitless or inconsistent row: unscaled
-            f = 1.0
-        if f != 1.0:
-            model.scaling_factor[c] = f
-
-
-def scaled_solve(model, tee=False):
-    """Retag by units, solve the scaled clone, map the solution back."""
-    tag_scaling(model)
-    sm = pyo.TransformationFactory("core.scale_model").create_using(model)
-    res = pyo.SolverFactory("pounce").solve(sm, tee=tee)
-    pyo.TransformationFactory("core.scale_model").propagate_solution(sm, model)
-    return res
