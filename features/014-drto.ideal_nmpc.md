@@ -110,11 +110,12 @@ default is quiet, nothing streamed, nothing kept.
 An active `scaling_factor` suffix is honored the way the initializers
 honor it: every solve on that side receives the factors, and the
 history reads back in the model's own units. The initial-condition
-Params stay physical. `scale=True` writes the factors itself: each
-side's Suffix is measured through `drto.scale` once, after that side's
+Params stay physical. `scale` takes a feature 023 source, `"point"`,
+`"bounds"`, or a mapping of units to magnitudes, and forwards it to
+`drto.scale`: each side's Suffix is written once, after that side's
 assembly and cold start, at the first point it holds values, and held
 for the whole loop rather than re-measured per step. The default,
-`scale=False`, writes nothing and honors what the caller wrote.
+`scale=None`, writes nothing and honors what the caller wrote.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the
@@ -182,10 +183,10 @@ single call on the declared model.
 - With an active `scaling_factor` suffix every solve on that side
   receives the factors; the history lands in the model's own units, and
   a hicks loop carrying factors reproduces the unscaled loop's history.
-- With `scale=True` the loop measures each side's factors through
-  `drto.scale` once, after that side's assembly and cold start, and
-  every solve receives them; the default `scale=False` writes no
-  factors.
+- With `scale` given a feature 023 source, the loop writes each side's
+  factors through `drto.scale` with that source once, after that side's
+  assembly and cold start, and every solve receives them; the default
+  `scale=None` writes no factors.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and
   `drto.plot_controls` gain a second input kind: handed a history instead

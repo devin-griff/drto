@@ -5,36 +5,58 @@
 ## Description
 
 As a user of DRTO, I want a function that assigns scaling factors to a
-declared model from its current values, and a solve that applies them,
+declared model from a source I choose, and a solve that applies them,
 so that models whose variables span many orders of magnitude solve
 without hand-written per-model factors.
 
 ```python
 import drto
+from pyomo.environ import units
 
 # ... declared, discretized, initialized model m ...
 
-drto.scale(m)
+drto.scale(m)                       # magnitudes from the values m holds
+drto.scale(m, source="bounds")      # from the declared bounds
+drto.scale(m, source={units.J: 1e7, units.W: 1e6})  # from the caller
 results = drto.scaled_solve(m)
-results = drto.scaled_solve(m, solver="ipopt_v2", tee=True,
-                            options={"max_iter": 500})
+results = drto.scaled_solve(m, source="bounds", solver="ipopt_v2",
+                            tee=True, options={"max_iter": 500})
 ```
 
-`drto.scale(m)` fills the standard `scaling_factor` Suffix on the model
-(direction EXPORT), replacing any existing one. It reads the model's
-current values, so it runs after an initializer has filled the model;
-a model without values is a descriptive error saying to initialize
-first.
+`drto.scale(m, source=...)` fills the standard `scaling_factor` Suffix
+on the model (direction EXPORT), replacing any existing one. `source`
+selects where each variable group's magnitude comes from, and the modes
+are exclusive: each scales the groups it can measure and leaves every
+other group at factor one. Whatever the mode, the constraint factors
+are measured through the Jacobian at the model's current point, so
+`scale` runs after an initializer has filled the model, and a model
+without values is a descriptive error saying to initialize first.
 
 Variable factors are assigned one per Var per name: the members of each
 Var are grouped by their string index elements (species, phases, port
 names), so numeric index elements (time points, spatial nodes, ordinal
-counters) never split a factor. Each group's magnitude is its largest
-absolute value, and a group whose magnitude falls outside [1e-2, 1e2]
-gets the power of ten bringing that magnitude to order one, the exponent
-clamped to twelve orders of magnitude. A group whose largest value is
-below 1e-16 holds numerical zeros and keeps factor one. Fixed variables
-get no entries: they are not part of the handed problem.
+counters) never split a factor.
+
+The mode gives each group its magnitude. `"point"`, the default, reads
+the group's largest absolute value at the point the model is sitting
+at. `"bounds"` reads `max(|lb|, |ub|)` over the members carrying two
+finite bounds, and a group with no such member keeps factor one, so the
+mode scales exactly the quantities whose operating limits are declared,
+in practice the controls, and reads no values. A mapping of units to
+magnitudes, `{units.J: 1e7, units.W: 1e6}`, gives every group whose
+members are valued in a mapped dimension that dimension's magnitude,
+and every other group keeps factor one: the caller states the process's
+operating magnitudes once per physical dimension, which covers a
+quantity whose value and bounds both say nothing, a duty sitting at
+zero with no bounds. There is no mode named `"units"`, the mapping
+itself is the mode, so a units request without magnitudes cannot be
+written. Any other `source` is a ValueError naming the three forms.
+
+Whatever the mode, a group whose magnitude falls outside [1e-2, 1e2]
+gets the power of ten bringing that magnitude to order one, the
+exponent clamped to twelve orders of magnitude. A group whose magnitude
+is below 1e-16 holds numerical zeros and keeps factor one. Fixed
+variables get no entries: they are not part of the handed problem.
 
 A derivative variable on the terminal segment takes the factor of the
 state it differentiates, reached through `get_state_var` and the pairing
@@ -79,10 +101,12 @@ constraint factors. The pin's penalty weight is defined in each state's
 own units, and a factor on the slack or its constraint changes the
 pin's effective weight against the objective.
 
-`drto.scaled_solve(m, solver=..., tee=..., options=...)` applies the
-factors and solves. `solver` names the solver and defaults to
-`pounce_v2`; `options` is a mapping passed through to it, overriding any
-default the call sets.
+`drto.scaled_solve(m, source=..., solver=..., tee=..., options=...)`
+assigns the factors and solves. `source` is forwarded to `drto.scale`,
+so every call measures fresh and replaces a Suffix already on the
+model. `solver` names the solver and defaults to `pounce_v2`; `options`
+is a mapping passed through to it, overriding any default the call
+sets.
 
 The factors reach the solver through the Suffix, and no second model is
 built anywhere. pounce and legacy ipopt read it under
@@ -98,9 +122,10 @@ A solver outside that set does not receive the factors: the solve runs
 unscaled, and `scaled_solve` warns, naming the solver and saying the
 factors were not applied.
 
-The factors compose with the rest of the package: the initializers
-already honor an active `scaling_factor` Suffix on their internal solves
-(feature 011), so the order is initialize, scale, solve.
+The factors compose with the rest of the package: the initializers run
+in the model's own units (features 010 and 011), and the loops honor an
+active Suffix or write one through their `scale` option (features 014
+and 026), so the order is initialize, scale, solve.
 
 ## Benefit hypothesis
 
@@ -134,8 +159,20 @@ demonstrate.
   that differ only in numeric index elements share a factor; members
   that differ in a string index element may not.
 - A group whose magnitude lies inside [1e-2, 1e2], and a group whose
-  largest value is below 1e-16, get no entry. Fixed variables get no
+  magnitude is below 1e-16, get no entry. Fixed variables get no
   entries. The exponent clamp holds at twelve orders of magnitude.
+- With `source="bounds"`, a group with a member carrying two finite
+  bounds takes its factor from the largest absolute bound and no value
+  is read: a control sitting at zero with bounds at plus and minus 1e6
+  takes 1e-6. A group with no such member keeps factor one.
+- With `source` a mapping of units to magnitudes, a group valued in a
+  mapped dimension takes that magnitude's factor, and every other
+  group, unmapped or dimensionless, keeps factor one. The mapping is
+  the only units form: no string selects a units mode.
+- A `source` that is none of `"point"`, `"bounds"`, or a mapping raises
+  a ValueError naming the three forms.
+- `drto.scaled_solve` forwards `source` to `drto.scale`, and each call
+  replaces the Suffix a previous call wrote.
 - After the call, every constraint whose largest Jacobian entry in the
   scaled variables exceeded 1e2 has been brought to order one, and a
   constraint whose entries were all small carries no factor.
@@ -165,10 +202,7 @@ demonstrate.
 - With a solver that does not receive the factors, the solve runs
   unscaled and a warning names the solver and says the factors were not
   applied.
-- The solvent extraction example's dynamic optimization converges from
-  its steady start through `drto.scale` and `drto.scaled_solve`, with
-  the concentrations and flows carrying their bounds at zero: the
-  handed point survives the solver's move off those bounds.
-- The initializers run their internal solves against the assigned
-  factors unchanged (feature 011's behavior), with no duplicate
-  assignment.
+- The steady reduction of the solvent extraction example converges
+  through `drto.scale` and `drto.scaled_solve`, with the concentrations
+  and flows carrying their bounds at zero: the handed point survives
+  the solver's move off those bounds.
