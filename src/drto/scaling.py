@@ -1,15 +1,16 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
-"""Scaling factors from the model's own values: ``drto.scale`` (feature 023).
+"""Scaling factors from a chosen source: ``drto.scale`` (feature 023).
 
-``drto.scale`` fills Pyomo's standard ``scaling_factor`` Suffix from the
-values the model currently holds, and ``drto.scaled_solve`` applies them
-and solves.
-
-The factors are measured, not declared. A variable's factor comes from
-the magnitude its own members hold, and a constraint's from its largest
-Jacobian entry once the variables are scaled, so a model carrying its
-physics' units needs no hand-written table.
+``drto.scale`` fills Pyomo's standard ``scaling_factor`` Suffix and
+``drto.scaled_solve`` applies it and solves. ``source`` selects where
+each variable group's magnitude comes from: ``"point"`` reads the
+values the model holds, ``"bounds"`` reads the declared bounds, and a
+mapping of unit names to magnitudes reads the caller's knowledge of the
+process, one entry per physical dimension. Each mode scales the groups
+it can measure and leaves the rest at factor one. The constraint
+factors are measured from the Jacobian at the current point in every
+mode, from each row's largest entry once the variables are scaled.
 
 Three properties of the assignment matter more than the arithmetic. The
 members of one Var share a factor unless they differ in a string index
@@ -24,8 +25,10 @@ the first step, which on a trace quantity is a displacement of orders of
 magnitude.
 """
 import math
+import warnings
+from collections.abc import Mapping
 
-from pyomo.core import Constraint, Objective, Suffix, TransformationFactory, Var
+from pyomo.core import Constraint, Objective, Suffix, Var
 from pyomo.dae import DerivativeVar
 
 from drto.info import info
@@ -43,8 +46,41 @@ _CLAMP = 12
 #: legacy interface and the v2 engine through that same API.
 _POUNCE_SOLVERS = ("pounce_v2", "pounce")
 
-#: Solvers whose interface passes the Suffix through to the solver.
+#: Solvers that apply the Suffix's factors. ipopt_v2 is here because
+#: Pyomo's NL-v2 writer consumes the Suffix and scales the problem as
+#: it writes the file, so that solver receives an already-scaled
+#: problem and needs no option.
 _READS_SUFFIX = _POUNCE_SOLVERS + ("ipopt", "ipopt_v2")
+
+#: The subset that reads the factors inside the solver, under
+#: ``nlp_scaling_method=user-scaling``.
+_TAKES_OPTION = _POUNCE_SOLVERS + ("ipopt",)
+
+
+def _suffix_active(m):
+    """Whether ``m`` carries an active ``scaling_factor`` Suffix."""
+    return any(
+        s.local_name == "scaling_factor"
+        for s in m.component_objects(Suffix, active=True)
+    )
+
+
+def _scaling_options(solver, fn):
+    """The options that make ``solver`` apply the Suffix.
+
+    A solver that does not receive the factors gets an empty mapping
+    and a warning naming it, so an unscaled solve is never silent.
+    """
+    if solver in _TAKES_OPTION:
+        return {"nlp_scaling_method": "user-scaling"}
+    if solver not in _READS_SUFFIX:
+        warnings.warn(
+            f"drto: {fn}: solver '{solver}' does not receive the "
+            f"scaling_factor Suffix, so the factors were not applied "
+            f"and the solve runs unscaled.",
+            stacklevel=3,
+        )
+    return {}
 
 
 def _group_key(vardata):
@@ -111,20 +147,89 @@ def _pin_components(reg):
     return out
 
 
-def scale(m):
-    """Fill ``m``'s ``scaling_factor`` Suffix from its current values.
+def _point_magnitude(members):
+    """The group's largest absolute value."""
+    return max((abs(v.value) for v in members if v.value is not None), default=0.0)
+
+
+def _bounds_magnitude(members):
+    """The largest absolute bound among members carrying two finite ones."""
+    return max(
+        (
+            max(abs(v.lb), abs(v.ub))
+            for v in members
+            if v.lb is not None and v.ub is not None
+        ),
+        default=0.0,
+    )
+
+
+def _units_magnitude(magnitudes):
+    """A rule giving each group its mapped dimension's magnitude.
+
+    The mapping is keyed by unit name, since a pyomo unit is an
+    expression and cannot key a dict. A group whose members are valued
+    in a mapped dimension takes that entry's magnitude, converted into
+    the members' own units; unmapped and dimensionless groups yield
+    zero and keep factor one.
+    """
+    from pyomo.core.base.units_container import units as U
+
+    cache = {}
+
+    def rule(members):
+        u = U.get_units(members[0])
+        key = str(u)
+        if key not in cache:
+            cache[key] = 0.0
+            for name, mag in magnitudes.items():
+                try:
+                    cache[key] = mag * U.convert_value(
+                        1.0, from_units=getattr(U, name), to_units=u
+                    )
+                    break
+                except Exception:
+                    continue
+        return cache[key]
+
+    return rule
+
+
+def scale(m, source="point"):
+    """Fill ``m``'s ``scaling_factor`` Suffix from the chosen source.
 
     Parameters
     ----------
     m : Block
-        A model holding values, which an initializer leaves behind.
+        A model holding values, which an initializer leaves behind. The
+        constraint factors are measured at those values in every mode.
+    source : str or mapping
+        Where each variable group's magnitude comes from. ``"point"``
+        reads the values the model holds. ``"bounds"`` reads the largest
+        absolute bound of the members carrying two finite bounds, and a
+        group with none keeps factor one. A mapping of units to
+        magnitudes gives every group valued in a mapped dimension that
+        entry's magnitude, and every other group keeps factor one.
 
     Raises
     ------
     ValueError
-        If no unfixed variable holds a value, since the factors are
-        measured at the point the model is sitting at.
+        If no unfixed variable holds a value, since the constraint
+        factors are measured at the point the model is sitting at, or if
+        ``source`` is none of the three forms.
     """
+    if source == "point":
+        magnitude = _point_magnitude
+    elif source == "bounds":
+        magnitude = _bounds_magnitude
+    elif isinstance(source, Mapping):
+        magnitude = _units_magnitude(source)
+    else:
+        raise ValueError(
+            f"drto: scale takes source='point', source='bounds', or a "
+            f"mapping of units to magnitudes, not {source!r}."
+        )
+
     reg = info(m)
     skip = _pin_components(reg)
     tail = _tail_derivative_keys(m, reg)
@@ -137,9 +242,9 @@ def scale(m):
         groups.setdefault(key, []).append(v)
     if not any(v.value is not None for g in groups.values() for v in g):
         raise ValueError(
-            "drto: scale measures the factors at the model's current "
-            "point, and no unfixed variable holds a value. Initialize "
-            "first (drto.initialize_steady_state or "
+            "drto: scale measures the constraint factors at the model's "
+            "current point, and no unfixed variable holds a value. "
+            "Initialize first (drto.initialize_steady_state or "
             "drto.cold_start_dynamic)."
         )
 
@@ -148,7 +253,7 @@ def scale(m):
     m.scaling_factor = Suffix(direction=Suffix.EXPORT)
 
     for members in groups.values():
-        mag = max((abs(v.value) for v in members if v.value is not None), default=0.0)
+        mag = magnitude(members)
         if mag < _FLOOR or _BAND[0] <= mag <= _BAND[1]:
             continue
         exponent = max(-_CLAMP, min(_CLAMP, round(math.log10(mag))))
@@ -207,21 +312,27 @@ def _constraint_factors(m, skip):
         m.scaling_factor[con] = 10.0 ** -round(math.log10(largest))
 
 
-def scaled_solve(m, solver="pounce_v2", tee=False, options=None):
+def scaled_solve(m, source="point", solver="pounce_v2", tee=False, options=None):
     """Assign the factors and solve, returning the model's own units.
 
-    pounce and ipopt read the Suffix under
-    ``nlp_scaling_method=user-scaling`` and solve ``m`` directly:
-    objective and constraint factors travel through the NL file's suffix
-    segments, variable factors are applied as a change of variables
-    inside the solver, and the solution comes back unscaled. Any other
-    solver takes ``core.scale_model``: a scaled clone is built, solved,
-    and its solution propagated back.
+    ``source`` is forwarded to ``scale``, so every call measures fresh
+    and replaces a Suffix already on the model. The factors reach the
+    solver through the Suffix, and no second model is built. pounce and
+    legacy ipopt read it under ``nlp_scaling_method=user-scaling``:
+    objective and constraint factors travel through the NL file's
+    suffix segments, and variable factors are applied as a change of
+    variables inside the solver. ipopt_v2 gets no option, since Pyomo's
+    NL-v2 writer consumes the Suffix and scales the problem as it
+    writes the file. Any other solver does not receive the factors: the
+    solve runs unscaled and a warning says so. Every route solves ``m``
+    itself and the solution comes back in the model's own units.
 
     Parameters
     ----------
     m : Block
         A model holding values.
+    source : str or mapping
+        ``scale``'s source of magnitudes.
     solver : str
         The solver's name.
     tee : bool
@@ -239,23 +350,7 @@ def scaled_solve(m, solver="pounce_v2", tee=False, options=None):
     if solver in _POUNCE_SOLVERS:
         import pyomo_pounce  # noqa: F401  registers the solver
 
-    scale(m)
-    opts = {"nlp_scaling_method": "user-scaling"}
+    scale(m, source=source)
+    opts = _scaling_options(solver, "scaled_solve")
     opts.update(options or {})
-
-    if solver in _READS_SUFFIX:
-        return SolverFactory(solver).solve(m, tee=tee, options=opts)
-
-    xfrm = TransformationFactory("core.scale_model")
-    clone = xfrm.create_using(m)
-    res = SolverFactory(solver).solve(clone, tee=tee, options=options or {})
-    # propagate_solution rescales the duals through the objective's own
-    # factor, so on a square model with no objective those suffixes go
-    # and the primal values come back alone
-    if next(clone.component_data_objects(Objective, active=True), None) is None:
-        for name in ("dual", "rc", "ipopt_zL_out", "ipopt_zU_out"):
-            comp = clone.component(name)
-            if comp is not None and comp.ctype is Suffix:
-                clone.del_component(comp)
-    xfrm.propagate_solution(clone, m)
-    return res
+    return SolverFactory(solver).solve(m, tee=tee, options=opts)

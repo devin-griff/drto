@@ -37,8 +37,7 @@ from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
 from drto.dynamic_optimization import _members, _spread
 from drto.ideal_nmpc import (
-    _WARM_SOLVERS,
-    _WARM_START_OPTIONS,
+    _warm_options,
     NmpcHistory,
     _first_move,
     _one_sample,
@@ -47,6 +46,7 @@ from drto.ideal_nmpc import (
 )
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
+from drto import scaling as drto_scaling
 from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
@@ -234,6 +234,7 @@ def approximate_nmpc_data(
     ranges=None,
     gradients=True,
     solver="pounce_v2",
+    scale=None,
     seed=0,
     path=None,
 ):
@@ -260,6 +261,14 @@ def approximate_nmpc_data(
         sampled Param, read from the pounce factorization.
     solver : str
         The labeling solver's name.
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, the factors are written
+        once at entry, before the first cold start, and every cold
+        start and solve runs against them: one write serves the whole
+        dataset. A caller choosing ``"point"`` passes the model at the
+        point to measure. The default, ``None``, writes nothing and
+        honors a ``scaling_factor`` Suffix the caller wrote.
     seed : int
         The design's seed.
     path : str, optional
@@ -296,14 +305,23 @@ def approximate_nmpc_data(
     cube = _design(method, n, len(pairs), seed)
     x_ss, u_ss = _steady_targets(reg, fn)
     points, failures = [], []
-    for row in cube:
+    # a scale source: the factors first, at entry, so every cold start
+    # and every solve runs against them
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
+    solve_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(m)
+        else {}
+    )
+    for i, row in enumerate(cube):
         draw = {}
         for (param, (lo, hi)), r in zip(pairs, row):
             v = lo + float(r) * (hi - lo)
             param.set_value(v)
             draw[param.name] = v
         cold_start_dynamic(m)
-        res = factory.solve(m)
+        res = factory.solve(m, options=solve_opts)
         if res.solver.termination_condition != TerminationCondition.optimal:
             failures.append(
                 {"x": draw, "termination": str(res.solver.termination_condition)}
@@ -917,7 +935,14 @@ def _stage_cost_vars(reg, t0, fn):
 
 
 def approximate_nmpc_closed_loop(
-    policy, m, samples=50, x0=None, disturbances=None, solver="pounce_v2", compare=False
+    policy,
+    m,
+    samples=50,
+    x0=None,
+    disturbances=None,
+    solver="pounce_v2",
+    scale=None,
+    compare=False,
 ):
     """Run the fitted policy closed loop against the declared model.
 
@@ -948,6 +973,14 @@ def approximate_nmpc_closed_loop(
         no entry is zero, and the loop is deterministic.
     solver : str
         The solver for the plant steps and the compare solves.
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, the factors are written
+        once at entry, before the plant is cloned, so the plant carries
+        them and the compare solves run against the same ones. A caller
+        choosing ``"point"`` passes the model at the point to measure.
+        The default, ``None``, writes nothing and honors a
+        ``scaling_factor`` Suffix the caller wrote.
     compare : bool
         Also solve the horizon problem at each visited state and record
         the control it takes there, beside the policy's. A visited
@@ -1014,7 +1047,21 @@ def approximate_nmpc_closed_loop(
         import pyomo_pounce  # noqa: F401
     opt = SolverFactory(solver)
 
+    # a scale source: the factors first, at entry, so the plant clone
+    # carries them and the compare solves run against the same ones
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
     plant = _policy_plant(m, fn)
+    plant_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(plant)
+        else {}
+    )
+    compare_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if compare and drto_scaling._suffix_active(m)
+        else {}
+    )
     regp = info(plant)
     p_pins = _pinned(regp, fn)
     time_p = regp.components("horizon")[0]
@@ -1068,12 +1115,8 @@ def approximate_nmpc_closed_loop(
                     warm_start_dynamic(m)
                 else:
                     cold_start_dynamic(m)
-            options = (
-                dict(_WARM_START_OPTIONS)
-                if k > 0 and compared and solver in _WARM_SOLVERS
-                else {}
-            )
-            res = opt.solve(m, options=options)
+            options = _warm_options(solver) if k > 0 and compared else {}
+            res = opt.solve(m, options={**compare_opts, **options})
             compared = res.solver.termination_condition == TerminationCondition.optimal
             if compared:
                 for u in m_controls:
@@ -1099,7 +1142,7 @@ def approximate_nmpc_closed_loop(
             report.realizations[w.local_name].append(realized)
             for vd in _members(w):
                 vd.set_value(realized)
-        res = opt.solve(plant)
+        res = opt.solve(plant, options=plant_opts)
         if res.solver.termination_condition != TerminationCondition.optimal:
             state = ", ".join(
                 f"{label} {value(hook):.6g}" for label, hook in zip(labels, c_hooks)

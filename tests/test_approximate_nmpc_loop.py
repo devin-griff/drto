@@ -83,6 +83,18 @@ def test_the_loop_records_the_trajectory():
 
 
 @needs_pounce
+def test_scale_writes_the_factors_and_the_default_does_not():
+    m = assembled_model()
+    policy = fitted(m)
+    drto.approximate_nmpc_closed_loop(policy, m, samples=2, scale="point", compare=True)
+    assert m.component("scaling_factor") is not None
+    m2 = assembled_model()
+    policy2 = fitted(m2)
+    drto.approximate_nmpc_closed_loop(policy2, m2, samples=2)
+    assert m2.component("scaling_factor") is None
+
+
+@needs_pounce
 def test_x0_is_honored_and_the_loop_is_deterministic():
     m = assembled_model()
     policy = fitted(m)

@@ -49,6 +49,25 @@ def test_steady_path_initializes_in_place():
     assert "block" in str(report) or "initialize" in str(report)
 
 
+def test_a_scale_source_writes_the_factors_first():
+    import pyomo_pounce
+
+    m = steady_authored_model()
+    seen = []
+    real = pyomo_pounce.initialize
+
+    def recording(model, *a, **kw):
+        seen.append(model.component("scaling_factor") is not None)
+        return real(model, *a, **kw)
+
+    pyomo_pounce.initialize = recording
+    try:
+        drto.initialize_steady_state(m, scale="bounds")
+    finally:
+        pyomo_pounce.initialize = real
+    assert seen == [True]
+
+
 def test_dynamic_path_broadcasts_a_reference_control():
     # the inlet idiom: the collapsed copy of a Reference-declared control
     # is a container even over its single member, and the broadcast reads
@@ -125,9 +144,9 @@ def test_values_survive_the_dynamic_transforms():
     assert all(pyo.value(m.u[t]) == pytest.approx(0.3) for t in m.u)
 
 
-def test_scaling_suffix_scales_the_steady_pipeline():
-    # an active scaling_factor suffix: the pipeline runs scaled and the
-    # values land in the model's own units, matching the unscaled run
+def test_a_scaling_suffix_does_not_change_the_steady_pipeline():
+    # the pipeline runs in the model's own units; the suffix stays on
+    # the model, unread, for the solves that follow (gh #92)
     m = steady_authored_model()
     m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
     m.scaling_factor[m.z] = 1e-6
@@ -136,11 +155,12 @@ def test_scaling_suffix_scales_the_steady_pipeline():
     assert report.ok
     assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
     assert not m.u.fixed
+    assert len(m.scaling_factor) == 2
 
 
-def test_the_pipeline_receives_the_scaled_clone(monkeypatch):
-    # the proof the suffix is honored: the pipeline solves a clone whose
-    # values are scaled, and the model comes back in its own units
+def test_the_pipeline_receives_the_model_itself(monkeypatch):
+    # no clone: the pipeline solves the model in place, in its own
+    # units, suffix or no suffix (gh #92)
     seen = {}
     real = pyomo_pounce.initialize
 
@@ -154,9 +174,9 @@ def test_the_pipeline_receives_the_scaled_clone(monkeypatch):
     m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
     m.scaling_factor[m.u] = 10.0
     drto.initialize_steady_state(m)
-    assert seen["model"] is not m  # a clone solved, not the model
-    assert seen["u"] == pytest.approx(2.5)  # 0.25 in the scaled space
-    assert pyo.value(m.u) == pytest.approx(0.25)  # its own units kept
+    assert seen["model"] is m
+    assert seen["u"] == pytest.approx(0.25)  # its own units throughout
+    assert pyo.value(m.u) == pytest.approx(0.25)
     assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
 
 

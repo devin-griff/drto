@@ -33,6 +33,30 @@ def test_states_run_on_the_line_and_derivatives_hold_the_slope():
         assert pyo.value(m.dzdt[t]) == pytest.approx(slope, abs=1e-6)
 
 
+def test_a_scale_source_writes_the_factors_first(monkeypatch):
+    import drto.scaling as sc
+
+    m = seeded()
+    order = []
+    real = sc.scale
+    monkeypatch.setattr(
+        sc, "scale", lambda mm, source: order.append("scale") or real(mm, source=source)
+    )
+    real_info = drto.cold_start.info
+    monkeypatch.setattr(
+        drto.cold_start, "info", lambda mm: order.append("run") or real_info(mm)
+    )
+    drto.cold_start_dynamic(m, scale="bounds")
+    assert order[0] == "scale"
+    assert m.component("scaling_factor") is not None
+
+
+def test_the_default_writes_no_factors():
+    m = seeded()
+    drto.cold_start_dynamic(m)
+    assert m.component("scaling_factor") is None
+
+
 def test_controls_hold_their_targets():
     m = seeded()
     drto.cold_start_dynamic(m)
@@ -188,9 +212,9 @@ def test_profile_errors():
         drto.cold_start_dynamic(seeded(), profile="exponential", time_constant=0.0)
 
 
-def test_scaling_suffix_scales_the_point_solves():
-    # with an active scaling_factor suffix the solves run on a scaled
-    # clone and propagate back: same result, in the model's own units
+def test_a_scaling_suffix_does_not_change_the_point_solves():
+    # the solves run in the model's own units; an active suffix stays
+    # on the model, unread, for the NLP solves that follow (gh #92)
     def built(suffix):
         m = block_model()
         m.u_ss = pyo.Param(initialize=0.3, mutable=True)
@@ -205,13 +229,15 @@ def test_scaling_suffix_scales_the_point_solves():
                 m.scaling_factor[blk.gain] = 1e-6
         return m
 
-    plain, scaled = built(False), built(True)
+    plain, carrying = built(False), built(True)
     drto.cold_start_dynamic(plain)
-    report = drto.cold_start_dynamic(scaled)
-    assert "scaled clone" in report.point_solves
+    report = drto.cold_start_dynamic(carrying)
+    assert report.point_solves == "run (pyomo-pounce block solve)"
+    # the suffix survives the call, entries intact
+    assert len(carrying.scaling_factor) == 2 * len(carrying.props)
     pairs = zip(
         plain.component_data_objects(pyo.Var),
-        scaled.component_data_objects(pyo.Var),
+        carrying.component_data_objects(pyo.Var),
         strict=True,
     )
     for vd, svd in pairs:
@@ -284,25 +310,13 @@ def test_point_solves_rejects_non_booleans():
         drto.cold_start_dynamic(seeded(), point_solves="maybe")
 
 
-def test_the_report_carries_the_scaled_clone():
-    # the closed loop adopts the clone instead of deep-copying again
-    # (gh #42); without scaling, or with the solves skipped, there is
-    # no clone to carry
+def test_the_report_carries_no_clone():
+    # the report holds values and counts, not a second model: the loop
+    # solves the model itself and no clone exists to adopt (gh #92)
     pytest.importorskip("pyomo_pounce")
     m = seeded()
     m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
     for vd in m.z.values():
         m.scaling_factor[vd] = 2.0
     report = drto.cold_start_dynamic(m)
-    sm = report.scaled_model
-    assert sm is not None and sm is not m
-    fmap = sm.component_scaling_factor_map
-    # the clone holds the initialized profile in its own scaled units
-    tN = sorted(m.t)[-1]
-    assert pyo.value(sm.z[tN]) / fmap[sm.z[tN]] == pytest.approx(pyo.value(m.z[tN]))
-    assert drto.cold_start_dynamic(seeded()).scaled_model is None
-    m2 = seeded()
-    m2.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
-    for vd in m2.z.values():
-        m2.scaling_factor[vd] = 2.0
-    assert drto.cold_start_dynamic(m2, point_solves=False).scaled_model is None
+    assert not hasattr(report, "scaled_model")

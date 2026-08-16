@@ -17,15 +17,17 @@ declared control targets, and the input becomes the controller through
 ``drto.dynamic_optimization``. The first solve is initialized per the
 ``initialize`` option, the cold start by default on the controller and
 the process alike; every later one warm-starts from the
-shifted previous solution, and under the ``pounce`` or ``ipopt``
-solvers it runs with the warm start recipe, the ``warm_start`` mapping
-laid over the documented default.
+shifted previous solution, ipopt adding the warm start recipe and
+pounce ``mu_init=1e-6`` alone, the ``warm_start`` mapping laid over
+the documented default.
 
-An active ``scaling_factor`` suffix is honored the way the initializers
-honor it: the loop builds each side's scaled clone once, runs every
-solve and warm start on those clones for the whole loop, and reads the
-history back in the model's own units. The initial-condition Params are the write points
-and stay physical.
+An active ``scaling_factor`` suffix is honored: every solve on that
+side receives the factors, and the history reads back in the model's
+own units. ``scale`` given a source writes the factors itself,
+forwarding it to ``drto.scale`` once at entry, before the sides are
+built, so the process clone carries them and every internal solve runs
+against them for the whole loop. The initial-condition Params stay
+physical.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
 declared names, and ``drto.plot_states`` / ``drto.plot_controls`` draw
@@ -47,11 +49,13 @@ from drto.dynamic_optimization import _members, _spread
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 from drto.initialize_steady_state import _attached, initialize_steady_state
+from drto import scaling as drto_scaling
 from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
-#: The default recipe for the warm-started solves, under the solvers
-#: that understand it; the ``warm_start`` option lays over this.
+#: The default recipe for the warm-started solves under ipopt, the one
+#: solver measured to gain from all of it; the ``warm_start`` option
+#: lays over this.
 _WARM_START_OPTIONS = {
     "warm_start_init_point": "yes",
     "mu_init": 1e-6,
@@ -59,9 +63,25 @@ _WARM_START_OPTIONS = {
     "warm_start_mult_bound_push": 1e-9,
 }
 
-#: The solvers that read the warm start recipe; any other solver warm
-#: starts on the shifted values alone.
-_WARM_SOLVERS = _POUNCE_SOLVERS + ("ipopt",)
+#: The pounce warm default: the shifted start with the barrier already
+#: small, the one recipe option measured to help pounce. The full
+#: recipe regresses it to 867 iterations on the CSTR warm start, and
+#: the regression needs the warm-start switch, the small barrier, and
+#: the 1e-9 pushes together.
+_POUNCE_WARM_OPTIONS = {"mu_init": 1e-6}
+
+#: The solvers that read the full warm start recipe.
+_WARM_SOLVERS = ("ipopt",)
+
+
+def _warm_options(solver):
+    """The warm-started solves' default options for ``solver``."""
+    if solver in _WARM_SOLVERS:
+        return dict(_WARM_START_OPTIONS)
+    if solver in _POUNCE_SOLVERS:
+        return dict(_POUNCE_WARM_OPTIONS)
+    return {}
+
 
 #: The mode transforms; the loop applies its own, so the input comes first.
 _TRANSFORMED = (
@@ -128,13 +148,6 @@ def _first_move(u):
     return u[sorted(u.keys())[0]]
 
 
-def _factor(vd, fmap):
-    """The member's scaling factor on a solve model, 1 when unscaled."""
-    if fmap is not None and vd in fmap:
-        return fmap[vd]
-    return 1.0
-
-
 def _prune_suffixes(model):
     """Drop suffix entries whose components the transforms removed.
 
@@ -197,6 +210,7 @@ def ideal_nmpc(
     seed=None,
     initialize="cold",
     solver="pounce_v2",
+    scale=None,
     warm_start=None,
     tee=False,
 ):
@@ -235,14 +249,24 @@ def ideal_nmpc(
         ``drto.infinite_horizon``); ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
-        ``"pounce"``, ``"pounce_v2"``, and ``"ipopt"`` warm start
-        between steps.
+        Every solver warm starts between steps on the shifted
+        values; ipopt also receives the warm start recipe.
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, the factors are written
+        once at entry, before the sides are built, so both sides carry
+        them and every internal solve receives them. A caller choosing
+        ``"point"`` passes the model at the point to measure. The
+        default, ``None``, writes nothing and honors a
+        ``scaling_factor`` Suffix the caller wrote.
     warm_start : mapping, optional
-        Solver options for the warm-started solves, laid over the
-        default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
-        ``warm_start_bound_push`` and ``warm_start_mult_bound_push``
-        at ``1e-9``) under the pounce names or ``"ipopt"``; under another
-        solver the mapping is used as given.
+        Solver options for the warm-started solves. Under ``"ipopt"``
+        they lay over the default recipe (``warm_start_init_point=yes``,
+        ``mu_init=1e-6``, ``warm_start_bound_push`` and
+        ``warm_start_mult_bound_push`` at ``1e-9``); under the pounce
+        names they lay over ``mu_init=1e-6`` alone; under any other
+        solver the mapping is used as given and the default is the
+        shifted values alone.
     tee : bool
         ``True`` streams every solve's output as the loop runs and
         returns it on the history's ``logs``, one ``(step, side,
@@ -356,6 +380,12 @@ def ideal_nmpc(
     if not opt.available(exception_flag=False):
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
+    # a scale source: the factors first, at entry, so the sides carry
+    # them and every internal solve, the cold starts' included, runs
+    # against them
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
+
     # the steady initialization runs on the input before the sides are
     # built, so the process clone and the controller both inherit it
     if initialize == "steady":
@@ -372,8 +402,7 @@ def ideal_nmpc(
         m, controls=at_targets
     )
     # the plant is the one-sample simulation from here on: everything
-    # downstream (cold start, scaling clone, every solve) sees only the
-    # first element
+    # downstream (cold start, every solve) sees only the first element
     _one_sample(process)
     _prune_suffixes(process)
 
@@ -385,45 +414,28 @@ def ideal_nmpc(
 
     # the warm-started solves' options: the recipe under the solvers
     # that read it, the warm_start mapping laid over
-    warm_opts = dict(_WARM_START_OPTIONS) if solver in _WARM_SOLVERS else {}
+    warm_opts = _warm_options(solver)
     warm_opts.update(warm_start or {})
 
     # the controller and the process cold-start alike, so the plant's
     # first simulation starts initialized too; the plant is already cut,
     # so its cold start is one element's worth
-    ctrl_cold = plant_cold = None
     if initialize == "cold" or isinstance(initialize, Mapping):
         opts = {} if initialize == "cold" else dict(initialize)
-        ctrl_cold = cold_start_dynamic(m, **opts)
-        plant_cold = cold_start_dynamic(process, **opts)
+        cold_start_dynamic(m, **opts)
+        cold_start_dynamic(process, **opts)
 
-    # an active scaling_factor suffix: the loop runs both sides on scaled
-    # clones, built once, and reads back in the model's own units
-    scaled = any(
-        s.local_name == "scaling_factor"
-        for s in m.component_objects(Suffix, active=True)
+    # an active scaling_factor suffix: every solve on that side
+    # receives the factors, through the solver option for the solvers
+    # that take one, and the history reads back in the model's own
+    # units. A solver that does not receive them warns here, once.
+    ctrl, plant = m, process
+    suffix_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(m)
+        else {}
     )
-    if scaled:
-        # the cold start already built and initialized each side's
-        # scaled clone; adopt it instead of deep-copying again (gh #42),
-        # building one only when the cold start left none (steady or
-        # skipped initialization, point solves off)
-        xfrm = TransformationFactory("core.scale_model")
-        ctrl = getattr(ctrl_cold, "scaled_model", None) or xfrm.create_using(
-            m, rename=False
-        )
-        plant = getattr(plant_cold, "scaled_model", None) or xfrm.create_using(
-            process, rename=False
-        )
-        fmap = ctrl.component_scaling_factor_map
-        pmap = plant.component_scaling_factor_map
-    else:
-        ctrl, plant, fmap, pmap = m, process, None, None
 
-    # the pinned constraints parse on the physical pair; a scaled clone's
-    # rewritten constraints do not, so the Params and the read points are found
-    # here and mapped onto the solve models by name (rename=False keeps
-    # the names identical)
     reg_m, reg_p = info(m), info(process)
     samples = reg_m.declarations("horizon")[0]["samples"]
     t0, t1 = samples[0], samples[1]
@@ -449,14 +461,9 @@ def ideal_nmpc(
         po, _t = _split_index(p_vd.index(), pos, len(subs))
         read_phys.append(zp[_join_index(po, t1, pos)])
 
-    if scaled:
-        c_hooks = [ctrl.find_component(h.name) for _vd, h in c_pins]
-        p_hooks = [plant.find_component(h.name) for _vd, h in p_pins]
-        p_read = [plant.find_component(vd.name) for vd in read_phys]
-    else:
-        c_hooks = [h for _vd, h in c_pins]
-        p_hooks = [h for _vd, h in p_pins]
-        p_read = read_phys
+    c_hooks = [h for _vd, h in c_pins]
+    p_hooks = [h for _vd, h in p_pins]
+    p_read = read_phys
 
     history = NmpcHistory()
     history.times.append(t0)
@@ -482,15 +489,16 @@ def ideal_nmpc(
     rng = random.Random(seed)
 
     def _solve(model, what, step, options=None):
+        opts = {**suffix_opts, **(options or {})}
         if tee:
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                res = opt.solve(model, options=options or {}, tee=True)
+                res = opt.solve(model, options=opts, tee=True)
             text = buf.getvalue()
             print(text, end="")
             history.logs.append((step, what, text))
         else:
-            res = opt.solve(model, options=options or {})
+            res = opt.solve(model, options=opts)
         if not pyo.check_optimal_termination(res):
             raise RuntimeError(
                 f"drto: {fn}: the {what} solve failed at step {step} "
@@ -506,10 +514,10 @@ def ideal_nmpc(
 
         # implement each control's first move on the process
         for u, pu in zip(c_controls, p_controls):
-            move = pyo.value(_first_move(u)) / _factor(_first_move(u), fmap)
+            move = pyo.value(_first_move(u))
             history.moves[u.local_name].append(move)
             for vd in _members(pu):
-                vd.set_value(move * _factor(vd, pmap))
+                vd.set_value(move)
 
         # realize this step's disturbances on the process
         for w in p_dist:
@@ -522,12 +530,12 @@ def ideal_nmpc(
                 val = rng.gauss(0.0, entry)
             history.realizations[w.local_name].append(val)
             for vd in _members(w):
-                vd.set_value(val * _factor(vd, pmap))
+                vd.set_value(val)
 
         # simulate one sample and write the state into both models' Params
         _solve(plant, "process", k)
         for c_hook, p_hook, src, label in zip(c_hooks, p_hooks, p_read, labels):
-            val = pyo.value(src) / _factor(src, pmap)
+            val = pyo.value(src)
             c_hook.set_value(val)
             p_hook.set_value(val)
             history.states[label].append(val)
