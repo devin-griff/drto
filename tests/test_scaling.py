@@ -145,6 +145,45 @@ def test_a_model_without_values_errors():
 
 
 # ----------------------------------------------------------------------
+# the sources
+# ----------------------------------------------------------------------
+def test_bounds_source_reads_no_value():
+    m = spanning_model()
+    for t in m.t:
+        m.u[t].setlb(-1e6)
+        m.u[t].setub(1e6)
+        m.u[t].set_value(0.0)  # a control at its target
+    drto.scale(m, source="bounds")
+    f = factors(m)
+    # the control at zero takes its factor from the bounds
+    assert f["u[0]"] == pytest.approx(1e-6)
+    # a group with no doubly bounded member keeps factor one
+    assert "c[0,big]" not in f
+    assert "c[0,trace]" not in f
+
+
+def test_units_mapping_scales_its_dimensions():
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1])
+    m.e = pyo.Var(m.t, initialize=1e7, units=pyo.units.J)
+    m.q = pyo.Var(m.t, initialize=0.0, units=pyo.units.W)  # a duty at zero
+    m.x = pyo.Var(m.t, initialize=5e4)  # dimensionless, unmapped
+    m.c = pyo.Constraint(m.t, rule=lambda mm, t: mm.e[t] == 3600.0 * mm.q[t])
+    drto.horizon(m.t)
+    drto.scale(m, source={"J": 1e7, "W": 1e6})
+    f = factors(m)
+    assert f["e[0]"] == pytest.approx(1e-7)
+    assert f["q[0]"] == pytest.approx(1e-6)
+    assert "x[0]" not in f
+
+
+def test_an_unknown_source_errors():
+    m = spanning_model()
+    with pytest.raises(ValueError, match="'point', source='bounds', or a"):
+        drto.scale(m, source="units")
+
+
+# ----------------------------------------------------------------------
 # constraint factors
 # ----------------------------------------------------------------------
 def test_large_rows_come_to_order_one_and_small_rows_are_left():
@@ -280,6 +319,21 @@ def test_ipopt_v2_gets_no_scaling_option(monkeypatch):
     m = spanning_model()
     drto.scaled_solve(m, solver="ipopt_v2")
     assert "nlp_scaling_method" not in record
+
+
+def test_scaled_solve_forwards_the_source(monkeypatch):
+    import pyomo.environ
+
+    record = {}
+    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    m = spanning_model()
+    for t in m.t:
+        m.u[t].setlb(-1e6)
+        m.u[t].setub(1e6)
+    drto.scaled_solve(m, source="bounds", solver="ipopt")
+    f = factors(m)
+    assert f["u[0]"] == pytest.approx(1e-6)
+    assert "c[0,big]" not in f
 
 
 def test_an_unlisted_solver_warns_and_solves_unscaled(monkeypatch):

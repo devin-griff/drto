@@ -261,10 +261,12 @@ fails stops the loop with an error naming the step.
 `history.logs` holds one `(step, side, text)` entry per solve in loop
 order. The default is quiet, nothing streamed, nothing kept.
 
-`scale=True` measures each side's scaling factors through `drto.scale`
-once, after that side's assembly and cold start, and every solve
-receives them; the history lands in the model's own units. The default
-writes nothing and honors a `scaling_factor` suffix the caller wrote.
+`scale` takes a `drto.scale` source, `"point"`, `"bounds"`, or a
+mapping of unit names to magnitudes, and writes each side's factors
+with it once, after that side's assembly and cold start; every solve
+receives them, and the history lands in the model's own units. The
+default writes nothing and honors a `scaling_factor` suffix the caller
+wrote.
 
 The returned `NmpcHistory` holds the actual closed-loop trajectory —
 times, each declared state's values, the implemented moves, and the
@@ -291,14 +293,21 @@ before any dynamic transform:
 ## How-to: scaling
 
 Badly scaled models (an energy holdup at 1e8 J next to mole fractions)
-are the rule in process systems. `drto.scale` measures a factor per
-variable group and per large constraint from the values the model
-holds, so it runs after an initializer has filled them, and
-`drto.scaled_solve` assigns the factors and solves:
+are the rule in process systems. `drto.scale` assigns a factor per
+variable group from a source you choose, and a factor per large
+constraint from the Jacobian at the model's current point, so it runs
+after an initializer has filled the values. `source="point"`, the
+default, reads the values themselves, right when the model sits near
+its operating magnitudes, the initialized steady broadcast. `"bounds"`
+reads declared operating limits, the controls in practice. A mapping
+states the process's magnitudes once per physical dimension, which
+covers a quantity whose value says nothing, a duty sitting at its zero
+target. `drto.scaled_solve` assigns the factors and solves:
 
 ```python
 drto.initialize_steady_state(m)
-res = drto.scaled_solve(m)
+res = drto.scaled_solve(m)                             # values as the source
+res = drto.scaled_solve(m, source={"J": 1e7, "W": 1e6})  # stated magnitudes
 ```
 
 The factors reach the solver through the standard `scaling_factor`
@@ -306,10 +315,10 @@ suffix, and no second model is built: pounce and legacy ipopt read it
 under `nlp_scaling_method=user-scaling`, and ipopt_v2's NL writer
 scales the problem as it writes the file. The model, its declarations,
 and its Params never leave physical units. The loops take the same
-measurement as an option: `scale=True` on `drto.ideal_nmpc`,
+assignment as an option: `scale` on `drto.ideal_nmpc`,
 `drto.approximate_nmpc_data`, and `drto.approximate_nmpc_closed_loop`
-measures each solved model once, after its cold start, and holds the
-factors for every solve. A hand-written suffix composes the same way:
+forwards a source to `drto.scale` once per solved model, after its
+cold start, and holds the factors for every solve. A hand-written suffix composes the same way:
 write it and the solves receive it.
 
 ## How-to: IDAES flowsheets

@@ -90,7 +90,7 @@ def test_an_extra_input_needs_a_box():
 @needs_pounce
 def test_scale_writes_the_factors_and_the_default_does_not():
     m = assembled_model()
-    drto.approximate_nmpc_data(m, n=2, seed=0, scale=True)
+    drto.approximate_nmpc_data(m, n=2, seed=0, scale="point")
     assert m.component("scaling_factor") is not None
     m2 = assembled_model()
     drto.approximate_nmpc_data(m2, n=2, seed=0)

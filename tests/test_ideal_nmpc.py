@@ -462,7 +462,7 @@ def test_scaled_loop_reproduces_the_unscaled_history():
 @needs_ipopt
 def test_scale_writes_the_factors_and_the_default_does_not():
     m = loop_model()
-    drto.ideal_nmpc(m, steps=1, solver="ipopt", scale=True)
+    drto.ideal_nmpc(m, steps=1, solver="ipopt", scale="point")
     assert m.component("scaling_factor") is not None
     m2 = loop_model()
     drto.ideal_nmpc(m2, steps=1, solver="ipopt")

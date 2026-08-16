@@ -235,7 +235,7 @@ def approximate_nmpc_data(
     ranges=None,
     gradients=True,
     solver="pounce_v2",
-    scale=False,
+    scale=None,
     seed=0,
     path=None,
 ):
@@ -262,11 +262,12 @@ def approximate_nmpc_data(
         sampled Param, read from the pounce factorization.
     solver : str
         The labeling solver's name.
-    scale : bool
-        ``True`` measures the model's scaling factors through
-        ``drto.scale`` once, after the first draw's cold start, and
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, the model's factors are
+        written with it once, after the first draw's cold start, and
         every solve receives them: one measurement serves the whole
-        dataset. The default writes nothing and honors a
+        dataset. The default, ``None``, writes nothing and honors a
         ``scaling_factor`` Suffix the caller wrote.
     seed : int
         The design's seed.
@@ -313,11 +314,11 @@ def approximate_nmpc_data(
             draw[param.name] = v
         cold_start_dynamic(m)
         if i == 0:
-            # scale=True: measure the factors at the first draw's cold
-            # start and hold them, so every sample solves under the
-            # same factors
-            if scale:
-                drto_scaling.scale(m)
+            # a scale source: write the factors at the first draw's
+            # cold start and hold them, so every sample solves under
+            # the same factors
+            if scale is not None:
+                drto_scaling.scale(m, source=scale)
             if drto_scaling._suffix_active(m):
                 solve_opts = drto_scaling._scaling_options(solver, fn)
         res = factory.solve(m, options=solve_opts)
@@ -940,7 +941,7 @@ def approximate_nmpc_closed_loop(
     x0=None,
     disturbances=None,
     solver="pounce_v2",
-    scale=False,
+    scale=None,
     compare=False,
 ):
     """Run the fitted policy closed loop against the declared model.
@@ -972,13 +973,13 @@ def approximate_nmpc_closed_loop(
         no entry is zero, and the loop is deterministic.
     solver : str
         The solver for the plant steps and the compare solves.
-    scale : bool
-        ``True`` measures the scaling factors through ``drto.scale``
-        once per model the loop solves, the plant and, with
-        ``compare``, the horizon model, each at the values it carries
-        when the loop starts, and every solve receives them. The
-        default writes nothing and honors a ``scaling_factor`` Suffix
-        the caller wrote.
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, the factors are written
+        with it once per model the loop solves, the plant and, with
+        ``compare``, the horizon model, and every solve receives them.
+        The default, ``None``, writes nothing and honors a
+        ``scaling_factor`` Suffix the caller wrote.
     compare : bool
         Also solve the horizon problem at each visited state and record
         the control it takes there, beside the policy's. A visited
@@ -1046,12 +1047,12 @@ def approximate_nmpc_closed_loop(
     opt = SolverFactory(solver)
 
     plant = _policy_plant(m, fn)
-    # scale=True: measure each solved model's factors at the values it
-    # carries when the loop starts, held for the whole run
-    if scale:
-        drto_scaling.scale(plant)
+    # a scale source: write each solved model's factors at the values
+    # it carries when the loop starts, held for the whole run
+    if scale is not None:
+        drto_scaling.scale(plant, source=scale)
         if compare:
-            drto_scaling.scale(m)
+            drto_scaling.scale(m, source=scale)
     plant_opts = (
         drto_scaling._scaling_options(solver, fn)
         if drto_scaling._suffix_active(plant)

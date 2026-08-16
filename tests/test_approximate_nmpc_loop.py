@@ -86,7 +86,7 @@ def test_the_loop_records_the_trajectory():
 def test_scale_writes_the_factors_and_the_default_does_not():
     m = assembled_model()
     policy = fitted(m)
-    drto.approximate_nmpc_closed_loop(policy, m, samples=2, scale=True, compare=True)
+    drto.approximate_nmpc_closed_loop(policy, m, samples=2, scale="point", compare=True)
     assert m.component("scaling_factor") is not None
     m2 = assembled_model()
     policy2 = fitted(m2)

@@ -23,9 +23,9 @@ laid over the documented default.
 
 An active ``scaling_factor`` suffix is honored: every solve on that
 side receives the factors, and the history reads back in the model's
-own units. ``scale=True`` writes the factors itself, measuring each
-side through ``drto.scale`` once, after that side's assembly and cold
-start, and holding them for the whole loop. The initial-condition
+own units. ``scale`` given a source writes the factors itself,
+forwarding it to ``drto.scale`` once per side, after that side's
+assembly and cold start, and holding them for the whole loop. The initial-condition
 Params are the write points and stay physical.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
@@ -192,7 +192,7 @@ def ideal_nmpc(
     seed=None,
     initialize="cold",
     solver="pounce_v2",
-    scale=False,
+    scale=None,
     warm_start=None,
     tee=False,
 ):
@@ -233,11 +233,13 @@ def ideal_nmpc(
         The solver, by name, for every controller and process solve.
         ``"pounce"``, ``"pounce_v2"``, and ``"ipopt"`` warm start
         between steps.
-    scale : bool
-        ``True`` measures each side's scaling factors through
-        ``drto.scale`` once, after that side's assembly and cold start,
-        and every solve receives them. The default writes nothing and
-        honors a ``scaling_factor`` Suffix the caller wrote.
+    scale : str or mapping, optional
+        A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
+        mapping of units to magnitudes. Given, each side's factors are
+        written with it once, after that side's assembly and cold
+        start, and every solve receives them. The default, ``None``,
+        writes nothing and honors a ``scaling_factor`` Suffix the
+        caller wrote.
     warm_start : mapping, optional
         Solver options for the warm-started solves, laid over the
         default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
@@ -396,12 +398,12 @@ def ideal_nmpc(
         cold_start_dynamic(m, **opts)
         cold_start_dynamic(process, **opts)
 
-    # scale=True: measure each side's factors at the first point it
+    # a scale source: write each side's factors at the first point it
     # holds values, after its assembly and cold start, held for the
     # whole loop rather than re-measured per step
-    if scale:
-        drto_scaling.scale(m)
-        drto_scaling.scale(process)
+    if scale is not None:
+        drto_scaling.scale(m, source=scale)
+        drto_scaling.scale(process, source=scale)
 
     # an active scaling_factor suffix: every solve on that side
     # receives the factors, through the solver option for the solvers
