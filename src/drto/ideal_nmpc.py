@@ -17,9 +17,8 @@ declared control targets, and the input becomes the controller through
 ``drto.dynamic_optimization``. The first solve is initialized per the
 ``initialize`` option, the cold start by default on the controller and
 the process alike; every later one warm-starts from the
-shifted previous solution, and under the ``pounce`` or ``ipopt``
-solvers it runs with the warm start recipe, the ``warm_start`` mapping
-laid over the documented default.
+shifted previous solution, ipopt alone adding the warm start recipe,
+the ``warm_start`` mapping laid over the documented default.
 
 An active ``scaling_factor`` suffix is honored: every solve on that
 side receives the factors, and the history reads back in the model's
@@ -53,8 +52,11 @@ from drto import scaling as drto_scaling
 from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
-#: The default recipe for the warm-started solves, under the solvers
-#: that understand it; the ``warm_start`` option lays over this.
+#: The default recipe for the warm-started solves under ipopt, the one
+#: solver measured to gain from it; the ``warm_start`` option lays over
+#: this. pounce regresses under these options, five-fold with no
+#: factors and up to sixty-fold under user-scaling, so the pounce
+#: solvers warm start on the shifted values alone.
 _WARM_START_OPTIONS = {
     "warm_start_init_point": "yes",
     "mu_init": 1e-6,
@@ -64,7 +66,7 @@ _WARM_START_OPTIONS = {
 
 #: The solvers that read the warm start recipe; any other solver warm
 #: starts on the shifted values alone.
-_WARM_SOLVERS = _POUNCE_SOLVERS + ("ipopt",)
+_WARM_SOLVERS = ("ipopt",)
 
 #: The mode transforms; the loop applies its own, so the input comes first.
 _TRANSFORMED = (
@@ -232,8 +234,8 @@ def ideal_nmpc(
         ``drto.infinite_horizon``); ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
-        ``"pounce"``, ``"pounce_v2"``, and ``"ipopt"`` warm start
-        between steps.
+        Every solver warm starts between steps on the shifted
+        values; ipopt also receives the warm start recipe.
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
         mapping of units to magnitudes. Given, the factors are written
@@ -243,11 +245,12 @@ def ideal_nmpc(
         default, ``None``, writes nothing and honors a
         ``scaling_factor`` Suffix the caller wrote.
     warm_start : mapping, optional
-        Solver options for the warm-started solves, laid over the
-        default recipe (``warm_start_init_point=yes``, ``mu_init=1e-6``,
-        ``warm_start_bound_push`` and ``warm_start_mult_bound_push``
-        at ``1e-9``) under the pounce names or ``"ipopt"``; under another
-        solver the mapping is used as given.
+        Solver options for the warm-started solves. Under ``"ipopt"``
+        they lay over the default recipe (``warm_start_init_point=yes``,
+        ``mu_init=1e-6``, ``warm_start_bound_push`` and
+        ``warm_start_mult_bound_push`` at ``1e-9``); under any other
+        solver, pounce included, the mapping is used as given and the
+        default is the shifted values alone.
     tee : bool
         ``True`` streams every solve's output as the loop runs and
         returns it on the history's ``logs``, one ``(step, side,

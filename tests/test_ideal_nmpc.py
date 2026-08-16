@@ -282,6 +282,18 @@ def test_another_solver_warm_starts_on_the_shifted_values_alone(monkeypatch):
 
 
 @needs_ipopt
+def test_pounce_warm_starts_on_the_shifted_values_alone(monkeypatch):
+    # measured on the CSTR warm start: pounce regresses under the
+    # recipe that helps ipopt, so its warm solves carry no options
+    rec = _Recorder(pyo.SolverFactory("ipopt"))
+    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    drto.ideal_nmpc(loop_model(), steps=2, solver="pounce_v2")
+    assert all(
+        "warm_start_init_point" not in c and "mu_init" not in c for c in rec.calls
+    )
+
+
+@needs_ipopt
 def test_a_failed_solve_names_the_step(monkeypatch):
     class Failing(_Recorder):
         def solve(self, model, **kwds):
