@@ -50,11 +50,11 @@ and everything else comes out of the per-point solves. The initialization:
   installed. At each grid point the states and controls hold the values
   above and the model's remaining equations, everything except the
   declared dynamics, solve for the rest: one small square solve per
-  point, the block pipeline feature 010 uses. When the model carries an
-  active `scaling_factor` suffix, the per-point solves receive the
-  factors, so the solves see well-scaled constraints while the model
-  and its declarations stay in their own
-  units. Without pyomo-pounce the per-point solves are
+  point, the block pipeline feature 010 uses. The per-point solves run
+  in the model's own units, and an active `scaling_factor` suffix does
+  not change them: each is a square block solved in calculation order,
+  and the suffix stays on the model for the NLP solves that follow
+  (gh #92). Without pyomo-pounce the per-point solves are
   skipped, the algebraic variables keep their values, and the report
   says so; everything else needs no solver.
 - **The terminal segment**, when one is attached: the tail rests at the
@@ -116,9 +116,9 @@ fixed point, the soft pin already satisfied.
   the states, derivatives, and controls initialize the same way, the
   algebraic variables keep their values, and the report records the
   skipped solves.
-- With an active `scaling_factor` suffix, the per-point solves receive
-  the factors and the values land in the model's own units; the result
-  matches the unscaled run and the report says the solves ran scaled.
+- With an active `scaling_factor` suffix, the per-point solves run
+  unchanged in the model's own units and the suffix survives the call;
+  the result matches the run without one.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
