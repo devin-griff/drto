@@ -16,6 +16,7 @@ import drto
 # transformation is applied:
 drto.initialize_steady_state(m)   # clone, reduce, solve, broadcast flat
 drto.initialize_steady_state(m, controls={m.u: 0.3})  # held at 0.3
+drto.initialize_steady_state(m, scale={"J": 1e7, "W": 1e6})  # factors first
 
 # a steady-state model (authored steady, or a feature 005 reduction):
 drto.initialize_steady_state(ss)  # in place: fill, project, block-solve
@@ -32,7 +33,8 @@ carry today.
 
 ## Acceptance criteria
 
-- `drto.initialize_steady_state(m, controls=None)` dispatches on the
+- `drto.initialize_steady_state(m, controls=None, scale=None)`
+  dispatches on the
   declared shape: `horizon` and `dynamics` declared takes the dynamic path;
   a model without them, authored steady-state or already reduced by feature
   005, takes the steady path. Both paths require declared states and error
@@ -43,11 +45,17 @@ carry today.
   of the equality system), with the declared controls as the decisions.
   drto contributes what that suite cannot know: which variables are
   decisions, the steady reduction, and the horizon broadcast.
-- The pipeline runs in the model's own units, and an active
-  `scaling_factor` suffix does not change it: the block solves work the
-  square equality system in calculation order, where the factors' job,
-  conditioning an NLP's steps, does not arise. The suffix stays on the
-  model for the solves that follow (gh #92).
+- An active `scaling_factor` suffix reaches the pipeline: the
+  projection solve receives it under `user-scaling`, and the block
+  solves measure their convergence against each constraint's factor, so
+  a row far above order one converges at its own scale instead of
+  failing an absolute tolerance it can never reach. The suffix stays on
+  the model for the solves that follow.
+- `scale` takes a feature 023 source and forwards it to `drto.scale`
+  before the pipeline runs, so the factors are in place for its solves.
+  The sources that read no values, the bounds and a units mapping, are
+  the ones that make sense here. The default, `scale=None`, writes
+  nothing and leaves a suffix the caller wrote untouched.
 - The steady path runs the pipeline on the model in place: the solved
   values land in `Var.value`.
 - The dynamic path requires a discretized horizon and no drto

@@ -122,10 +122,11 @@ A solver outside that set does not receive the factors: the solve runs
 unscaled, and `scaled_solve` warns, naming the solver and saying the
 factors were not applied.
 
-The factors compose with the rest of the package: the initializers run
-in the model's own units (features 010 and 011), and the loops honor an
-active Suffix or write one through their `scale` option (features 014
-and 026), so the order is initialize, scale, solve.
+The factors compose with the rest of the package: the initializers
+and the loops honor an active Suffix or write one through their own
+`scale` option (features 010, 011, 014, and 026). The sources that
+read no values can be written before anything runs, so the
+initializers' internal solves measure their convergence against them.
 
 ## Benefit hypothesis
 

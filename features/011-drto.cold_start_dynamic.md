@@ -17,6 +17,7 @@ import drto
 
 drto.cold_start_dynamic(m)
 drto.cold_start_dynamic(m, profile="exponential", time_constant=3.0)
+drto.cold_start_dynamic(m, scale={"J": 1e7, "W": 1e6})  # factors first
 ```
 
 Values only, at any stage: the declared discretized model, or after
@@ -50,13 +51,18 @@ and everything else comes out of the per-point solves. The initialization:
   installed. At each grid point the states and controls hold the values
   above and the model's remaining equations, everything except the
   declared dynamics, solve for the rest: one small square solve per
-  point, the block pipeline feature 010 uses. The per-point solves run
-  in the model's own units, and an active `scaling_factor` suffix does
-  not change them: each is a square block solved in calculation order,
-  and the suffix stays on the model for the NLP solves that follow
-  (gh #92). Without pyomo-pounce the per-point solves are
-  skipped, the algebraic variables keep their values, and the report
-  says so; everything else needs no solver.
+  point, the block pipeline feature 010 uses. An active
+  `scaling_factor` suffix reaches those solves: each block's
+  convergence is measured against its constraints' factors, so a row
+  far above order one converges at its own scale instead of failing an
+  absolute tolerance it can never reach, and the suffix stays on the
+  model for the NLP solves that follow. `scale` takes a feature 023
+  source and forwards it to `drto.scale` before anything runs, so the
+  factors are in place for the per-point solves; the default,
+  `scale=None`, writes nothing and leaves a suffix the caller wrote
+  untouched. Without pyomo-pounce the per-point solves are skipped,
+  the algebraic variables keep their values, and the report says so;
+  everything else needs no solver.
 - **The terminal segment**, when one is attached: the tail rests at the
   targets. State copies and segment controls hold the targets, the tau
   derivatives and the pin slacks are zero, and the segment's algebraic
@@ -116,9 +122,11 @@ fixed point, the soft pin already satisfied.
   the states, derivatives, and controls initialize the same way, the
   algebraic variables keep their values, and the report records the
   skipped solves.
-- With an active `scaling_factor` suffix, the per-point solves run
-  unchanged in the model's own units and the suffix survives the call;
-  the result matches the run without one.
+- With an active `scaling_factor` suffix, the per-point solves
+  measure their convergence against it and the suffix survives the
+  call. With `scale` given a feature 023 source, the factors are
+  written through `drto.scale` before the per-point solves run; the
+  default `scale=None` writes none.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
