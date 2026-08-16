@@ -97,12 +97,15 @@ Under `"ipopt"` every warm-started solve runs with the warm start
 recipe, and `warm_start` lays user options over it: the default is
 `warm_start_init_point=yes`, `mu_init=1e-6`, and the `1e-9` bound and
 multiplier pushes, so `warm_start={"mu_init": 1e-4}` retunes one knob
-without restating the rest. Under any other solver, pounce included,
-the loop warm starts on the shifted values alone, a given `warm_start`
-mapping passing to the solves as is. pounce is measured to regress
-under the recipe that helps ipopt, five-fold with no factors and up to
-sixty-fold under `user-scaling`, where the shifted values alone beat
-its cold solve. A solve that fails stops the loop with an error naming
+without restating the rest. Under the pounce names the default is
+`mu_init=1e-6` alone, the shifted start with the barrier already
+small, the one recipe option measured to help pounce: on the CSTR warm
+start it takes the shifted solve from ten iterations to seven, while
+the full recipe takes it to 867, a regression that requires its three
+ingredients together, the warm-start switch, the small barrier, and
+the 1e-9 pushes. Under any other solver the loop warm starts on the
+shifted values alone, a given `warm_start` mapping passing to the
+solves as is. A solve that fails stops the loop with an error naming
 the step.
 
 `tee=True` streams every solve's output as the loop runs and returns
@@ -178,10 +181,11 @@ single call on the declared model.
 - `solver` names the solver for every controller and process solve.
   Under `"ipopt"` every warm-started solve runs with the warm start
   recipe (`warm_start_init_point=yes`, `mu_init=1e-6`, the `1e-9`
-  pushes), a `warm_start` mapping laid over it; under any other solver,
-  pounce included, the loop warm starts on the shifted values alone, a
-  given mapping passing through as is. A failed solve raises an error
-  naming the step.
+  pushes), a `warm_start` mapping laid over it. Under the pounce names
+  the warm solves carry `mu_init=1e-6` alone, the mapping laid over
+  it. Under any other solver the loop warm starts on the shifted
+  values alone, a given mapping passing through as is. A failed solve
+  raises an error naming the step.
 - `tee=True` streams each solve's output and returns it: the history's
   `logs` holds (step, side, text) for every controller and process
   solve in loop order; the default keeps and prints nothing.
