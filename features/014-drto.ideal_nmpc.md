@@ -112,10 +112,12 @@ honor it: every solve on that side receives the factors, and the
 history reads back in the model's own units. The initial-condition
 Params stay physical. `scale` takes a feature 023 source, `"point"`,
 `"bounds"`, or a mapping of units to magnitudes, and forwards it to
-`drto.scale`: each side's Suffix is written once, after that side's
-assembly and cold start, at the first point it holds values, and held
-for the whole loop rather than re-measured per step. The default,
-`scale=None`, writes nothing and honors what the caller wrote.
+`drto.scale` at entry, before the sides are built, so the process clone
+carries the factors and every internal solve, the cold starts' block
+solves included, runs against them. They are written once and held for
+the whole loop. A caller choosing `"point"` passes the model at the
+point to measure. The default, `scale=None`, writes nothing and honors
+what the caller wrote.
 
 The returned history holds the actual trajectory: the times, each
 declared state member's actual values, the implemented moves, and the
@@ -183,10 +185,10 @@ single call on the declared model.
 - With an active `scaling_factor` suffix every solve on that side
   receives the factors; the history lands in the model's own units, and
   a hicks loop carrying factors reproduces the unscaled loop's history.
-- With `scale` given a feature 023 source, the loop writes each side's
-  factors through `drto.scale` with that source once, after that side's
-  assembly and cold start, and every solve receives them; the default
-  `scale=None` writes no factors.
+- With `scale` given a feature 023 source, the loop writes the
+  factors through `drto.scale` at entry, before the sides are built,
+  so both sides carry them and every internal solve receives them; the
+  default `scale=None` writes no factors.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and
   `drto.plot_controls` gain a second input kind: handed a history instead

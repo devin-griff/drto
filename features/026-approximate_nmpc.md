@@ -227,9 +227,9 @@ and the options reproduce the protocol of Lueken, Brandner & Lucia
   control sequences. A compare solve that does not return optimal
   records nan for that sample and the sample's time, and the run
   continues.
-- With `scale` given a feature 023 source, the plant's factors are
-  written through `drto.scale` with that source after its cold start
-  and, with `compare`, the horizon model's after its own; the default
+- With `scale` given a feature 023 source, the factors are written
+  through `drto.scale` at entry, before the plant is cloned, and both
+  the plant steps and the compare solves receive them; the default
   `scale=None` writes no factors.
 - `drto.plot_states` draws the closed-loop report's state trajectory
   directly, the way it draws the loop histories. `drto.plot_controls`
