@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- Every solve goes through Pyomo's native solver interface
+  (`pyomo.contrib.solver`). Solver options travel as `solver_options`,
+  results carry the native structured termination and solution status,
+  solution loading is explicit so a failed solve no longer writes its
+  point into the model, and the default solver name is `pounce`, with
+  `pounce_v2` still resolving. An unknown solver name raises with the
+  factory's registry listed.
+
 ### Removed
 
 - The hand-written initialization script `examples/initialize.py`. The

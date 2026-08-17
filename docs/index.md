@@ -17,6 +17,7 @@ holdups and controls declared on inlet ports.
 
 ```python
 import drto
+from pyomo.contrib.solver.common.factory import SolverFactory
 
 # declare roles on your existing model
 drto.horizon(m.t)
@@ -34,7 +35,7 @@ pyo.TransformationFactory("dae.collocation").apply_to(m, wrt=m.t, nfe=10, ncp=3)
 pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
 drto.cold_start_dynamic(m)
 pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-pyo.SolverFactory("ipopt").solve(m)
+SolverFactory("ipopt").solve(m)
 drto.plot_states(m)
 ```
 

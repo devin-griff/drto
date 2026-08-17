@@ -30,8 +30,8 @@ classifiers = [
 # pyomo-cvp parameterizes the declared controls; numpy derives the
 # infinite-horizon quadrature weights. Both are guarded by attempt_import so
 # the bare package still imports without them.
-# pyomo 6.10.1 is where pyomo.contrib.solver carries the interface
-# pyomo-pounce registers pounce_v2 against, the default solver
+# pyomo 6.10.1 is where pyomo.contrib.solver carries the native
+# factory pyomo-pounce registers pounce against, the default solver
 dependencies = ["pyomo>=6.10.1", "pyomo-cvp>=0.7.0", "numpy"]
 
 [project.optional-dependencies]
