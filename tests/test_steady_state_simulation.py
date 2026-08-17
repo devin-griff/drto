@@ -9,7 +9,7 @@ import drto
 from test_declarations import declared_model
 from test_dynamic_optimization import estimation_model
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -179,7 +179,7 @@ def test_simulation_solves_the_fixed_control_equilibrium():
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={"u": 0.3}
     )
-    pyo.SolverFactory("ipopt").solve(m)
+    drto.scaling.solver_by_name("ipopt").solve(m)
     assert pyo.value(m.z) == pytest.approx(0.3, abs=1e-8)
 
 
@@ -189,5 +189,5 @@ def test_steady_authored_simulation_solves():
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={"u": 0.4}
     )
-    pyo.SolverFactory("ipopt").solve(m)
+    drto.scaling.solver_by_name("ipopt").solve(m)
     assert pyo.value(m.z) == pytest.approx(0.8, abs=1e-8)

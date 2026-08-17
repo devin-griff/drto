@@ -9,7 +9,7 @@ import drto
 from test_declarations import base_model, declared_model
 from test_infinite_horizon import ready_model
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 DO = "drto.dynamic_optimization"
@@ -222,8 +222,8 @@ def test_estimated_parameter_without_a_value_errors():
 def test_solve_drives_the_state_toward_the_setpoint():
     m = ready_model()
     pyo.TransformationFactory(DO).apply_to(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     # z starts at z_hat = 0.4 and is driven toward z_ss = 0.5
     assert pyo.value(m.z[m.t.last()]) == pytest.approx(0.5, abs=5e-2)
 
@@ -232,8 +232,8 @@ def test_solve_drives_the_state_toward_the_setpoint():
 def test_estimation_model_solves_as_a_control_problem():
     m = estimation_model()
     pyo.TransformationFactory(DO).apply_to(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
 
 
 @needs_ipopt
@@ -246,5 +246,5 @@ def test_infinite_horizon_tail_reaches_the_objective():
     reg = drto.info(m)
     assert reg.has_transformation("drto.infinite_horizon")
     assert reg.has_declaration("cost_group")
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)

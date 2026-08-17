@@ -9,7 +9,7 @@ from test_declarations import base_model, declared_model
 from test_dynamic_optimization import estimation_model
 from test_infinite_horizon import ready_model
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 DS = "drto.dynamic_simulation"
@@ -253,8 +253,8 @@ def test_integrates_to_the_equilibrium():
     # dz/dt = -z + u with u held: the state settles at u
     m = sim_model()
     pyo.TransformationFactory(DS).apply_to(m, controls={"u": 0.9})
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     assert pyo.value(m.z[0]) == pytest.approx(0.4, abs=1e-6)  # the pinned start
     assert pyo.value(m.z[m.t.last()]) == pytest.approx(0.9, abs=1e-3)
 
@@ -263,5 +263,5 @@ def test_integrates_to_the_equilibrium():
 def test_the_estimation_model_simulates():
     m = estimation_model()
     pyo.TransformationFactory(DS).apply_to(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)

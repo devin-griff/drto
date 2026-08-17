@@ -41,7 +41,6 @@ from dataclasses import dataclass, field
 
 import pyomo.environ as pyo
 from pyomo.core import Suffix, TransformationFactory
-from pyomo.opt import SolverFactory
 
 from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
@@ -209,7 +208,7 @@ def ideal_nmpc(
     disturbances=None,
     seed=None,
     initialize="cold",
-    solver="pounce_v2",
+    solver="pounce",
     scale=None,
     warm_start=None,
     tee=False,
@@ -376,8 +375,8 @@ def ideal_nmpc(
                 f"drto: {fn}: solver 'pounce' requires pyomo-pounce "
                 f"(pip install drto[pounce], or pip install pyomo-pounce)."
             ) from err
-    opt = SolverFactory(solver)
-    if not opt.available(exception_flag=False):
+    opt = drto_scaling.solver_by_name(solver)
+    if not opt.available():
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
     # a scale source: the factors first, at entry, so the sides carry
@@ -490,20 +489,26 @@ def ideal_nmpc(
 
     def _solve(model, what, step, options=None):
         opts = {**suffix_opts, **(options or {})}
+        kwargs = dict(
+            solver_options=opts,
+            load_solutions=False,
+            raise_exception_on_nonoptimal_result=False,
+        )
         if tee:
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                res = opt.solve(model, options=opts, tee=True)
+                res = opt.solve(model, tee=True, **kwargs)
             text = buf.getvalue()
             print(text, end="")
             history.logs.append((step, what, text))
         else:
-            res = opt.solve(model, options=opts)
-        if not pyo.check_optimal_termination(res):
+            res = opt.solve(model, **kwargs)
+        if not drto_scaling.solved_to_optimality(res):
             raise RuntimeError(
                 f"drto: {fn}: the {what} solve failed at step {step} "
-                f"({res.solver.termination_condition})."
+                f"({res.termination_condition.name})."
             )
+        res.solution_loader.load_vars()
 
     for k in range(steps):
         # solve the controller at the current state, warm-started after

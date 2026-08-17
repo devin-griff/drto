@@ -10,7 +10,7 @@ import drto
 import drto.cold_start
 from test_infinite_horizon import block_model, packed_model, ready_model
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -118,8 +118,8 @@ def test_cold_started_optimization_solves():
     pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
     drto.cold_start_dynamic(m)
-    res = pyo.SolverFactory("ipopt").solve(m)
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    res = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(res)
 
 
 def test_every_set_aside_row_comes_back_active():

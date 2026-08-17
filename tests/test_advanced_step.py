@@ -11,9 +11,9 @@ from test_infinite_horizon import ready_model
 
 pyomo_pounce = pytest.importorskip("pyomo_pounce")
 
-pounce_ok = pyo.SolverFactory("pounce").available(exception_flag=False)
+pounce_ok = bool(drto.scaling.solver_by_name("pounce").available())
 needs_pounce = pytest.mark.skipif(not pounce_ok, reason="pounce not available")
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -34,8 +34,8 @@ def test_dynamic_optimization_declares_the_hooks():
 @needs_ipopt
 def test_declaration_is_inert_for_other_solvers():
     m = controller()
-    res = pyo.SolverFactory("ipopt").solve(m)
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    res = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(res)
 
 
 def test_without_a_pounce_solve_raises_the_no_session_error():
@@ -54,7 +54,7 @@ def test_without_pyomo_pounce_the_error_names_the_extra(monkeypatch):
 @needs_pounce
 def test_estimate_agrees_with_a_resolve_and_leaves_the_model_alone():
     m = controller(z_hat=0.1)
-    pyo.SolverFactory("pounce").solve(m)
+    drto.scaling.solver_by_name("pounce").solve(m)
     before = {v.name: v.value for v in m.component_data_objects(pyo.Var)}
 
     m.z_hat.set_value(0.12)  # the measurement arrives
@@ -68,7 +68,7 @@ def test_estimate_agrees_with_a_resolve_and_leaves_the_model_alone():
 
     # the corrected solution agrees with a re-solve at the measurement
     mt = controller(z_hat=0.12)
-    pyo.SolverFactory("pounce").solve(mt)
+    drto.scaling.solver_by_name("pounce").solve(mt)
     for v, vt in ((m.z, mt.z), (m.u, mt.u)):
         for idx in v:
             assert est[v[idx]] == pytest.approx(pyo.value(vt[idx]), abs=5e-3)
@@ -77,7 +77,7 @@ def test_estimate_agrees_with_a_resolve_and_leaves_the_model_alone():
 @needs_pounce
 def test_gradient_maps_controls_to_hooks():
     m = controller(z_hat=0.1)
-    pyo.SolverFactory("pounce").solve(m)
+    drto.scaling.solver_by_name("pounce").solve(m)
     grads = drto.advanced_step_controller(m, gradient=True)
     G = grads[m.u][m.z_hat]
 
@@ -86,8 +86,8 @@ def test_gradient_maps_controls_to_hooks():
     h = 1e-4
     hi = controller(z_hat=0.1 + h)
     lo = controller(z_hat=0.1 - h)
-    pyo.SolverFactory("pounce").solve(hi)
-    pyo.SolverFactory("pounce").solve(lo)
+    drto.scaling.solver_by_name("pounce").solve(hi)
+    drto.scaling.solver_by_name("pounce").solve(lo)
     i1 = sorted(m.u)[0]
     fd = (pyo.value(hi.u[i1]) - pyo.value(lo.u[i1])) / (2 * h)
     assert G[m.u[i1], m.z_hat] == pytest.approx(fd, abs=1e-3)
@@ -96,6 +96,6 @@ def test_gradient_maps_controls_to_hooks():
 @needs_pounce
 def test_unrecognized_kwargs_pass_through_to_pounce():
     m = controller()
-    pyo.SolverFactory("pounce").solve(m)
+    drto.scaling.solver_by_name("pounce").solve(m)
     with pytest.raises(TypeError, match="definitely_not_an_option"):
         drto.advanced_step_controller(m, definitely_not_an_option=1)

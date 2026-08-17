@@ -12,7 +12,7 @@ from test_infinite_horizon import ready_model
 
 IH = "drto.infinite_horizon"
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -285,18 +285,22 @@ def test_a_segment_derivative_takes_its_state_factor():
 # ----------------------------------------------------------------------
 # scaled_solve
 # ----------------------------------------------------------------------
-class _RecordingFactory:
-    """Stands in for SolverFactory, recording the options it is handed."""
+class _RecordingSolver:
+    """Stands in for solver_by_name, recording the solver options."""
 
     def __init__(self, record):
         self.record = record
 
     def __call__(self, name):
+        self.record["name"] = name
         return self
 
-    def solve(self, model, tee=False, options=None):
-        self.record.update(options or {})
-        return "solved"
+    def solve(self, model, tee=False, solver_options=None, **kwargs):
+        from pyomo.contrib.solver.common.results import Results
+
+        self.record.update(solver_options or {})
+        res = Results()
+        return res
 
 
 @needs_ipopt
@@ -304,28 +308,24 @@ def test_the_solve_builds_no_clone_and_returns_own_units():
     m = spanning_model()
     m.obj = pyo.Objective(expr=sum(m.cost[t] for t in m.cost))
     res = drto.scaled_solve(m, solver="ipopt")
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert drto.scaling.solved_to_optimality(res)
     # the model itself was solved: its values are the solution, unscaled
     assert pyo.value(m.n[0, "big"]) == pytest.approx(2e6, rel=1e-6)
 
 
-def test_ipopt_v2_gets_no_scaling_option(monkeypatch):
-    # the NL-v2 writer consumes the Suffix and scales the problem as it
+def test_ipopt_gets_no_scaling_option(monkeypatch):
+    # the NL writer consumes the Suffix and scales the problem as it
     # writes, so the option would name a job already done
-    import pyomo.environ
-
     record = {}
-    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    monkeypatch.setattr(drto.scaling, "solver_by_name", _RecordingSolver(record))
     m = spanning_model()
-    drto.scaled_solve(m, solver="ipopt_v2")
+    drto.scaled_solve(m, solver="ipopt")
     assert "nlp_scaling_method" not in record
 
 
 def test_scaled_solve_forwards_the_source(monkeypatch):
-    import pyomo.environ
-
     record = {}
-    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    monkeypatch.setattr(drto.scaling, "solver_by_name", _RecordingSolver(record))
     m = spanning_model()
     for t in m.t:
         m.u[t].setlb(-1e6)
@@ -337,16 +337,21 @@ def test_scaled_solve_forwards_the_source(monkeypatch):
 
 
 def test_an_unlisted_solver_warns_and_solves_unscaled(monkeypatch):
-    import pyomo.environ
-
     record = {}
-    monkeypatch.setattr(pyomo.environ, "SolverFactory", _RecordingFactory(record))
+    monkeypatch.setattr(drto.scaling, "solver_by_name", _RecordingSolver(record))
     m = spanning_model()
     with pytest.warns(UserWarning, match="factors were not applied"):
-        drto.scaled_solve(m, solver="cbc")
+        drto.scaled_solve(m, solver="highs")
     assert "nlp_scaling_method" not in record
     # the factors were still measured onto the model
     assert len(m.scaling_factor) > 0
+
+
+def test_an_unknown_name_raises_with_the_registry():
+    m = spanning_model()
+    with pytest.warns(UserWarning, match="factors were not applied"):
+        with pytest.raises(ValueError, match="native factory"):
+            drto.scaled_solve(m, solver="no_such_solver")
 
 
 def test_a_missing_asl_library_names_both_installers(monkeypatch):
@@ -362,8 +367,16 @@ def test_a_missing_asl_library_names_both_installers(monkeypatch):
 def test_the_solver_lists_agree():
     from drto.scaling import _POUNCE_SOLVERS, _READS_SUFFIX, _TAKES_OPTION
 
-    # both pounce names reach the same solver and take the option;
-    # ipopt_v2 applies the factors without one, in the NL-v2 writer
-    assert _POUNCE_SOLVERS == ("pounce_v2", "pounce")
+    # both pounce names resolve to the one native solver and take the
+    # option; ipopt applies the factors without one, in the NL writer
+    assert _POUNCE_SOLVERS == ("pounce", "pounce_v2")
     assert all(name in _TAKES_OPTION for name in _POUNCE_SOLVERS)
-    assert "ipopt_v2" in _READS_SUFFIX and "ipopt_v2" not in _TAKES_OPTION
+    assert "ipopt" in _READS_SUFFIX and "ipopt" not in _TAKES_OPTION
+
+
+def test_both_pounce_names_resolve_natively():
+    from pyomo.contrib.solver.common.factory import SolverFactory as SF2
+
+    for name in ("pounce", "pounce_v2"):
+        solver = drto.scaling.solver_by_name(name)
+        assert type(solver) is type(SF2("pounce"))
