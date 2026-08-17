@@ -104,7 +104,7 @@ pin's effective weight against the objective.
 `drto.scaled_solve(m, source=..., solver=..., tee=..., options=...)`
 assigns the factors and solves. `source` is forwarded to `drto.scale`,
 so every call measures fresh and replaces a Suffix already on the
-model. `solver` names the solver and defaults to `pounce_v2`; `options`
+model. `solver` names the solver and defaults to `pounce`; `options`
 is a mapping passed through to it, overriding any default the call
 sets.
 
@@ -194,7 +194,9 @@ component-walking code reduced to a source stated at the call.
   effective weight against the objective is the declared one, unchanged
   by scaling.
 - `drto.scaled_solve` takes the solver by name, defaulting to
-  `pounce_v2`, and passes an options mapping through to it.
+  `pounce`, and passes an options mapping through to it. Every name
+  resolves in Pyomo's native solver factory, and an unknown name raises
+  with the registry listed.
 - With pounce or legacy ipopt it solves the model under
   `nlp_scaling_method=user-scaling`; with ipopt_v2 it passes no scaling
   option, since the NL-v2 writer applies the factors as it writes. No
