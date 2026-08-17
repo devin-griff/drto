@@ -21,9 +21,9 @@ try:
     import pyomo_pounce  # noqa: F401  registers the pounce solver
 except ImportError:
     pass
-pounce_ok = pyo.SolverFactory("pounce").available(exception_flag=False)
+pounce_ok = bool(drto.scaling.solver_by_name("pounce").available())
 needs_pounce = pytest.mark.skipif(not pounce_ok, reason="pounce not available")
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -69,16 +69,16 @@ def loop_model(N=5, discretize=True):
 
 
 class _Recorder:
-    """Wraps a real solver, recording each solve call's options."""
+    """Wraps a real native solver, recording each solve's options."""
 
     def __init__(self, real):
         self.real, self.calls = real, []
 
-    def available(self, exception_flag=False):
+    def available(self):
         return True
 
     def solve(self, model, **kwds):
-        self.calls.append(dict(kwds.get("options") or {}))
+        self.calls.append(dict(kwds.get("solver_options") or {}))
         return self.real.solve(model, **kwds)
 
 
@@ -117,8 +117,8 @@ def test_short_disturbance_sequence_errors():
         drto.ideal_nmpc(loop_model(), steps=3, disturbances={"w": [0.1]})
 
 
-def test_unavailable_solver_errors():
-    with pytest.raises(RuntimeError, match="not available"):
+def test_an_unknown_solver_names_the_registry():
+    with pytest.raises(ValueError, match="native factory"):
         drto.ideal_nmpc(loop_model(), steps=2, solver="no_such_solver")
 
 
@@ -240,8 +240,8 @@ def test_member_subset_states_label_by_their_reference():
 
 @needs_ipopt
 def test_warm_started_solves_get_the_recipe(monkeypatch):
-    rec = _Recorder(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     m = loop_model()
     drto.ideal_nmpc(m, steps=2, solver="ipopt")
     # call order: controller, process, controller (warm), process
@@ -259,8 +259,8 @@ def test_warm_started_solves_get_the_recipe(monkeypatch):
 
 @needs_ipopt
 def test_warm_start_options_lay_over_the_recipe(monkeypatch):
-    rec = _Recorder(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     drto.ideal_nmpc(loop_model(), steps=2, solver="ipopt", warm_start={"mu_init": 1e-4})
     assert rec.calls[2]["mu_init"] == pytest.approx(1e-4)  # the override
     assert rec.calls[2]["warm_start_init_point"] == "yes"  # the rest stays
@@ -268,15 +268,15 @@ def test_warm_start_options_lay_over_the_recipe(monkeypatch):
 
 @needs_ipopt
 def test_another_solver_warm_starts_on_the_shifted_values_alone(monkeypatch):
-    rec = _Recorder(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     m = loop_model()
     drto.ideal_nmpc(m, steps=2, solver="other")
     assert all(c == {} for c in rec.calls)
     assert m.component("dual") is None
     # a given mapping still reaches the warm solves as is
-    rec = _Recorder(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     drto.ideal_nmpc(loop_model(), steps=2, solver="other", warm_start={"max_iter": 400})
     assert rec.calls[2] == {"max_iter": 400}
 
@@ -287,8 +287,8 @@ def test_pounce_warm_solves_carry_mu_init_alone(monkeypatch):
     # from ten iterations to seven, and the full recipe regresses
     # pounce, so its warm solves carry the small barrier and nothing
     # else
-    rec = _Recorder(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     drto.ideal_nmpc(loop_model(), steps=2, solver="pounce_v2")
     assert rec.calls[2]["mu_init"] == pytest.approx(1e-6)
     assert "warm_start_init_point" not in rec.calls[2]
@@ -301,15 +301,15 @@ def test_a_failed_solve_names_the_step(monkeypatch):
         def solve(self, model, **kwds):
             res = self.real.solve(model, **kwds)
             if len(self.calls) == len(self.fail_after):
-                res.solver.termination_condition = (
-                    pyo.TerminationCondition.maxIterations
-                )
+                from pyomo.contrib.solver.common.results import TerminationCondition
+
+                res.termination_condition = TerminationCondition.iterationLimit
             self.calls.append({})
             return res
 
-    rec = Failing(pyo.SolverFactory("ipopt"))
+    rec = Failing(drto.scaling.solver_by_name("ipopt"))
     rec.fail_after = [None, None]  # the third call, step 1's controller
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     with pytest.raises(RuntimeError, match="controller solve failed at step 1"):
         drto.ideal_nmpc(loop_model(), steps=3, solver="ipopt")
 
@@ -386,8 +386,8 @@ def test_the_plant_is_the_one_sample_simulation(monkeypatch):
             seen.append(model)
             return super().solve(model, **kwds)
 
-    rec = Rec(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = Rec(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     m = hicks(N=5)
     pyo.TransformationFactory("dae.collocation").apply_to(
         m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
@@ -442,15 +442,17 @@ def test_a_suffix_loop_solves_the_models_themselves(monkeypatch):
             seen.append(model)
             return super().solve(model, **kwds)
 
-    rec = Rec(pyo.SolverFactory("ipopt"))
-    monkeypatch.setattr(loop_module, "SolverFactory", lambda name: rec)
+    rec = Rec(drto.scaling.solver_by_name("ipopt"))
+    monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     m = loop_model()
     m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
     for vd in m.z.values():
         m.scaling_factor[vd] = 2.0
     drto.ideal_nmpc(m, steps=1, solver="ipopt")
     assert seen[0] is m
-    assert all(opts.get("nlp_scaling_method") == "user-scaling" for opts in rec.calls)
+    # ipopt needs no option: the NL writer consumes the Suffix and
+    # scales the problem as it writes
+    assert all("nlp_scaling_method" not in opts for opts in rec.calls)
 
 
 # ── scaling ──────────────────────────────────────────────────────────────────

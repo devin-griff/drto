@@ -7,7 +7,7 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 SSO = "drto.steady_state_optimization"
@@ -262,8 +262,8 @@ def test_economic_optimum():
     # at rest z = u, so minimizing z^2 - u over u in [0, 1] gives u = 0.5
     m = econ_model()
     pyo.TransformationFactory(SSO).apply_to(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     assert pyo.value(m.u) == pytest.approx(0.5, abs=1e-6)
     assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-6)
 
@@ -272,7 +272,7 @@ def test_economic_optimum():
 def test_steady_authored_reaches_the_same_optimum():
     m = steady_authored_model()
     pyo.TransformationFactory(SSO).apply_to(m)
-    pyo.SolverFactory("ipopt").solve(m)
+    drto.scaling.solver_by_name("ipopt").solve(m)
     assert pyo.value(m.u) == pytest.approx(0.5, abs=1e-6)
 
 
@@ -282,8 +282,8 @@ def test_tracking_only_optimum_is_the_nearest_steady_point():
     # minimizer of (z - 0.4)^2 + (u - 0.2)^2 on z = u is 0.3
     m = tracking_model()
     pyo.TransformationFactory(SSO).apply_to(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     assert pyo.value(m.u) == pytest.approx(0.3, abs=1e-6)
     assert pyo.value(m.z) == pytest.approx(0.3, abs=1e-6)
 
@@ -295,7 +295,7 @@ def test_tracking_weight_regularizes_toward_the_known_point():
     for w in (0.0, 1.0, 20.0):
         m = econ_model(tracking=True)
         pyo.TransformationFactory(SSO).apply_to(m, tracking_weight=w)
-        pyo.SolverFactory("ipopt").solve(m)
+        drto.scaling.solver_by_name("ipopt").solve(m)
         results[w] = pyo.value(m.u)
     assert results[0.0] == pytest.approx(0.5, abs=1e-6)  # pure economics
     assert results[0.0] > results[1.0] > results[20.0]  # pulled toward 0.2

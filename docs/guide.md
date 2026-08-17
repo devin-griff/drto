@@ -121,7 +121,9 @@ drto.cold_start_dynamic(m)
 pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
 
 # 5. solve and read back
-pyo.SolverFactory("ipopt").solve(m)
+from pyomo.contrib.solver.common.factory import SolverFactory
+
+SolverFactory("ipopt").solve(m)
 drto.plot_states(m)
 drto.plot_controls(m)
 ```

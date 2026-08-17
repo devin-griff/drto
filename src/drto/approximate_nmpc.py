@@ -31,7 +31,6 @@ import json
 from dataclasses import dataclass, field
 
 from pyomo.core import Objective, value
-from pyomo.opt import SolverFactory, TerminationCondition
 
 from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
@@ -233,7 +232,7 @@ def approximate_nmpc_data(
     inputs=None,
     ranges=None,
     gradients=True,
-    solver="pounce_v2",
+    solver="pounce",
     scale=None,
     seed=0,
     path=None,
@@ -300,7 +299,7 @@ def approximate_nmpc_data(
         import pyomo_pounce
 
         pyomo_pounce.declare_sens_param(*(p for p, _ in pairs))
-    factory = SolverFactory(solver)
+    factory = drto_scaling.solver_by_name(solver)
 
     cube = _design(method, n, len(pairs), seed)
     x_ss, u_ss = _steady_targets(reg, fn)
@@ -321,12 +320,16 @@ def approximate_nmpc_data(
             param.set_value(v)
             draw[param.name] = v
         cold_start_dynamic(m)
-        res = factory.solve(m, options=solve_opts)
-        if res.solver.termination_condition != TerminationCondition.optimal:
-            failures.append(
-                {"x": draw, "termination": str(res.solver.termination_condition)}
-            )
+        res = factory.solve(
+            m,
+            solver_options=solve_opts,
+            load_solutions=False,
+            raise_exception_on_nonoptimal_result=False,
+        )
+        if not drto_scaling.solved_to_optimality(res):
+            failures.append({"x": draw, "termination": res.termination_condition.name})
             continue
+        res.solution_loader.load_vars()
         objective = next(m.component_data_objects(Objective, active=True))
         point = {
             "x": draw,
@@ -940,7 +943,7 @@ def approximate_nmpc_closed_loop(
     samples=50,
     x0=None,
     disturbances=None,
-    solver="pounce_v2",
+    solver="pounce",
     scale=None,
     compare=False,
 ):
@@ -1045,7 +1048,7 @@ def approximate_nmpc_closed_loop(
 
     if solver in _POUNCE_SOLVERS:
         import pyomo_pounce  # noqa: F401
-    opt = SolverFactory(solver)
+    opt = drto_scaling.solver_by_name(solver)
 
     # a scale source: the factors first, at entry, so the plant clone
     # carries them and the compare solves run against the same ones
@@ -1116,8 +1119,15 @@ def approximate_nmpc_closed_loop(
                 else:
                     cold_start_dynamic(m)
             options = _warm_options(solver) if k > 0 and compared else {}
-            res = opt.solve(m, options={**compare_opts, **options})
-            compared = res.solver.termination_condition == TerminationCondition.optimal
+            res = opt.solve(
+                m,
+                solver_options={**compare_opts, **options},
+                load_solutions=False,
+                raise_exception_on_nonoptimal_result=False,
+            )
+            compared = drto_scaling.solved_to_optimality(res)
+            if compared:
+                res.solution_loader.load_vars()
             if compared:
                 for u in m_controls:
                     report.solver_moves[u.local_name].append(value(_first_move(u)))
@@ -1142,8 +1152,15 @@ def approximate_nmpc_closed_loop(
             report.realizations[w.local_name].append(realized)
             for vd in _members(w):
                 vd.set_value(realized)
-        res = opt.solve(plant, options=plant_opts)
-        if res.solver.termination_condition != TerminationCondition.optimal:
+        res = opt.solve(
+            plant,
+            solver_options=plant_opts,
+            load_solutions=False,
+            raise_exception_on_nonoptimal_result=False,
+        )
+        if drto_scaling.solved_to_optimality(res):
+            res.solution_loader.load_vars()
+        else:
             state = ", ".join(
                 f"{label} {value(hook):.6g}" for label, hook in zip(labels, c_hooks)
             )
@@ -1153,7 +1170,7 @@ def approximate_nmpc_closed_loop(
             )
             raise RuntimeError(
                 f"drto: {fn}: the plant solve failed at sample {k} "
-                f"({res.solver.termination_condition}). Visited state "
+                f"({res.termination_condition.name}). Visited state "
                 f"{state}. Applied action {applied}."
             )
         report.stage_costs.append(sum(value(cv) for cv in cost_vars))

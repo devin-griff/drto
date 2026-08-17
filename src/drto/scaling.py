@@ -42,19 +42,53 @@ _FLOOR = 1e-16
 #: The largest exponent a factor may carry.
 _CLAMP = 12
 
-#: The names pounce registers, both reaching the same solver: the
-#: legacy interface and the v2 engine through that same API.
-_POUNCE_SOLVERS = ("pounce_v2", "pounce")
+#: The names that resolve to pounce through the native factory, kept
+#: plural so a caller's "pounce_v2" keeps working.
+_POUNCE_SOLVERS = ("pounce", "pounce_v2")
 
-#: Solvers that apply the Suffix's factors. ipopt_v2 is here because
+#: Solvers that apply the Suffix's factors. ipopt is here because
 #: Pyomo's NL-v2 writer consumes the Suffix and scales the problem as
-#: it writes the file, so that solver receives an already-scaled
+#: it writes the file, so the solver receives an already-scaled
 #: problem and needs no option.
-_READS_SUFFIX = _POUNCE_SOLVERS + ("ipopt", "ipopt_v2")
+_READS_SUFFIX = _POUNCE_SOLVERS + ("ipopt",)
 
 #: The subset that reads the factors inside the solver, under
 #: ``nlp_scaling_method=user-scaling``.
-_TAKES_OPTION = _POUNCE_SOLVERS + ("ipopt",)
+_TAKES_OPTION = _POUNCE_SOLVERS
+
+
+def solver_by_name(name):
+    """The native-interface solver for ``name``.
+
+    Every drto solve goes through Pyomo's native factory
+    (``pyomo.contrib.solver``). A pounce name imports ``pyomo_pounce``
+    first, which registers it. The factory returns None for a name it
+    does not know, so that case raises here with the registry listed.
+    """
+    from pyomo.contrib.solver.common.factory import SolverFactory
+
+    if name in _POUNCE_SOLVERS:
+        import pyomo_pounce  # noqa: F401  registers pounce
+
+        name = "pounce"
+    solver = SolverFactory(name)
+    if solver is None:
+        raise ValueError(
+            f"drto: no solver named '{name}' in Pyomo's native factory; "
+            f"the registered names are {sorted(SolverFactory)}."
+        )
+    return solver
+
+
+def solved_to_optimality(results):
+    """Whether the native ``Results`` reports a converged, optimal solve."""
+    from pyomo.contrib.solver.common.results import SolutionStatus, TerminationCondition
+
+    return (
+        results.termination_condition
+        == TerminationCondition.convergenceCriteriaSatisfied
+        and results.solution_status == SolutionStatus.optimal
+    )
 
 
 def _suffix_active(m):
@@ -312,20 +346,21 @@ def _constraint_factors(m, skip):
         m.scaling_factor[con] = 10.0 ** -round(math.log10(largest))
 
 
-def scaled_solve(m, source="point", solver="pounce_v2", tee=False, options=None):
+def scaled_solve(m, source="point", solver="pounce", tee=False, options=None):
     """Assign the factors and solve, returning the model's own units.
 
     ``source`` is forwarded to ``scale``, so every call measures fresh
     and replaces a Suffix already on the model. The factors reach the
-    solver through the Suffix, and no second model is built. pounce and
-    legacy ipopt read it under ``nlp_scaling_method=user-scaling``:
-    objective and constraint factors travel through the NL file's
-    suffix segments, and variable factors are applied as a change of
-    variables inside the solver. ipopt_v2 gets no option, since Pyomo's
-    NL-v2 writer consumes the Suffix and scales the problem as it
-    writes the file. Any other solver does not receive the factors: the
-    solve runs unscaled and a warning says so. Every route solves ``m``
-    itself and the solution comes back in the model's own units.
+    solver through the Suffix, no second model is built, and every
+    solve goes through Pyomo's native interface. pounce reads the
+    Suffix under ``nlp_scaling_method=user-scaling``, constraint
+    factors through the NL file's suffix segments and variable factors
+    as a change of variables inside the solver. ipopt needs no option,
+    since the NL writer consumes the Suffix and scales the problem as
+    it writes the file. Any other solver does not receive the factors:
+    the solve runs unscaled and a warning says so. The solution loads
+    into ``m`` in its own units whenever the solver returned one, and a
+    solve with no solution leaves the model untouched.
 
     Parameters
     ----------
@@ -342,15 +377,22 @@ def scaled_solve(m, source="point", solver="pounce_v2", tee=False, options=None)
 
     Returns
     -------
-    SolverResults
-        The solver's results object.
+    pyomo.contrib.solver.common.results.Results
+        The native results: ``termination_condition`` and
+        ``solution_status`` are its structured fields.
     """
-    from pyomo.environ import SolverFactory
-
-    if solver in _POUNCE_SOLVERS:
-        import pyomo_pounce  # noqa: F401  registers the solver
+    from pyomo.contrib.solver.common.results import SolutionStatus
 
     scale(m, source=source)
     opts = _scaling_options(solver, "scaled_solve")
     opts.update(options or {})
-    return SolverFactory(solver).solve(m, tee=tee, options=opts)
+    results = solver_by_name(solver).solve(
+        m,
+        tee=tee,
+        solver_options=opts,
+        load_solutions=False,
+        raise_exception_on_nonoptimal_result=False,
+    )
+    if results.solution_status != SolutionStatus.noSolution:
+        results.solution_loader.load_vars()
+    return results

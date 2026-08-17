@@ -11,7 +11,7 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
 
-pounce_ok = pyo.SolverFactory("pounce").available(exception_flag=False)
+pounce_ok = bool(drto.scaling.solver_by_name("pounce").available())
 needs_pounce = pytest.mark.skipif(not pounce_ok, reason="pounce not available")
 
 

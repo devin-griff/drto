@@ -16,7 +16,7 @@ from test_infinite_horizon import (
     ready_model,
 )
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 SS = "drto.dynamic_to_steady_state"
@@ -116,8 +116,8 @@ def test_steady_solve_matches_the_fixed_point():
     m = declared_model()
     ss = pyo.TransformationFactory(SS).create_using(m)
     drto.build_objective(ss)
-    r = pyo.SolverFactory("ipopt").solve(ss)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(ss)
+    assert drto.scaling.solved_to_optimality(r)
     # dz/dt = -z + u at rest with the tracking cost: z = u = the setpoint
     assert pyo.value(ss.z) == pytest.approx(0.5, abs=1e-6)
     assert pyo.value(ss.u) == pytest.approx(0.5, abs=1e-6)
@@ -270,8 +270,8 @@ def test_block_reduction_reaches_the_fixed_point():
     m = block_model()
     pyo.TransformationFactory(SS).apply_to(m)
     drto.build_objective(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     # dz/dt = u - y at rest with y = 2z + 0.1q and u in [0, 1]: the
     # setpoint needs u = 1.3, so the optimum rides the bound, u = y = 1
     # and z = (1 - 0.3) / 2, the member equation carrying the physics
@@ -430,8 +430,8 @@ def test_the_steady_spatial_profile_solves():
     # model (backward differences start past the inlet): held for the
     # square solve
     m.dzdx[0].fix(0.0)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     # steady transport with first-order loss: the profile decays along
     # the vessel from the held inlet
     xs = sorted(m.x)

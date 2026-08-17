@@ -18,7 +18,7 @@ from models.hicks import hicks  # noqa: E402
 
 DT = 2.5  # the fixture's sample step
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
@@ -243,15 +243,15 @@ def test_shifted_primals_warm_start_in_single_digits():
     pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
     drto.cold_start_dynamic(m)
-    pyo.SolverFactory("ipopt").solve(m)
+    drto.scaling.solver_by_name("ipopt").solve(m)
     m.zc_hat.set_value(pyo.value(m.zc[1]))
     m.zt_hat.set_value(pyo.value(m.zt[1]))
     drto.warm_start_dynamic(m)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        res = pyo.SolverFactory("ipopt").solve(
+        res = drto.scaling.solver_by_name("ipopt").solve(
             m,
-            options={
+            solver_options={
                 "warm_start_init_point": "yes",
                 "mu_init": 1e-6,
                 "warm_start_bound_push": 1e-9,
@@ -259,7 +259,7 @@ def test_shifted_primals_warm_start_in_single_digits():
             },
             tee=True,
         )
-    assert pyo.check_optimal_termination(res)
+    assert drto.scaling.solved_to_optimality(res)
     iters = next(
         int(line.split(":")[-1])
         for line in buf.getvalue().splitlines()

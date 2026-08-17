@@ -10,7 +10,7 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 from test_declarations import base_model, declared_model
 
-ipopt_ok = pyo.SolverFactory("ipopt").available(exception_flag=False)
+ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 IH = "drto.infinite_horizon"
@@ -444,8 +444,8 @@ def test_indexed_state_reaches_the_fixed_point():
     pyo.TransformationFactory(IH).apply_to(m)
     pyo.TransformationFactory("drto.parameterize").apply_to(m)
     drto.build_objective(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     b = m.drto_ih
     for i in m.i:
         assert pyo.value(b.x[i, 1]) == pytest.approx(0.5, abs=1e-4)
@@ -481,8 +481,8 @@ def test_algebraic_model_reaches_the_fixed_point():
     pyo.TransformationFactory(IH).apply_to(m)
     pyo.TransformationFactory("drto.parameterize").apply_to(m)
     drto.build_objective(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     b = m.drto_ih
     assert pyo.value(b.z[1]) == pytest.approx(0.5, abs=1e-4)
     # the algebra holds no endpoint copy (gh #32: interior points only);
@@ -569,7 +569,7 @@ def test_bad_profile_errors_before_the_model_is_touched():
 # ----------------------------------------------------------------------
 @needs_ipopt
 def test_hicks_short_horizon_reproduces_the_long_one():
-    ipopt = pyo.SolverFactory("ipopt")
+    ipopt = drto.scaling.solver_by_name("ipopt")
 
     m50 = hicks(50)
     pyo.TransformationFactory("dae.collocation").apply_to(
@@ -578,7 +578,7 @@ def test_hicks_short_horizon_reproduces_the_long_one():
     pyo.TransformationFactory("cvp.parameterize").apply_to(m50)
     drto.build_objective(m50)
     r = ipopt.solve(m50)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert drto.scaling.solved_to_optimality(r)
 
     m5 = hicks(5)
     pyo.TransformationFactory("dae.collocation").apply_to(
@@ -590,7 +590,7 @@ def test_hicks_short_horizon_reproduces_the_long_one():
     pyo.TransformationFactory("cvp.parameterize").apply_to(m5)
     drto.build_objective(m5)
     r = ipopt.solve(m5)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert drto.scaling.solved_to_optimality(r)
 
     # the first control move matches the long horizon
     assert pyo.value(m5.v1[0]) == pytest.approx(pyo.value(m50.v1[0]), rel=0.05)
@@ -675,8 +675,8 @@ def test_soft_pin_lands_the_endpoint_on_the_setpoint():
     pyo.TransformationFactory(IH).apply_to(m)  # default terminal='soft'
     pyo.TransformationFactory("cvp.parameterize").apply_to(m)
     drto.build_objective(m)
-    r = pyo.SolverFactory("ipopt").solve(m)
-    assert r.solver.termination_condition == pyo.TerminationCondition.optimal
+    r = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(r)
     b = m.drto_ih
     # the L1 penalty is exact: at the default mu the slacks vanish and the
     # extrapolated endpoint lands on the setpoint (soft reproduces the pin)
@@ -1060,8 +1060,8 @@ def test_reference_control_solves_through_the_tail():
     m = ref_control_model()
     pyo.TransformationFactory(IH).apply_to(m)
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-    res = pyo.SolverFactory("ipopt").solve(m)
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    res = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(res)
     # at rest dz = f - z = 0 and the cost pins z at the setpoint, so the
     # tail control settles at the steady input through its own copy
     tail_end = max(m.drto_ih.fin.keys())
@@ -1141,8 +1141,8 @@ def test_member_subset_state_solves_through_the_tail():
     m = packed_model()
     pyo.TransformationFactory(IH).apply_to(m)
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-    res = pyo.SolverFactory("ipopt").solve(m)
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    res = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(res)
     b = m.drto_ih
     assert pyo.value(b.x_A[1]) == pytest.approx(0.5, abs=1e-6)
     sp = sorted(b.tau)[3]
@@ -1166,8 +1166,8 @@ def test_block_model_solves_through_the_tail():
     m = block_model()
     pyo.TransformationFactory(IH).apply_to(m)
     pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-    res = pyo.SolverFactory("ipopt").solve(m)
-    assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+    res = drto.scaling.solver_by_name("ipopt").solve(m)
+    assert drto.scaling.solved_to_optimality(res)
 
 
 def _first_order(scaled):
@@ -1232,8 +1232,8 @@ def test_a_scaled_derivative_side_dilates_like_the_bare_form():
         m = _first_order(scaled)
         pyo.TransformationFactory(IH).apply_to(m)
         pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-        res = pyo.SolverFactory("ipopt").solve(m)
-        assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+        res = drto.scaling.solver_by_name("ipopt").solve(m)
+        assert drto.scaling.solved_to_optimality(res)
         results.append(
             [pyo.value(m.z[t]) for t in m.t]
             + [pyo.value(m.drto_ih.z[s]) for s in sorted(m.drto_ih.tau)]
@@ -1322,8 +1322,8 @@ def test_multi_index_blocks_solve_like_the_flat_twin():
         m = spatial_block_model(flat=flat)
         pyo.TransformationFactory(IH).apply_to(m)
         pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-        res = pyo.SolverFactory("ipopt").solve(m)
-        assert res.solver.termination_condition == pyo.TerminationCondition.optimal
+        res = drto.scaling.solver_by_name("ipopt").solve(m)
+        assert drto.scaling.solved_to_optimality(res)
         sols.append([pyo.value(m.z[t]) for t in sorted(m.t)])
     for za, zb in zip(*sols):
         assert za == pytest.approx(zb, abs=1e-8)
