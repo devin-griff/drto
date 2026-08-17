@@ -10,6 +10,8 @@ the model as declared without writing a separate simulation.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... declared model m (feature 002), discretized ...
@@ -17,7 +19,7 @@ import drto
 pyo.TransformationFactory("drto.dynamic_simulation").apply_to(m)
 # controls fixed at the values they already hold, objective zero; a
 # supplied constant or profile is the option: apply_to(m, controls={m.u: 0.3})
-pyo.SolverFactory("ipopt").solve(m)   # square forward integration
+SolverFactory("ipopt").solve(m)   # square forward integration
 ```
 
 ## Benefit hypothesis

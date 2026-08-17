@@ -11,6 +11,8 @@ terminal cost or terminal region by hand.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... build a pyomo.dae model: states m.z, controls m.u over ContinuousSet
@@ -31,7 +33,7 @@ pyo.TransformationFactory("drto.infinite_horizon").apply_to(
 
 pyo.TransformationFactory("drto.parameterize").apply_to(m)  # feature 017
 drto.build_objective(m)
-pyo.SolverFactory("ipopt").solve(m)
+SolverFactory("ipopt").solve(m)
 ```
 
 The tail terms it registers are live cost terms, so `drto.build_objective`

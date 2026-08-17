@@ -11,6 +11,8 @@ free and fixed variables.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... declared model m (feature 002) ...
@@ -23,7 +25,7 @@ pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
 # declarations dropped, objective assembled from the live cost terms.
 # With both cost kinds declared, the tracking weight is an argument:
 # apply_to(m, tracking_weight=10.0)
-pyo.SolverFactory("ipopt").solve(m)
+SolverFactory("ipopt").solve(m)
 ```
 
 ## Benefit hypothesis

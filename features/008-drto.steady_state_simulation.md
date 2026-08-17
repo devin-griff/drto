@@ -10,13 +10,15 @@ find the resting operating point from the one model.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... declared model m (feature 002), dynamic or already steady-state ...
 
 sim = pyo.TransformationFactory("drto.steady_state_simulation").create_using(
     m, controls={m.u: 0.3})
-pyo.SolverFactory("ipopt").solve(sim)   # the equilibrium under u = 0.3
+SolverFactory("ipopt").solve(sim)   # the equilibrium under u = 0.3
 ```
 
 ## Benefit hypothesis

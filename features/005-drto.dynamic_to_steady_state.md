@@ -11,6 +11,8 @@ steady-state model.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... declared dynamic model m (feature 002) ...
@@ -20,7 +22,7 @@ ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
 # dz/dt collapsed with it and fixed at zero, initial and terminal pieces
 # removed; m is unchanged
 drto.build_objective(ss)              # e.g. the single-point cost
-pyo.SolverFactory("ipopt").solve(ss)
+SolverFactory("ipopt").solve(ss)
 ```
 
 A `Block(time)` family collapses to its `t0` member, one per non-time

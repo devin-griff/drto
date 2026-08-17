@@ -10,13 +10,15 @@ get the optimal steady operating point (economic RTO) from the one model.
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
+
 import drto
 
 # ... declared model m (feature 002) with an economic stage cost ...
 
 rto = pyo.TransformationFactory(
     "drto.steady_state_optimization").create_using(m)
-pyo.SolverFactory("ipopt").solve(rto)   # the optimal steady operating point
+SolverFactory("ipopt").solve(rto)   # the optimal steady operating point
 ```
 
 ## Benefit hypothesis

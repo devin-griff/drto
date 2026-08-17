@@ -11,15 +11,14 @@ without hand-written per-model factors.
 
 ```python
 import drto
-from pyomo.environ import units
 
 # ... declared, discretized, initialized model m ...
 
 drto.scale(m)                       # magnitudes from the values m holds
 drto.scale(m, source="bounds")      # from the declared bounds
-drto.scale(m, source={units.J: 1e7, units.W: 1e6})  # from the caller
+drto.scale(m, source={"J": 1e7, "W": 1e6})  # from the caller
 results = drto.scaled_solve(m)
-results = drto.scaled_solve(m, source="bounds", solver="ipopt_v2",
+results = drto.scaled_solve(m, source="bounds", solver="ipopt",
                             tee=True, options={"max_iter": 500})
 ```
 
@@ -42,9 +41,11 @@ the group's largest absolute value at the point the model is sitting
 at. `"bounds"` reads `max(|lb|, |ub|)` over the members carrying two
 finite bounds, and a group with no such member keeps factor one, so the
 mode scales exactly the quantities whose operating limits are declared,
-in practice the controls, and reads no values. A mapping of units to
-magnitudes, `{units.J: 1e7, units.W: 1e6}`, gives every group whose
-members are valued in a mapped dimension that dimension's magnitude,
+in practice the controls, and reads no values. A mapping of unit
+names to magnitudes, `{"J": 1e7, "W": 1e6}`, keyed by name since a
+pyomo unit is an expression and cannot key a dict, gives every group
+whose members are valued in a mapped dimension that dimension's
+magnitude,
 and every other group keeps factor one: the caller states the process's
 operating magnitudes once per physical dimension, which covers a
 quantity whose value and bounds both say nothing, a duty sitting at
@@ -108,15 +109,15 @@ model. `solver` names the solver and defaults to `pounce`; `options`
 is a mapping passed through to it, overriding any default the call
 sets.
 
-The factors reach the solver through the Suffix, and no second model is
-built anywhere. pounce and legacy ipopt read it under
-`nlp_scaling_method=user-scaling`: objective and constraint factors
-travel through the NL file's suffix segments, and variable factors are
-applied as a change of variables inside the solver. ipopt_v2 gets no
-scaling option, since Pyomo's NL-v2 writer consumes the Suffix and
-scales the problem as it writes the file, so that solver receives an
-already-scaled problem. Every route returns the solution in the model's
-own units.
+The factors reach the solver through the Suffix, no second model is
+built anywhere, and every solve goes through Pyomo's native solver
+interface. pounce reads the Suffix under
+`nlp_scaling_method=user-scaling`, constraint factors through the NL
+file's suffix segments and variable factors as a change of variables
+inside the solver. ipopt gets no scaling option, since the NL writer
+consumes the Suffix and scales the problem as it writes the file.
+Every route returns the solution in the model's own units, loaded
+whenever the solver returned one.
 
 A solver outside that set does not receive the factors: the solve runs
 unscaled, and `scaled_solve` warns, naming the solver and saying the
@@ -197,9 +198,9 @@ component-walking code reduced to a source stated at the call.
   `pounce`, and passes an options mapping through to it. Every name
   resolves in Pyomo's native solver factory, and an unknown name raises
   with the registry listed.
-- With pounce or legacy ipopt it solves the model under
-  `nlp_scaling_method=user-scaling`; with ipopt_v2 it passes no scaling
-  option, since the NL-v2 writer applies the factors as it writes. No
+- With pounce it solves the model under
+  `nlp_scaling_method=user-scaling`; with ipopt it passes no scaling
+  option, since the NL writer applies the factors as it writes. No
   clone is built on any route, and the solution comes back in the
   model's own units.
 - With a solver that does not receive the factors, the solve runs
