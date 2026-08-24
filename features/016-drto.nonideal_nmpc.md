@@ -49,9 +49,9 @@ those of `drto.ideal_nmpc` (feature 014), with `delay` added.
 The loop differs from the ideal one in when a move takes effect. Each
 step's delay is the solve time the solver reports, in seconds, converted
 into the declared time set's units, or the value `delay` prescribes,
-already in those units. A model whose time carries no units cannot place
-reported seconds on its time axis, so `delay="solver"` there is a
-descriptive error asking for a prescribed delay. The new move takes
+already in those units. With no units on the declared time set the
+reported seconds cannot be converted, so `delay="solver"` is a
+descriptive error saying to prescribe a delay instead. The new move takes
 effect one delay into the sample. Every simulation step therefore carries
 two control actions, and runs as two finite elements of different
 lengths. The process advances for the delay under the previous move, then
