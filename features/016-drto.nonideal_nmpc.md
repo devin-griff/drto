@@ -32,9 +32,11 @@ history = drto.nonideal_nmpc(
                                        # values. Omitted is zero
     seed=0,                            # makes the draws reproducible
     initialize="cold",                 # the first solve's
-                                       # initialization: "cold" the cold
-                                       # start (a mapping its options),
-                                       # "steady" the steady broadcast,
+                                       # initialization: "cold" runs
+                                       # drto.cold_start_dynamic (a
+                                       # mapping passes its options),
+                                       # "steady" runs
+                                       # drto.initialize_steady_state,
                                        # False skips it
     solver="pounce",                   # the solver, by name
 )
@@ -52,19 +54,19 @@ into the declared time set's units, or the value `delay` prescribes,
 already in those units. With no units on the declared time set the
 reported seconds cannot be converted, so `delay="solver"` is a
 descriptive error saying to prescribe a delay instead. The new move takes
-effect one delay into the sample. Every simulation step therefore carries
-two control actions, and runs as two finite elements of different
+effect one delay into the sample. Two moves therefore apply in every
+simulation step, which runs as two finite elements of different
 lengths. The process advances for the delay under the previous move, then
 for the rest of the sample under the new one. The process simulation's
 duration is a parameter, so both lengths are exact on its fixed grid. A
 piece of zero length is not simulated. A zero delay runs the sample in
 one piece under the new move, and a delay at the sample length runs it
 in one piece under the previous move. On the first step, the previous
-move is the declared control targets, the inputs the process sat at
+move is the declared control targets, the inputs the process held
 before the loop.
 
-A solve that takes longer than the sample, a delay at or past the
-sampling time, keeps the previous move for the whole sample, and its
+When a solve takes longer than the sample, a delay at or past the
+sampling time, the previous move holds for the whole sample and the new
 move takes effect at the next sample boundary, recorded as clamped.
 
 The history is `drto.ideal_nmpc`'s, adding each step's delay and the time
@@ -75,17 +77,17 @@ times.
 
 A closed loop that accounts for the controller's computation time is
 cumbersome to program by hand. Each sample has to be split at the moment
-the new move arrives, the process advanced under the previous move and
+the solve returns, the process advanced under the previous move and
 then under the new one, and the split point recomputed every step from
 that step's solve time. Writing that once per model is enough work that
-the comparison usually goes unmeasured.
+the comparison usually goes unmade.
 
 `drto.nonideal_nmpc` runs the loop from the same call `drto.ideal_nmpc`
-takes, with one added argument, on any declared model. It is the baseline
-the faster implementations are measured against.
+takes, with one added argument, on any declared model. It is the
+baseline the faster implementations are measured against.
 `drto.advanced_step_controller` and the fitted policy of feature 026 both
 exist to take the delay out of the loop, and what they remove is only
-measurable against a loop that carries it.
+measurable against a loop that has it.
 
 ## Acceptance criteria
 
@@ -94,7 +96,7 @@ measurable against a loop that carries it.
 - Each step solves at the measurement. The delay is the solver-reported
   solve time converted into the declared time set's units when `delay` is
   `"solver"`, and a number or per-step sequence in those units otherwise.
-  On a model whose time carries no units, `delay="solver"` is a
+  On a model whose time set has no units, `delay="solver"` is a
   descriptive error. The sample simulates as two elements of exact
   lengths, the delay under the previous move and the rest of the sample
   under the new one, the duration a parameter of the process simulation
