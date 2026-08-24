@@ -17,7 +17,7 @@ import drto
 
 history = drto.nonideal_nmpc(
     m,
-    steps=50,                          # loop length, in samples
+    steps=50,                          # loop length, in intervals
     initial_condition={"z": 0.2},      # written into the initial-condition
                                        # Params. Omitted, they keep their
                                        # current values
@@ -54,20 +54,21 @@ into the declared time set's units, or the value `delay` prescribes,
 already in those units. With no units on the declared time set the
 reported seconds cannot be converted, so `delay="solver"` is a
 descriptive error saying to prescribe a delay instead. The new move takes
-effect one delay into the sample. Two moves therefore apply in each
-sample, which runs as two simulations of the one-element plant. The
-process advances for the delay under the previous move, then for the
-rest of the sample under the new one. The process simulation's duration
+effect one delay into the sampling interval. Two moves therefore apply
+in each interval, which runs as two simulations of the one-element
+plant. The process advances for the delay under the previous move, then
+for the rest of the interval under the new one. The simulation's duration
 is a parameter, so both lengths are exact and the plant is discretized
 once. A piece of zero length is not simulated. A zero delay runs the
-sample in one piece under the new move, and a delay at the sample length
-runs it in one piece under the previous move. On the first step, the
-previous move is the declared control targets, the inputs the process
-held before the loop.
+interval in one piece under the new move, and a delay at the interval
+length runs it in one piece under the previous move. On the first step,
+the previous move is the declared control targets, the inputs the
+process held before the loop.
 
-When a solve takes longer than the sample, a delay at or past the
-sampling time, the previous move holds for the whole sample and the new
-move takes effect at the next sample boundary, recorded as clamped.
+When a solve takes longer than the interval, a delay at or past the
+interval length, the previous move holds for the whole interval and the
+new move takes effect at the next interval boundary, recorded as
+clamped.
 
 The history is `drto.ideal_nmpc`'s, adding each step's delay and the time
 each move took effect. The moves plot as a staircase stepping at those
@@ -76,7 +77,7 @@ times.
 ## Benefit hypothesis
 
 A closed loop that accounts for the controller's computation time is
-cumbersome to program by hand. Each sample has to be split at the moment
+cumbersome to program by hand. Each interval has to be split at the moment
 the solve returns, the process advanced under the previous move and
 then under the new one, and the split point recomputed every step from
 that step's solve time. Writing that once per model is enough work that
@@ -97,17 +98,18 @@ measurable against a loop that has it.
   solve time converted into the declared time set's units when `delay` is
   `"solver"`, and a number or per-step sequence in those units otherwise.
   On a model whose time set has no units, `delay="solver"` is a
-  descriptive error. The sample runs as two simulations of exact
-  lengths, the delay under the previous move and the rest of the sample
+  descriptive error. The interval runs as two simulations of exact
+  lengths, the delay under the previous move and the rest of the interval
   under the new one, the duration a parameter of the process simulation
   and a zero-length piece not simulated.
 - The first step's previous move is the declared control targets. A delay
-  at or past the sample end keeps the previous move for the whole sample
-  and the move takes effect at the next boundary, recorded as clamped.
+  at or past the interval end keeps the previous move for the whole
+  interval and the move takes effect at the next boundary, recorded as
+  clamped.
 - `delay=0` reproduces `drto.ideal_nmpc` exactly. A delay at the
-  sampling time holds every move for a full sample before it takes
+  interval length holds every move for a full interval before it takes
   effect.
 - The history adds each step's delay and each move's effect time, and the
   moves plot as a staircase stepping at those times.
-- On hicks with zero disturbances and a delay shorter than the sampling
-  time, the actual states settle to the declared targets.
+- On hicks with zero disturbances and a delay shorter than the interval
+  length, the actual states settle to the declared targets.
