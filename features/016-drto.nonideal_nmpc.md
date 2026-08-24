@@ -54,14 +54,14 @@ into the declared time set's units, or the value `delay` prescribes,
 already in those units. With no units on the declared time set the
 reported seconds cannot be converted, so `delay="solver"` is a
 descriptive error saying to prescribe a delay instead. The new move takes
-effect one delay into the sample. Two moves therefore apply in every
-simulation step, which runs as two finite elements of different
-lengths. The process advances for the delay under the previous move, then
-for the rest of the sample under the new one. The process simulation's
-duration is a parameter, so both lengths are exact on its fixed grid. A
-piece of zero length is not simulated. A zero delay runs the sample in
-one piece under the new move, and a delay at the sample length runs it
-in one piece under the previous move. On the first step, the previous
+effect one delay into the sample. Two moves therefore apply in each
+sample, which runs as two simulations of the one-element plant. The
+process advances for the delay under the previous move, then for the
+rest of the sample under the new one. The process simulation's duration
+is a parameter, so both lengths are exact and the plant is discretized
+once. A piece of zero length is not simulated. A zero delay runs the
+sample in one piece under the new move, and a delay at the sample length
+runs it in one piece under the previous move. On the first step, the
 move is the declared control targets, the inputs the process held
 before the loop.
 
@@ -97,7 +97,7 @@ measurable against a loop that has it.
   solve time converted into the declared time set's units when `delay` is
   `"solver"`, and a number or per-step sequence in those units otherwise.
   On a model whose time set has no units, `delay="solver"` is a
-  descriptive error. The sample simulates as two elements of exact
+  descriptive error. The sample runs as two simulations of exact
   lengths, the delay under the previous move and the rest of the sample
   under the new one, the duration a parameter of the process simulation
   and a zero-length piece not simulated.
