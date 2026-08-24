@@ -62,8 +62,8 @@ is a parameter, so both lengths are exact and the plant is discretized
 once. A piece of zero length is not simulated. A zero delay runs the
 sample in one piece under the new move, and a delay at the sample length
 runs it in one piece under the previous move. On the first step, the
-move is the declared control targets, the inputs the process held
-before the loop.
+previous move is the declared control targets, the inputs the process
+held before the loop.
 
 When a solve takes longer than the sample, a delay at or past the
 sampling time, the previous move holds for the whole sample and the new
