@@ -36,7 +36,8 @@ hand-roll black or pytest flags):
 - `python -m sphinx -b html -W --keep-going docs docs/_build/html` -- docs build, warnings as errors.
 - `python -c "import drto; print('drto', drto.__version__)"` -- import drto with only base deps.
 
-These mirror the CI lint, test, docs, and import-base jobs;
+These mirror the CI lint, test, docs, and import-base jobs. CI also
+runs a min-deps job at the floor (Python 3.10, `pyomo==6.10.1`), and
 `.github/workflows/ci.yml` is the source of truth for the exact steps.
 
 This is a single pure-Python package that matches its siblings pyomo-cvp and
