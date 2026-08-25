@@ -133,8 +133,12 @@ on the first move.
   finite-horizon controls: default `'collocation'` (the element's
   collocation polynomial through all its collocation points), the
   accuracy-first class with `beta` as the safety margin, and
-  `piecewise_constant` as the conservative option. Raw unparameterized copies
-  are never left on the segment.
+  `piecewise_constant` as the conservative option. Raw unparameterized
+  copies are never left on the segment. A control declared on a
+  component that points at existing variables (an inlet Port's
+  `flow_vol`) gets one segment copy, and the replicated equations are
+  routed to it rather than to separate copies of the variables it
+  points at (gh #18).
 - `gamma` is a mutable Param set by an option whose default, `'rule'`,
   derives it from the mesh rule `tanh(gamma*dt) = tau_11`, which puts the
   segment's first collocation point one sampling time past the junction,
@@ -164,6 +168,12 @@ on the first move.
 - A variable copied to the segment with no replicated equation involving
   it errors, naming the variable. A silently free variable there is a
   wrong tail the solver exploits.
+- A declared disturbance referenced by the replicated equations gets a
+  segment copy fixed at zero, so the tail continues under nominal
+  disturbance unless told otherwise. A `disturbances` option maps a
+  declared disturbance to the constant its copy is fixed at, a scalar
+  held everywhere or one value per non-time index (a multi-component
+  feed). A value for an undeclared disturbance is a descriptive error.
 - The finite grid's final instant becomes the linking time. Model
   equations there reference the last move, which pyomo-cvp
   resolves by the constraint's own structure. No convention is declared
