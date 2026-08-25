@@ -40,9 +40,9 @@ These mirror the CI lint, test, docs, and import-base jobs. CI also
 runs a min-deps job at the floor (Python 3.10, `pyomo==6.10.1`), and
 `.github/workflows/ci.yml` is the source of truth for the exact steps.
 
-This is a single pure-Python package that matches its siblings pyomo-cvp and
-pyomo-cp. When adding a file, copy the shape of the nearest sibling rather
-than inventing a new one.
+This is a single pure-Python package that matches its sibling pyomo-cvp.
+When adding a file, copy the shape of the nearest sibling rather than
+inventing a new one.
 
 - **License:** BSD-3-Clause. Every source file carries the two-line header
   `# Copyright (c) 2026 Devin Griffith` /
@@ -55,6 +55,11 @@ than inventing a new one.
   `pyomo.common.dependencies.attempt_import` so the package imports cleanly
   when a backend (the pounce solver, pyomo-cvp) is absent. Prefer explicit
   declaration over introspection throughout.
+- **Solvers:** every solve goes through Pyomo's native interface,
+  `pyomo.contrib.solver.common.factory.SolverFactory`. pounce, the
+  default solver, registers there when `pyomo_pounce` is imported. The
+  legacy `pyo.SolverFactory` is not used anywhere, examples and tests
+  included.
 - **Do not defer tech debt:** fix deprecated deps, outdated action versions,
   and floating refs in the same pass you notice them.
 
