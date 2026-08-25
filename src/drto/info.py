@@ -52,6 +52,13 @@ _KIND_LABELS = (
     ("arrival_cost", "arrival cost"),
 )
 
+#: Declaration kinds the view leaves out. A kind belongs here when one
+#: transformation writes it for another to read rather than a user declaring
+#: it, so a reader can act on nothing in the row. ``drto.infinite_horizon``
+#: records a ``cost_group`` per weighted term set for ``drto.build_objective``
+#: to sum (gh #104). The records stay in the registry for those readers.
+_UNRENDERED_KINDS = ("cost_group",)
+
 #: Fallback free-index names, for rules whose own argument names are
 #: unavailable.
 _INDEX_NAMES = ("k", "j", "i", "l")
@@ -264,7 +271,11 @@ class Info:
         """Yield ``(label, text)`` pairs for the declaration view."""
         labels = dict(_KIND_LABELS)
         ordered = [k for k, _ in _KIND_LABELS if k in self._declarations]
-        extra = [k for k in self._declarations if k not in labels]
+        extra = [
+            k
+            for k in self._declarations
+            if k not in labels and k not in _UNRENDERED_KINDS
+        ]
         for kind in ordered + extra:
             label = labels.get(kind, kind)
             records = self._declarations[kind]

@@ -6,6 +6,7 @@ import pytest
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
+from test_declarations import declared_model as fully_declared_model
 
 
 def declared_model():
@@ -128,6 +129,22 @@ def test_repr_keeps_component_names_ending_in_an_underscored_number():
     reg.record_declaration("dynamics", m.ode)
     text = repr(reg)
     assert "dz_1[t]  ==  - k0_1*z_1[t] - k0_2*z_1[t]**2  for t in t" in text
+
+
+def test_the_view_leaves_out_cost_group_records():
+    # infinite_horizon records a cost_group per weighted term set for
+    # build_objective to read, so the row names nothing the user declared
+    # and both records name the same segment block (gh #104)
+    m = fully_declared_model()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    reg = drto.info(m)
+    # the records stay for build_objective; only the view drops them
+    assert len(reg.declarations("cost_group")) == 2
+    assert "cost_group" not in repr(reg)
+    assert "cost_group" not in reg._repr_html_()
 
 
 def test_repr_falls_back_for_skip_guarded_rules():

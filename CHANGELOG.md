@@ -341,6 +341,13 @@ All notable changes to this project are documented here. The format is based on
   replacement now matches a placeholder only where the underscore is not
   preceded by a word character.
 
+- The registry view leaves out the `cost_group` records (gh #104). A
+  model carrying a terminal segment rendered the row
+  `cost_group: drto_ih, drto_ih`, which named the same segment block
+  twice and nothing the user declared. `drto.infinite_horizon` records a
+  `cost_group` per weighted term set for `drto.build_objective` to sum,
+  so the records stay in the registry and only the view drops them.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
