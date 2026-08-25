@@ -27,14 +27,21 @@ drto.info(m)   # now also shows the reduction and what it did
 
 ## Benefit hypothesis
 
-DRTO already has to store the declarations somewhere for the transformations to
-consume, so folding an ordered log of applied transformations into that same
-registry is nearly free, and it replaces the ad-hoc per-transformation
-markers with one uniform mechanism. A single source of truth makes re-application
-guards and composition consistent across every transformation, and gives clear,
-model-aware error messages. Backing it with Pyomo's namespaced private data
-keeps it isolated from the user's component namespace and correct under model
-cloning, which the `create_using` form of every transformation depends on.
+As DRTO transforms a model, it frees and fixes variables, drops cost
+terms, installs objectives, and appends segments, and none of that is
+visible afterward except by inspecting components one by one. The
+registry view shows the declarations by role and each applied
+transformation with its outcome, so the user can read what DRTO has done
+to the model and check that the problem about to be solved is the one
+they meant.
+
+DRTO already has to store the declarations somewhere for the
+transformations to consume, so the record is nearly free, and using it
+as the one source for re-application guards and composition makes those
+checks and their error messages consistent across every transformation.
+Backing it with Pyomo's namespaced private data keeps it isolated from
+the user's component namespace and correct under model cloning, which
+the `create_using` form of every transformation depends on.
 
 ## Acceptance criteria
 
