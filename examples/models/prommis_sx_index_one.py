@@ -413,7 +413,7 @@ def build(N=8, h=1, ncp=3, noise=True):
                   m.w_sa, m.w_sh, m.w_ss, m.w_so):
             w.fix(0.0)
 
-    # feedback hooks: one Param per state, filled by the caller
+    # the initial state, one Param per state, filled by the caller
     m.ic_metal = pyo.Param(elements, initialize=1.0, mutable=True)
     m.ic_h = pyo.Param(initialize=1.0, mutable=True)
     m.ic_s = pyo.Param(initialize=1.0, mutable=True)

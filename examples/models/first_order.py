@@ -32,7 +32,8 @@ def first_order(N=10, h=1):
     # a consistent equilibrium pair: dz/dt = 0 requires z = u for this model
     m.z_ss = pyo.Param(initialize=0.5, mutable=True)  # tracking targets
     m.u_ss = pyo.Param(initialize=0.5, mutable=True)
-    m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # state feedback hook
+    m.z_hat = pyo.Param(initialize=0.4, mutable=True)  # the initial state,
+                                                       # set as feedback
 
     m.z = pyo.Var(m.t, initialize=0.4)
     m.dzdt = DerivativeVar(m.z, wrt=m.t)

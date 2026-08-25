@@ -56,7 +56,7 @@ def cart_pole(N=10, h=1):
     m.theta_dot_ss = pyo.Param(initialize=0.0, mutable=True)
     m.F_ss = pyo.Param(initialize=0.0, mutable=True)
 
-    # the initial state (hooks): a 40-degree tilt at rest
+    # the initial state, set as feedback: a 40-degree tilt at rest
     m.x_hat = pyo.Param(initialize=0.0, mutable=True)
     m.x_dot_hat = pyo.Param(initialize=0.0, mutable=True)
     m.theta_hat = pyo.Param(initialize=math.radians(40), mutable=True)

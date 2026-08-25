@@ -112,8 +112,8 @@ def klatt_engell(N=20, h=0.005, ncp=2, move_penalty=True):
     # control-deviation weights for the move_penalty=False form
     m.r_f = pyo.Param(initialize=0.0, mutable=True)
     m.r_q = pyo.Param(initialize=0.0, mutable=True)
-    m.ca_hat = pyo.Param(initialize=0.8, mutable=True)  # state feedback hooks
-    m.cb_hat = pyo.Param(initialize=0.5, mutable=True)
+    m.ca_hat = pyo.Param(initialize=0.8, mutable=True)  # the initial state,
+    m.cb_hat = pyo.Param(initialize=0.5, mutable=True)  # set as feedback
     m.tr_hat = pyo.Param(initialize=134.14, mutable=True)
     m.tk_hat = pyo.Param(initialize=130.0, mutable=True)
     m.F_prev = pyo.Param(initialize=52.5, mutable=True)  # previous control action

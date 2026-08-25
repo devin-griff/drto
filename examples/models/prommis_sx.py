@@ -155,8 +155,8 @@ def build(N=8, h=1, ncp=3, noise=True):
     drto.control(m.fs.og_feed, m.fs.aq_feed, profile="piecewise_constant")
 
     # additive process noise, one zero-mean term per state's balance
-    # (mol/hr), appended to the rows since MSContactor has no custom-term
-    # hooks; zero nominally, so the noise-free model is untouched
+    # (mol/hr), added into the balance equations, since MSContactor takes
+    # no custom terms. Zero nominally, so the noise-free model is untouched
     def _noise(name, con, index):
         w = pyo.Var(m.fs.time, initialize=0.0, units=U.mol / U.hour)
         m.fs.add_component(name, w)
@@ -177,7 +177,7 @@ def build(N=8, h=1, ncp=3, noise=True):
                 terms.append(_noise(f"w_so{i}_{j}", og.material_balances, (x, j)))
         drto.disturbance(*terms)
 
-    # feedback hooks: one Param per state, filled by the caller
+    # the initial state, one Param per state, filled by the caller
     t0 = m.fs.time.first()
     m.ic_maq = pyo.Param(maq, initialize=1.0, mutable=True, units=U.mol)
     m.ic_dehpa = pyo.Param(initialize=1.0, mutable=True, units=U.mol)

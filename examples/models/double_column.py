@@ -70,7 +70,8 @@ def double_column(N=25, h=1):
     m.zF1 = pyo.Param(initialize=d["zF"][0], mutable=True)  # feed composition A
     m.zF2 = pyo.Param(initialize=d["zF"][1], mutable=True)  # feed composition B
 
-    # the reference steady state (targets) and the initial state (hooks)
+    # the reference steady state (targets) and the initial state
+    # (feedback Params)
     x1r, x2r = d["x1_ref"], d["x2_ref"]
     m.x1_ss = pyo.Param(m.tray, m.comp, initialize=lambda m, i, j: x1r[i - 1][j - 1], mutable=True)
     m.x2_ss = pyo.Param(m.tray, m.comp, initialize=lambda m, i, j: x2r[i - 1][j - 1], mutable=True)
