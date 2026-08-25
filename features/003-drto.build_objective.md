@@ -69,10 +69,10 @@ installs it the same way every time.
 - It is also registered as `TransformationFactory('drto.build_objective')` so a
   user can apply it on its own. The transform calls the same function, and both
   `apply_to` (in place) and `create_using` (a clone) work.
-- An empty cost sum is not a case build_objective has to guard. The
+- The mode transforms never hand build_objective an empty cost sum. The
   optimization transforms each require a stage cost (features 006 and
-  009), so it is never asked to assemble a cost objective with no live
-  cost term. A dynamic
-  optimization with no stage cost is impossible by construction, caught by the
-  transform's requirements. The simulation modes take the zero option rather
-  than relying on an empty sum.
+  009), so a dynamic optimization with no stage cost is impossible by
+  construction, and the simulation modes take the zero option rather
+  than relying on an empty sum. A direct call finding no live cost term
+  raises a descriptive error naming the stage-cost declaration and the
+  zero option.
