@@ -6,8 +6,9 @@
 Each declaration function tags a Pyomo component, validates that it is of the
 expected type and meets the declaration's convention, and records it in the
 model's registry (``drto.info``, feature 001), where the transformations find
-it. Declarations are the public surface: drto bolts onto an existing model
-rather than replacing how the user builds one.
+it. Declarations are the public surface. Each one tags a component the
+user already wrote, so the model is built as an ordinary Pyomo model and
+declared afterwards or as it is written.
 
 Every function serves two calling styles. Tagging: handed a component already
 attached to the model, it registers immediately, so a finished model is
@@ -201,10 +202,11 @@ def _declare_many(kind, components, fn, **metadata):
     """Record an accumulating declaration, rejecting duplicates."""
     if not components:
         raise TypeError(f"drto: {fn} needs at least one component.")
-    model = _container(components[0], fn).model()
+    # every caller validates each component with _container first, so this
+    # takes the model from the first component and checks the rest against it
+    model = components[0].model()
     reg = info(model)
     for comp in components:
-        _container(comp, fn)
         if comp.model() is not model:
             raise ValueError(
                 f"drto: {fn}: '{comp.name}' is on a different model than "
@@ -621,7 +623,9 @@ def _register_stage_cost(kind, component, fn):
             raise ValueError(
                 f"drto: {fn}: '{component.name}' is indexed by the time set "
                 f"'{time.name}': discretization expands such a family to every "
-                f"collocation point, dragging the cost off the sample grid. "
+                f"collocation point, and the objective sums the cost at the "
+                f"samples only, so it never includes the members "
+                f"discretization added. "
                 f"Index it over the samples, for example "
                 f"@m.Constraint(sorted(m.t)[:-1])."
             )
@@ -652,8 +656,13 @@ def _register_stage_cost(kind, component, fn):
     _declare_single(kind, component, fn)
 
 
-def _declare_stage_cost(kind, args, fn, kwargs):
-    """Dispatch a stage-cost declaration across the three calling styles."""
+def _declare_stage_cost(kind, args, kwargs):
+    """Dispatch a stage-cost declaration across the three calling styles.
+
+    ``kind`` is both the registry key and the declaring function's name,
+    and the error messages use it.
+    """
+    fn = kind
     if args and _is_block(args[0]):
         block, sets = args[0], args[1:]
         return _constraint_decorator(
@@ -679,9 +688,7 @@ def tracking_stage_cost(*args, **kwargs):
     cost owns it). Declare the states and controls first. Tags, wraps, or
     builds as a decorator: ``@drto.tracking_stage_cost(m, sorted(m.t)[:-1])``.
     """
-    return _declare_stage_cost(
-        "tracking_stage_cost", args, "tracking_stage_cost", kwargs
-    )
+    return _declare_stage_cost("tracking_stage_cost", args, kwargs)
 
 
 def economic_stage_cost(*args, **kwargs):
@@ -690,17 +697,15 @@ def economic_stage_cost(*args, **kwargs):
     One side of each member is the scalar running-cost variable; the other
     defines the cost. One per model. Tags, wraps, or builds as a decorator.
     """
-    return _declare_stage_cost(
-        "economic_stage_cost", args, "economic_stage_cost", kwargs
-    )
+    return _declare_stage_cost("economic_stage_cost", args, kwargs)
 
 
 def _move_cost_containment(component, fn):
-    """The move cost prices control members inside each member's window.
+    """The move cost penalizes control members inside each member's window.
 
     Each member's defining side may reference only declared control
     members, at the member's own sample or the one before it. Params (the
-    weights, and the previous action the first member is priced against)
+    weights, and the previous action the first member is measured against)
     pass untouched; the defining cost variable sits on the other side of
     the equality.
     """
@@ -709,7 +714,7 @@ def _move_cost_containment(component, fn):
     if not controls:
         raise ValueError(
             f"drto: {fn}: declare the controls before the move cost; it "
-            f"prices their moves."
+            f"penalizes their moves."
         )
     owner_of = {}
     for comp in controls:
@@ -743,9 +748,9 @@ def move_suppression(*args, **kwargs):
     """Declare the move-suppression cost, a per-sample equality.
 
     One side of each member is the scalar move-cost variable; the other
-    prices the control moves, referencing declared control members at
+    penalizes the control moves, referencing declared control members at
     that sample and the one before, plus Params (the weights, and the
-    previous action the first member is priced against). One per model,
+    previous action the first member is measured against). One per model,
     indexed over the samples minus the final time; requires a declared
     horizon, since a steady-state model has no moves. The objective sums
     it with the stage costs, the steady-state reduction drops it, and
@@ -753,16 +758,20 @@ def move_suppression(*args, **kwargs):
     tail integrand. Tags, wraps, or builds as a decorator:
     ``@drto.move_suppression(m, sorted(m.t)[:-1])``.
     """
-    return _declare_stage_cost("move_suppression", args, "move_suppression", kwargs)
+    return _declare_stage_cost("move_suppression", args, kwargs)
 
 
-def _declare_scalar_cost(kind, args, fn, kwargs, scalar_reason, var_desc):
+def _declare_scalar_cost(kind, args, kwargs, scalar_reason, var_desc):
     """Declare a scalar-LHS equality cost across the three calling styles.
 
     Shared by the terminal-form costs, a single scalar equality Constraint
     whose one side is the scalar cost variable: the tracking terminal cost,
     and the estimation terminal and arrival costs (feature 018).
+
+    ``kind`` is both the registry key and the declaring function's name,
+    and the error messages use it.
     """
+    fn = kind
 
     def register(component):
         if component.is_indexed():
@@ -799,7 +808,6 @@ def tracking_terminal_cost(*args, **kwargs):
     return _declare_scalar_cost(
         "tracking_terminal_cost",
         args,
-        "tracking_terminal_cost",
         kwargs,
         "the terminal cost applies at the final time only",
         "the scalar terminal-cost variable",
@@ -1145,9 +1153,7 @@ def estimation_stage_cost(*args, **kwargs):
     One per model, indexed over the samples minus the final time (the terminal
     term owns it). Tags, wraps, or builds as a decorator.
     """
-    return _declare_stage_cost(
-        "estimation_stage_cost", args, "estimation_stage_cost", kwargs
-    )
+    return _declare_stage_cost("estimation_stage_cost", args, kwargs)
 
 
 def estimation_terminal_cost(*args, **kwargs):
@@ -1160,7 +1166,6 @@ def estimation_terminal_cost(*args, **kwargs):
     return _declare_scalar_cost(
         "estimation_terminal_cost",
         args,
-        "estimation_terminal_cost",
         kwargs,
         "the terminal estimation cost applies at the present time only",
         "the scalar terminal estimation-cost variable",
@@ -1178,7 +1183,6 @@ def arrival_cost(*args, **kwargs):
     return _declare_scalar_cost(
         "arrival_cost",
         args,
-        "arrival_cost",
         kwargs,
         "the arrival cost applies at the initial time only",
         "the scalar arrival-cost variable",
