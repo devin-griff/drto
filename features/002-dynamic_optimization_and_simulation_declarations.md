@@ -170,7 +170,13 @@ rather than re-deriving them.
   constraint's tN) find the time coordinate inside the member's index.
 - `state(m.z, ...)` tags one or more state Vars. A state has a
   `DerivativeVar` only in a dynamic model, so a steady-state model's
-  states need not have one and `state` does not require it.
+  states need not have one and `state` does not require it. A
+  member-subset slice of an indexed Var (`holdup[:, "Liq", "NaOH"]`)
+  declares the true state members when the container also holds
+  algebraic entries, an IDAES holdup with water left out. The slice is
+  wrapped as a Reference attached beside the sliced Var, the Reference
+  is the declared state, and the container's other members stay
+  undeclared (gh #20).
 - `control(m.u, ..., profile=...)` tags one or more manipulated-input
   Vars and sets their parameterization (piecewise-constant, ...) over the
   declared time set via pyomo-cvp. The `profile` applies to the controls named in
@@ -230,7 +236,9 @@ rather than re-deriving them.
   only states at the final time point.
 - `steady_state(m.z, m.z_ss)` pairs a declared state with the mutable
   Param holding its setpoint, and `steady_state_control(m.u, m.u_ss)`
-  pairs a declared control with its setpoint Param. Each call takes one
+  pairs a declared control with its setpoint Param. The owner may be
+  the same member-subset slice that declared the state, which resolves
+  to the declared Reference by member identity. Each call takes one
   pair and calls accumulate. Re-declaring the same pair is idempotent,
   a different target for a state or control that already has one is
   rejected, a target Param cannot be paired with two owners (in either
