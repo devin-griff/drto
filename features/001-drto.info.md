@@ -25,29 +25,10 @@ pyo.TransformationFactory("drto.dynamic_to_steady_state").apply_to(m)
 drto.info(m)   # now also shows the reduction and what it did
 ```
 
-On the hicks dynamic optimization of the examples, the console rendering
-reads:
+On the hicks dynamic optimization of the examples, the notebook
+rendering reads:
 
-```
-<drto registry>
-states: 2, controls: 2
-declarations:
-  horizon: t (ContinuousSet, 151 points)
-  states: zc (free), zt (free)
-  dynamics: dzc[t]  ==  (1 - zc[t])/(u2sf*v2[t]) - k0*zc[t]*exp(- ea/zt[t])  for t in t
-  dynamics: dzt[t]  ==  (ztf - zt[t])/(u2sf*v2[t]) + k0*zc[t]*exp(- ea/zt[t]) - a0*u1sf*v1[t]*(zt[t] - ztcw)  for t in t
-  controls: v1 (piecewise_constant, free), v2 (piecewise_constant, free)
-  tracking stage cost: cost[t]  ==  10*(zc[t] - zc_ss)**2 + 2*(zt[t] - zt_ss)**2 + (v1[t] - v1_ss)**2 + 0.5*(v2[t] - v2_ss)**2  for t in sorted(t)[:-1]
-  terminal cost: term  ==  10*(zc[50] - zc_ss)**2 + 2*(zt[50] - zt_ss)**2
-  initial conditions: zc[0]  ==  zc_hat
-  initial conditions: zt[0]  ==  zt_hat
-  steady-state targets: zc_ss (of zc), zt_ss (of zt)
-  steady-state control targets: v1_ss (of v1), v2_ss (of v2)
-transformations:
-  drto.parameterize: profiles=v1 (piecewise_constant), v2 (piecewise_constant)
-  drto.build_objective: objective=sum of 51 weighted cost terms
-  drto.dynamic_optimization: horizon=kept, tracking_weight=(one stage cost declared), sensitivity=2 initial-condition Params declared
-```
+<div class="drto-registry"><b>drto registry</b><table><tbody><tr><td colspan="2">states: 2, controls: 2</td></tr><tr><td>horizon</td><td><code>t (ContinuousSet, 151 points)</code></td></tr><tr><td>states</td><td><code>zc (free), zt (free)</code></td></tr><tr><td>dynamics</td><td><code>dzc[t]  ==  (1 - zc[t])/(u2sf*v2[t]) - k0*zc[t]*exp(- ea/zt[t])  for t in t</code></td></tr><tr><td>dynamics</td><td><code>dzt[t]  ==  (ztf - zt[t])/(u2sf*v2[t]) + k0*zc[t]*exp(- ea/zt[t]) - a0*u1sf*v1[t]*(zt[t] - ztcw)  for t in t</code></td></tr><tr><td>controls</td><td><code>v1 (piecewise_constant, free), v2 (piecewise_constant, free)</code></td></tr><tr><td>tracking stage cost</td><td><code>cost[t]  ==  10*(zc[t] - zc_ss)**2 + 2*(zt[t] - zt_ss)**2 + (v1[t] - v1_ss)**2 + 0.5*(v2[t] - v2_ss)**2  for t in sorted(t)[:-1]</code></td></tr><tr><td>terminal cost</td><td><code>term  ==  10*(zc[50] - zc_ss)**2 + 2*(zt[50] - zt_ss)**2</code></td></tr><tr><td>initial conditions</td><td><code>zc[0]  ==  zc_hat</code></td></tr><tr><td>initial conditions</td><td><code>zt[0]  ==  zt_hat</code></td></tr><tr><td>steady-state targets</td><td><code>zc_ss (of zc), zt_ss (of zt)</code></td></tr><tr><td>steady-state control targets</td><td><code>v1_ss (of v1), v2_ss (of v2)</code></td></tr></tbody></table><b>transformations</b><ol><li><code>drto.parameterize: profiles=v1 (piecewise_constant), v2 (piecewise_constant)</code></li><li><code>drto.build_objective: objective=sum of 51 weighted cost terms</code></li><li><code>drto.dynamic_optimization: horizon=kept, tracking_weight=(one stage cost declared), sensitivity=2 initial-condition Params declared</code></li></ol></div>
 
 ## Benefit hypothesis
 
