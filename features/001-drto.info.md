@@ -58,12 +58,13 @@ cloning, which the `create_using` form of every transformation depends on.
   in it is remapped to the clone's components, not the source model's.
 - The applied declarations and the ordered list of applied
   transformations can be read back.
-- Guarding uses the registry as the record of what DRTO has applied, on the
-  assumption that DRTO drives a model of fixed form. Where it is cheap, a
-  transformation additionally cross-checks the model itself, for example that
-  the objective it would build is not already present. If the user
-  mutates the model outside DRTO between transformations, the outcome is
-  not guaranteed.
+- A transformation deciding whether it may run reads the registry as the
+  record of what has been applied, rather than inspecting the model, on
+  the assumption that only DRTO transformations change the model's form.
+  Where it is cheap, a transformation additionally cross-checks the model
+  itself, for example that the objective it would build is not already
+  present. If the user mutates the model outside DRTO between
+  transformations, the outcome is not guaranteed.
 - Displaying `drto.info(m)` renders a readable, DRTO-aware view of the model: a
   `__repr__` for the console and a `_repr_html_` for a Jupyter notebook panel,
   while its attributes stay queryable.
