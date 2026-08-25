@@ -71,10 +71,8 @@ on the first move.
   `tracking_stage_cost`, and errors clearly if any is missing.
 - A cost declared with `economic_stage_cost` may be present alongside.
   The segment replicates only the tracking stage cost, and the economic
-  terms stay on the finite horizon. An economic stage cost is a nonzero
-  constant at the equilibrium, so its tail integral diverges and its
-  quadrature would be mesh-dependent rather than an approximation. For
-  the same reason `economic_stage_cost` alone is rejected.
+  terms stay on the finite horizon. `economic_stage_cost` alone is
+  rejected.
 - It applies to a model whose declared time set is already discretized. It
   builds a segment ContinuousSet on [0, 1] carrying the transformed time and
   discretizes it itself with Gauss-Legendre collocation (`nfe` and `ncp`
