@@ -259,12 +259,14 @@ rather than re-deriving them.
   The terminal cost does the same over the states alone. Violations are
   descriptive errors at declaration, which is why the states and controls
   precede the costs in the declaration order.
-- Cost variables are left unbounded. The defining equality fixes the
-  value, so a `NonNegativeReals` bound adds no information, and it places
-  the optimum exactly on the bound wherever the cost vanishes: settled
-  samples on a long horizon, a tail at equilibrium. Interior-point solvers
-  take many more iterations there (Hicks at N = 50: 43 iterations with
-  the bound against 6 without, identical solutions).
+- Leaving cost variables unbounded is a documented convention, not a
+  rule the declarations enforce. Nothing reads a cost variable's bounds.
+  The defining equality fixes the value, so a `NonNegativeReals` bound
+  adds no information, and it places the optimum exactly on the bound
+  wherever the cost vanishes, at settled samples on a long horizon or
+  through a tail at equilibrium. Interior-point solvers take many more
+  iterations there (Hicks at N = 50: 43 iterations with the bound
+  against 6 without, identical solutions).
 - Path constraints are not declared. They are the state variables' own
   bounds.
 - The estimation declarations (measurements, disturbances, arrival cost, and the
