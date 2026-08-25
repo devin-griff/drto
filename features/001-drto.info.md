@@ -25,6 +25,30 @@ pyo.TransformationFactory("drto.dynamic_to_steady_state").apply_to(m)
 drto.info(m)   # now also shows the reduction and what it did
 ```
 
+On the hicks dynamic optimization of the examples, the console rendering
+reads:
+
+```
+<drto registry>
+states: 2, controls: 2
+declarations:
+  horizon: t (ContinuousSet, 151 points)
+  states: zc (free), zt (free)
+  dynamics: dzc[t]  ==  (1 - zc[t])/(u2sf*v2[t]) - k0*zc[t]*exp(- ea/zt[t])  for t in t
+  dynamics: dzt[t]  ==  (ztf - zt[t])/(u2sf*v2[t]) + k0*zc[t]*exp(- ea/zt[t]) - a0*u1sf*v1[t]*(zt[t] - ztcw)  for t in t
+  controls: v1 (piecewise_constant, free), v2 (piecewise_constant, free)
+  tracking stage cost: cost[t]  ==  10*(zc[t] - zc_ss)**2 + 2*(zt[t] - zt_ss)**2 + (v1[t] - v1_ss)**2 + 0.5*(v2[t] - v2_ss)**2  for t in sorted(t)[:-1]
+  terminal cost: term  ==  10*(zc[50] - zc_ss)**2 + 2*(zt[50] - zt_ss)**2
+  initial conditions: zc[0]  ==  zc_hat
+  initial conditions: zt[0]  ==  zt_hat
+  steady-state targets: zc_ss (of zc), zt_ss (of zt)
+  steady-state control targets: v1_ss (of v1), v2_ss (of v2)
+transformations:
+  drto.parameterize: profiles=v1 (piecewise_constant), v2 (piecewise_constant)
+  drto.build_objective: objective=sum of 51 weighted cost terms
+  drto.dynamic_optimization: horizon=kept, tracking_weight=(one stage cost declared), sensitivity=2 initial-condition Params declared
+```
+
 ## Benefit hypothesis
 
 As DRTO transforms a model, it frees and fixes variables, drops cost
