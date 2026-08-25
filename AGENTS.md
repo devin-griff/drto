@@ -11,14 +11,15 @@ per-feature status and is the only place that tracks it: do not restate
 implementation status here or in README.md, since a second copy goes stale
 silently. The design is settled and recorded:
 
-- **DESIGN.md** is the authoritative design record: the six-mode framework,
-  the declaration surface, and the current design.
-- **README.md** is the user-facing overview of the same.
+- **features/** is the authoritative design record, one numbered spec
+  per feature, each stating the surface and its acceptance criteria.
+- **README.md** is the user-facing overview, including the six-mode
+  framework.
 
-Treat both as the source of truth. Before touching anything on the
-declaration or API surface, read DESIGN.md. It states the design as it stands
-now, so if new work changes the design, update DESIGN.md to match rather than
-diverging from it silently.
+Treat them as the source of truth. Before touching anything on the
+declaration or API surface, read the feature's spec. A spec states the
+design as it stands now, so if new work changes the design, amend the
+spec to match rather than diverging from it silently.
 
 Development is spec-first: each feature is specified in `features/` before it
 is implemented. Read the feature's spec and build to its acceptance criteria,
@@ -71,10 +72,10 @@ tracker records every item with a verification receipt (see
 
 No em dashes anywhere: code, comments, docs, commit messages, changelog.
 Short plain sentences. Comments state present-tense constraints and
-rationale, not development history. Design history lives in `dev-notes/` and
-`DESIGN.md`, not in code comments.
+rationale, not development history. Design history lives in `dev-notes/`, not
+in code comments.
 
-## Intended module map (grows from DESIGN.md)
+## Module map
 
 - The declaration surface (bare nouns: `horizon`, `state`, `dynamics`,
   `control`, the cost and boundary declarations, the paired steady-state
@@ -85,7 +86,5 @@ rationale, not development history. Design history lives in `dev-notes/` and
   by simulation / optimization / estimation); the ideal / nonideal /
   advanced-step execution variants are variants of dynamic optimization, not
   separate modes.
-- The sensitivity fast update rides on pyomo-pounce; control parameterization
-  on pyomo-cvp. Both are dependencies, not vendored.
-
-Grow this into a "how to drive drto" table once there is a runnable loop.
+- The sensitivity fast update is built on pyomo-pounce, and control
+  parameterization on pyomo-cvp. Both are dependencies, not vendored.
