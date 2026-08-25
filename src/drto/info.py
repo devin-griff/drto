@@ -87,6 +87,16 @@ def _index_names(con, count):
     ]
 
 
+def _rename_placeholder(s, num, name):
+    """Replace template placeholder ``_num`` in ``s`` with ``name``.
+
+    The lookbehind rejects an underscore preceded by a word character, so a
+    component named ``k0_1`` or ``z_2`` renders unchanged. The lookahead
+    prevents ``_1`` from matching inside ``_12`` (gh #103).
+    """
+    return re.sub(rf"(?<!\w)_{num}(?!\d)", name, s)
+
+
 def _name_sum_indices(s, outer_names):
     """Rename the template placeholders of a rule's internal sums.
 
@@ -102,7 +112,7 @@ def _name_sum_indices(s, outer_names):
     nums = sorted({int(x) for x in re.findall(r"(?<!\w)_(\d+)", s)}, reverse=True)
     for num in nums:
         name = pool[(num - n_outer - 1) % len(pool)]
-        s = re.sub(rf"(?<!\w)_{num}(?!\d)", name, s)
+        s = _rename_placeholder(s, num, name)
     return s
 
 
@@ -252,12 +262,11 @@ class Info:
     # ------------------------------------------------------------------
     def _role_lines(self):
         """Yield ``(label, text)`` pairs for the declaration view."""
-        seen = set()
+        labels = dict(_KIND_LABELS)
         ordered = [k for k, _ in _KIND_LABELS if k in self._declarations]
-        extra = [k for k in self._declarations if k not in dict(_KIND_LABELS)]
+        extra = [k for k in self._declarations if k not in labels]
         for kind in ordered + extra:
-            seen.add(kind)
-            label = dict(_KIND_LABELS).get(kind, kind)
+            label = labels.get(kind, kind)
             records = self._declarations[kind]
             ctype = _component_category(records[0]["component"])
             if ctype == "constraint":
@@ -298,7 +307,7 @@ class Info:
         """Yield one rendered line per applied transformation."""
         for r in self._transformations:
             notes = ", ".join(f"{k}={v}" for k, v in r["outcome"].items())
-            yield f"{r['name']}" + (f": {notes}" if notes else "")
+            yield r["name"] + (f": {notes}" if notes else "")
 
     def _size_line(self):
         """The problem's size: declared states and controls, counted as
@@ -508,7 +517,7 @@ def _compact_constraint(con, index_set_label=None):
         s = str(tmpl)
         names = _index_names(con, len(indices))
         for n in reversed(range(len(indices))):
-            s = s.replace(f"_{n + 1}", names[n])
+            s = _rename_placeholder(s, n + 1, names[n])
         if index_set_label is not None and len(indices) == 1:
             sets = [f"{names[0]} in {index_set_label}"]
         else:

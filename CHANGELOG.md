@@ -331,6 +331,16 @@ All notable changes to this project are documented here. The format is based on
   ignored, its entries riding the reduced clone into the subsystem solves
   with NL-writer warnings; the scaled path removes both.
 
+### Fixed
+
+- The registry renders a component whose name ends in an underscored
+  number under its own name (gh #103). Naming the free indexes of a
+  constraint family replaced the template placeholders `_1`, `_2`, and so
+  on as plain substrings, so the registry rendered the dynamics of a
+  model carrying the Param `k0_1` with `k0t` in place of that name. The
+  replacement now matches a placeholder only where the underscore is not
+  preceded by a word character.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
