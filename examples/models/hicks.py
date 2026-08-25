@@ -43,8 +43,8 @@ def hicks(N=5, h=1):
     m.zt_ss = pyo.Param(initialize=0.5387, mutable=True)
     m.v1_ss = pyo.Param(initialize=0.57828, mutable=True)
     m.v2_ss = pyo.Param(initialize=0.49989, mutable=True)
-    m.zc_hat = pyo.Param(initialize=0.625, mutable=True)  # state feedback hooks
-    m.zt_hat = pyo.Param(initialize=0.525, mutable=True)
+    m.zc_hat = pyo.Param(initialize=0.625, mutable=True)  # the initial state,
+    m.zt_hat = pyo.Param(initialize=0.525, mutable=True)  # set as feedback
 
     m.zc = pyo.Var(m.t, bounds=(0, 1), initialize=0.6416)
     m.zt = pyo.Var(m.t, bounds=(0, None), initialize=0.5387)
