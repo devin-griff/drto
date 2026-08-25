@@ -18,8 +18,9 @@ states.
 
 The manipulated inputs are the two feed flows. The declared
 disturbances are additive zero-mean noise terms, one in every state's
-balance, appended to the rows since MSContactor carries no custom-term
-hooks; they are zero nominally, so the noise-free model is untouched. The transfer extents and the
+balance, added into the balance equations, since MSContactor takes no
+custom terms. They are zero nominally, so the noise-free model is
+untouched. The transfer extents and the
 stage flows at the first time point are inert data of the high-index
 equilibrium formulation (no rate law determines them there) and are
 fixed, the same choice PrOMMiS's own dynamic driver makes.

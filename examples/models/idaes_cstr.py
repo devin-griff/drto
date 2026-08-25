@@ -8,8 +8,8 @@ declare as member-subset slices of the indexed material holdup (the water
 member stays algebraic, closed by the property package), the energy holdup
 is the fifth state, and the manipulated inputs are the jacket duty and the
 feed flow, the flow declared on the inlet Port's time-indexed Reference.
-Targets and feedback hooks are Params in the owners' units, filled by the
-caller (the setpoint from ``drto.steady_state_simulation``, the start from
+The targets and the initial conditions are Params in the owners' units,
+filled by the caller (the setpoint from ``drto.steady_state_simulation``, the start from
 the setpoint composition knocked back along the stoichiometry, hot).
 
 The flowsheet runs in raw SI, energy holdups near 1e7 J against unit
@@ -63,7 +63,7 @@ class NoisyCSTRData(CSTRData):
     """The packaged CSTR with additive noise in every balance equation.
 
     The build is the parent's, verbatim, except the control volume's
-    balance builders receive IDAES's custom-term hooks: each species
+    balance builders receive IDAES's custom terms. Each species
     balance gains the flowsheet's ``w_<component>`` variable (mol/s)
     and the enthalpy balance gains ``w_energy`` (W), so the dynamics
     read dM/dt = f + w with the equations still IDAES-generated. A
