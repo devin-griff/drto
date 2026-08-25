@@ -35,6 +35,7 @@ controller:
 
 ```python
 import pyomo.environ as pyo
+from pyomo.contrib.solver.common.factory import SolverFactory
 from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
@@ -42,7 +43,8 @@ m = pyo.ConcreteModel()
 m.t = ContinuousSet(initialize=range(11))            # 10 samples, 1 s apart
 m.z_ss = pyo.Param(initialize=0.5, mutable=True)     # steady-state targets
 m.u_ss = pyo.Param(initialize=0.5, mutable=True)
-m.z_hat = pyo.Param(initialize=0.1, mutable=True)    # state feedback hook
+m.z_hat = pyo.Param(initialize=0.1, mutable=True)    # the initial state,
+                                                     # set as feedback
 
 m.z = pyo.Var(m.t, initialize=0.1)
 m.dzdt = DerivativeVar(m.z, wrt=m.t)
@@ -97,7 +99,7 @@ pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
 drto.cold_start_dynamic(m)          # states on a line to the targets,
                                     # algebra solved pointwise, tail at rest
 pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-pyo.SolverFactory("ipopt").solve(m)  # -> optimal
+SolverFactory("ipopt").solve(m)      # -> optimal
 
 drto.plot_states(m)
 drto.plot_controls(m)
@@ -241,9 +243,10 @@ One modeling practice worth following: leave cost variables unbounded. The
 defining equality already fixes each cost value (a sum of squares is
 nonnegative without being told), and a `NonNegativeReals` bound puts the
 optimum exactly on the bound wherever the cost vanishes, at settled samples
-on long horizons or through an infinite-horizon tail at equilibrium, which
-drags interior-point solvers (measured on the Hicks example at N = 50: 43
-ipopt iterations bounded, 6 unbounded, identical solutions).
+on long horizons or through an infinite-horizon tail at equilibrium, where
+interior-point solvers take many more iterations (measured on the Hicks
+example at N = 50: 43 ipopt iterations bounded, 6 unbounded, identical
+solutions).
 
 One thing you never declare, because it already lives in the model: the
 **path constraints** are the state variables' own upper and lower bounds.

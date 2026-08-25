@@ -5,8 +5,8 @@ trackers, and forward-looking research. This is the one place development
 history is allowed to accrete, which keeps code comments clean (they state
 present-tense rationale only).
 
-`DESIGN.md` at the repo root stays the top-level design record. These notes
-are the working layer beneath it.
+The specs in `features/` are the design record. These notes are the
+working layer beneath them.
 
 ## Naming so notes are findable
 
