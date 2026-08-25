@@ -108,6 +108,28 @@ def test_repr_renders_indexed_constraints_compactly():
     assert "[2.5]" not in text
 
 
+def test_repr_keeps_component_names_ending_in_an_underscored_number():
+    # naming the free indexes replaces the template's own placeholders only,
+    # so a component name containing _1 or _2 renders unchanged (gh #103)
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(bounds=(0, 10), initialize=[0, 5, 10])
+    m.z_1 = pyo.Var(m.t)
+    m.dz_1 = DerivativeVar(m.z_1, wrt=m.t)
+    m.k0_1 = pyo.Param(initialize=1.2, mutable=True)
+    m.k0_2 = pyo.Param(initialize=3.4, mutable=True)
+
+    @m.Constraint(m.t)
+    def ode(m, t):
+        return m.dz_1[t] == -m.k0_1 * m.z_1[t] - m.k0_2 * m.z_1[t] ** 2
+
+    reg = drto.info(m)
+    reg.record_declaration("horizon", m.t)
+    reg.record_declaration("state", m.z_1)
+    reg.record_declaration("dynamics", m.ode)
+    text = repr(reg)
+    assert "dz_1[t]  ==  - k0_1*z_1[t] - k0_2*z_1[t]**2  for t in t" in text
+
+
 def test_repr_falls_back_for_skip_guarded_rules():
     m = declared_model()
 
