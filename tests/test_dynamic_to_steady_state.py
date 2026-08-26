@@ -8,6 +8,7 @@ from pyomo.network import Port
 
 import drto
 from test_declarations import base_model, declared_model
+from test_estimation_declarations import est_declared
 from test_infinite_horizon import (
     _dof,
     block_model,
@@ -40,7 +41,7 @@ def test_a_fixed_input_stays_fixed_through_the_reduction():
 def test_requires_the_declarations():
     m = base_model()
     drto.horizon(m.t)
-    with pytest.raises(ValueError, match="missing: state, dynamics"):
+    with pytest.raises(ValueError, match="Missing: state, dynamics"):
         pyo.TransformationFactory(SS).apply_to(m)
 
 
@@ -490,3 +491,17 @@ def test_the_mixer_settler_stage_reduces_square():
     assert len(matching) == len(rows)
     spatial = sum(1 for c in rows if "_disc_eq" in c.name)
     assert spatial > 0
+
+
+def test_the_estimation_terminal_cost_leaves_the_model():
+    # the spec removes both terminal costs, the tracking one and the
+    # estimation one (gh #111)
+    m = est_declared()
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=3, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    ss = pyo.TransformationFactory(SS).create_using(m)
+    assert ss.component("est_term_con") is None
+    assert not drto.info(ss).has_declaration("estimation_terminal_cost")
+    # the source model keeps its own
+    assert m.component("est_term_con") is not None

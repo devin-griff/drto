@@ -366,6 +366,12 @@ All notable changes to this project are documented here. The format is based on
   meets. No transform deactivates such a block today, so no model in
   the package changes behavior.
 
+- `drto.dynamic_to_steady_state` removes a declared estimation terminal
+  cost (gh #111). It removed the initial condition, the terminal
+  constraint, the tracking terminal cost, and the move-suppression cost,
+  but left the estimation terminal cost and its registry record on the
+  reduced model. Feature 005 states that both terminal costs go.
+
 - `drto.infinite_horizon` rejects a `disturbances=` value naming a
   declared disturbance that no replicated equation references (gh #109).
   The value was accepted and did nothing, since the segment copies only
