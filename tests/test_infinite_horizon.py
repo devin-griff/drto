@@ -5,6 +5,8 @@ import math
 
 import pyomo.environ as pyo
 import pytest
+from pyomo.common.collections import ComponentSet
+from pyomo.core.expr import identify_variables
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
@@ -118,8 +120,37 @@ def test_economic_alone_is_rejected():
     drto.dynamics(m.ode)
     drto.control(m.u)
     drto.economic_stage_cost(m.econ)
-    with pytest.raises(ValueError, match="tail integral diverges"):
+    with pytest.raises(ValueError, match="economic stage cost alone is rejected"):
         pyo.TransformationFactory(IH).apply_to(m)
+
+
+def test_economic_alongside_tracking_stays_off_the_tail():
+    # the segment replicates the tracking cost alone, and the economic cost
+    # variables stay out of the tail's cost group (gh #109, spec 004)
+    m = declared_model()  # undiscretized: the economic cost is declared
+    m.ecost = pyo.Var(m.t)  # over the sample grid, before collocation
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def econ(mm, t):
+        return mm.ecost[t] == -mm.u[t]
+
+    drto.economic_stage_cost(m.econ)
+    n_samples = len(sorted(m.t)) - 1
+    pyo.TransformationFactory("dae.collocation").apply_to(
+        m, wrt=m.t, nfe=4, ncp=3, scheme="LAGRANGE-RADAU"
+    )
+    pyo.TransformationFactory(IH).apply_to(m, terminal="none")
+
+    reg = drto.info(m)
+    (group,) = reg.declarations("cost_group")
+    tail_vars = ComponentSet()
+    for term, _ in group["terms"]:
+        tail_vars.update(identify_variables(term.expr))
+    assert all(m.ecost[t] not in tail_vars for t in m.t)
+    # the tail replicates the tracking cost, so its states are there
+    assert any(m.drto_ih.z[i] in tail_vars for i in m.drto_ih.z)
+    # and the economic cost is untouched on the finite horizon
+    assert m.econ.active and len(m.econ) == n_samples
 
 
 def test_requires_a_discretized_time_set():
@@ -282,6 +313,81 @@ def test_tail_terms_reach_the_objective():
     for term, _ in group["terms"]:
         for v in identify_variables(term.expr):
             assert v in in_obj
+
+
+def _lagrange_weights(nodes):
+    """Integral of each Lagrange basis polynomial over [0, 1].
+
+    The interpolatory quadrature weights for ``nodes``, by definition, and a
+    different computation from the module's moment solve.
+    """
+    numpy = pytest.importorskip("numpy")
+    P = numpy.polynomial.polynomial
+    out = []
+    for k, xk in enumerate(nodes):
+        coef = P.polyfromroots([x for j, x in enumerate(nodes) if j != k])
+        coef = coef / P.polyval(xk, coef)
+        anti = P.polyint(coef)
+        out.append(P.polyval(1.0, anti) - P.polyval(0.0, anti))
+    return out
+
+
+def test_explicit_weights_equal_the_quadrature_state_tail():
+    # spec 004: the tail is the paper's quadrature-state formulation with the
+    # state eliminated. That state integrates beta*psi/(gamma*dt*(1-tau^2))
+    # over the segment, which collocation evaluates per element as
+    # h * sum_k w_k f(tau_k), with w_k the integral of the Lagrange basis.
+    # The weights are built here from that basis rather than from the
+    # module's moment solve, so the check is independent of it (gh #109).
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m, terminal="none")
+    b = m.drto_ih
+    (group,) = drto.info(m).declarations("cost_group")
+
+    fe = b.tau.get_finite_elements()
+    pts = sorted(b.tau)
+    interior = [[p for p in pts if lo < p < hi] for lo, hi in zip(fe, fe[1:])]
+    t_fe = m.t.get_finite_elements()  # the sampling time, not a collocation gap
+    dt = t_fe[1] - t_fe[0]
+    # the replicated cost Expressions come from the recorded pairing, never
+    # from rebuilding the segment's component names (gh #27)
+    psi = {term.index(): term for term, _ in group["terms"]}
+
+    quadrature = sum(
+        (hi - lo) * w * b.beta * psi[p] / (b.gamma * dt * (1 - p**2))
+        for lo, hi, points in zip(fe, fe[1:], interior)
+        for p, w in zip(
+            points, _lagrange_weights([(x - lo) / (hi - lo) for x in points])
+        )
+    )
+    explicit = sum(w * term for term, w in group["terms"])
+
+    # one common point: every free segment variable at a distinct value,
+    # inside its bounds so no value is clipped
+    for n, vd in enumerate(b.component_data_objects(pyo.Var, active=True)):
+        if not vd.fixed:
+            vd.set_value(0.1 + 0.005 * (n % 100))
+
+    # machine precision. The transform derives the weights per element from
+    # that element's own nodes, which matters because pyomo.dae stores the
+    # segment's element boundaries rounded to six decimals, so the elements
+    # are not exactly equal and one weight set does not serve them all
+    assert pyo.value(explicit) == pytest.approx(pyo.value(quadrature), rel=1e-12)
+
+
+def test_tail_weights_match_the_lagrange_basis_on_one_element():
+    # the moment solve the transform uses returns the interpolatory weights
+    # for the nodes the discretization placed (gh #109)
+    from drto.infinite_horizon import _gauss_weights
+
+    m = ready_model()
+    pyo.TransformationFactory(IH).apply_to(m, terminal="none")
+    b = m.drto_ih
+    fe = b.tau.get_finite_elements()
+    pts = sorted(b.tau)
+    nodes = [(p - fe[0]) / (fe[1] - fe[0]) for p in pts if fe[0] < p < fe[1]]
+    for got, want in zip(_gauss_weights(nodes), _lagrange_weights(nodes)):
+        assert got == pytest.approx(want, abs=1e-13)
 
 
 def test_tail_weights_integrate_through_the_jacobian():
@@ -843,6 +949,16 @@ def test_tail_rejects_an_undeclared_disturbance_value():
         pyo.TransformationFactory(IH).apply_to(m, disturbances={"nope": 1.0})
 
 
+def test_tail_rejects_a_value_for_an_unreferenced_disturbance():
+    # w2 is declared but appears in no equation the segment replicates, so
+    # its copy is never made and a value for it would do nothing (gh #109)
+    m = disturbed_model()
+    m.w2 = pyo.Var(m.t, initialize=0.0)
+    drto.disturbance(m.w2)
+    with pytest.raises(ValueError, match="no replicated equation involves it"):
+        pyo.TransformationFactory(IH).apply_to(m, disturbances={"w2": 0.25})
+
+
 # ── time-indexed Blocks on the segment (feature 004) ─────────────────────────
 
 
@@ -1133,7 +1249,7 @@ def test_member_subset_state_segment_structure():
     assert {k[0] for k in xm.keys()} == {"W"}
     assert {k[0] for k in b.component("dx_members").keys()} == {"W"}
     log = drto.info(m)._transformations[-1]["outcome"]
-    assert "partially declared" in log["partial"]
+    assert log["partial"] == "algebraic entries of 2 indexed Var(s) copied per member"
 
 
 @needs_ipopt

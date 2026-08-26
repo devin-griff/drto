@@ -198,7 +198,7 @@ def warm_start_dynamic(m):
                         if r["kind"] == "state" and r.get("derivative") is not None:
                             dtail_of[id(vd)] = (r["derivative"], o)
         for r in recs:
-            if r["kind"] == "packed_member":
+            if r["kind"] == "member_subset":
                 pcomp, copy = r["of"], r["copy"]
                 pos, _ = _time_index(pcomp, time)
                 for cidx in copy:
