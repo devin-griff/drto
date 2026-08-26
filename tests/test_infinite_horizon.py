@@ -368,14 +368,11 @@ def test_explicit_weights_equal_the_quadrature_state_tail():
         if not vd.fixed:
             vd.set_value(0.1 + 0.005 * (n % 100))
 
-    # not machine precision. pyomo.dae stores the segment's element
-    # boundaries rounded to six decimals, so the elements are not exactly
-    # equal and their normalized nodes differ in the sixth decimal, while the
-    # transform derives one weight set from the first element and reuses it.
-    # That is the whole of the difference, and it is about 1e-7 relative.
-    # The weights themselves are exact for the nodes they are built from,
-    # which the next test pins to machine precision.
-    assert pyo.value(explicit) == pytest.approx(pyo.value(quadrature), rel=1e-6)
+    # machine precision. The transform derives the weights per element from
+    # that element's own nodes, which matters because pyomo.dae stores the
+    # segment's element boundaries rounded to six decimals, so the elements
+    # are not exactly equal and one weight set does not serve them all
+    assert pyo.value(explicit) == pytest.approx(pyo.value(quadrature), rel=1e-12)
 
 
 def test_tail_weights_match_the_lagrange_basis_on_one_element():

@@ -1129,11 +1129,13 @@ class InfiniteHorizonTransformation(Transformation):
         # the quadrature state eliminated. beta and gamma stay symbolic in
         # the weights, so set_value retunes them without a re-apply ---
         interior = [[p for p in pts if lo < p < hi] for lo, hi in zip(fe, fe[1:])]
-        h0 = fe[1] - fe[0]
-        omega = _gauss_weights([(p - fe[0]) / h0 for p in interior[0]])
         terms = []
         for lo, hi, points in zip(fe, fe[1:], interior):
             h = hi - lo
+            # per element, from that element's own nodes. pyomo.dae stores the
+            # tau points rounded to six decimals, so the elements are not
+            # exactly equal and one weight set does not serve them all
+            omega = _gauss_weights([(p - lo) / h for p in points])
             for p, w in zip(points, omega):
                 weight = b.beta * (h * float(w)) / (b.gamma * dt * (1 - p**2))
                 terms.append((seg_cost[p], weight))

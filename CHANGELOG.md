@@ -371,6 +371,17 @@ All notable changes to this project are documented here. The format is based on
   The value was accepted and did nothing, since the segment copies only
   the disturbances its replicated equations reference.
 
+- `drto.infinite_horizon` derives the tail quadrature weights per
+  segment element from that element's own collocation nodes (gh #109).
+  It derived one set from the first element and reused it, which is
+  exact only if the elements are equal, and `pyomo.dae` stores the
+  element boundaries rounded to six decimals, so they are not. At the
+  default three-element segment the middle element's weights were wrong
+  by 6e-6 relative. The explicit-weight tail now equals the paper's
+  quadrature-state formulation to machine precision, which feature 004
+  states and a test pins. Objectives across the example notebooks move
+  in the eighth significant figure or beyond.
+
 - The `drto.infinite_horizon` transformation outcome names what it did.
   The row read "N partially declared container(s) copied per member" and
   now reads "algebraic entries of N indexed Var(s) copied per member"
