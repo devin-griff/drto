@@ -110,6 +110,26 @@ def _gauss_weights(nodes):
     return numpy.linalg.solve(a, b)
 
 
+def _time_artifact(con, time):
+    """Whether a pyomo.dae artifact belongs to the declared time set.
+
+    A discretization equation is the time set's when its derivative is taken
+    with respect to it. One over another ContinuousSet (a spatial axis) is
+    real algebra (a settler's ``material_flow_dx_disc_eq``). Continuity
+    equations carry no derivative and arise from the declared-time
+    collocation in the meshes drto supports, so they belong to it.
+    """
+    members = con.values() if con.is_indexed() else (con,)
+    cd = next(iter(members), None)
+    if cd is None:
+        return True
+    for v in identify_variables(cd.body, include_fixed=True):
+        dv = v.parent_component()
+        if isinstance(dv, DerivativeVar):
+            return time in dv.get_continuousset_list()
+    return True
+
+
 def _time_index(comp, time):
     """Return ``(position, subsets)`` of the time set in ``comp``'s index.
 
@@ -426,21 +446,6 @@ class InfiniteHorizonTransformation(Transformation):
         ):
             declared_cons.update(reg.components(kind))
 
-        def _time_artifact(con):
-            """Whether a pyomo.dae artifact belongs to the declared time
-            set. A discretization equation is the time set's when its
-            derivative is taken with respect to it. One over another
-            ContinuousSet (a spatial axis) is real algebra the segment
-            must replicate (a settler's ``material_flow_dx_disc_eq``).
-            Continuity equations carry no derivative and arise from the
-            declared-time collocation in the meshes drto supports."""
-            cd = next(iter(con.values())) if con.is_indexed() else con
-            for v in identify_variables(cd.body, include_fixed=True):
-                dv = v.parent_component()
-                if isinstance(dv, DerivativeVar):
-                    return time in dv.get_continuousset_list()
-            return True
-
         alg_cons = []
         for con in model.component_objects(Constraint, active=True):
             # pyomo.dae artifacts: collocation equations ('_disc_') and the
@@ -450,7 +455,7 @@ class InfiniteHorizonTransformation(Transformation):
                 continue
             if (
                 "_disc_" in con.local_name or con.local_name.endswith("_cont_eq")
-            ) and _time_artifact(con):
+            ) and _time_artifact(con, time):
                 continue
             pos, _ = _time_index(con, time)
             if pos is None:

@@ -2,43 +2,43 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The steady-state reduction: ``drto.dynamic_to_steady_state`` (feature 005).
 
-Reduces a declared dynamic model to its steady-state form: time collapses to
+Reduces a declared dynamic model to its steady-state form. Time collapses to
 a single point, each declared state's time derivative collapses with it and is
 fixed at zero, and the initial condition, terminal constraint, and terminal
-cost leave the model. The result is the equilibrium system, the declared
+costs leave the model. The result is the equilibrium system, the declared
 dynamics reading as written with ``dz/dt`` pinned at zero, algebraic relations
 intact (a derivative-carrying energy balance keeps its form, its derivative
 fixed), and a per-sample stage cost becomes the single-point cost that
 ``drto.build_objective`` assembles for the steady modes.
 
 A ``Block(time)`` family (the IDAES property-block idiom) collapses to its
-single steady member: the ``t0`` member stays as written, its variables and
+single steady member. The ``t0`` member stays as written, its variables and
 internal equations untouched, and the other members leave the model with
-their contents (feature 005). A Block carrying further indexes — a 1D
-control volume's ``Block(t, x)``, an MSContactor's ``Block(t, element)``
-— collapses the same way per spatial point: the ``t0`` member of every
-combination survives, so the spatial structure is kept and only time
-goes. Spatial discretization equations are algebra, not grid machinery,
-and stay; only the declared time set's collocation and continuity
-equations are discarded. A time-indexed Reference is a view, not a
-variable: it collapses to a view of the surviving member (a Port entry) or
-of the collapsed Var (an IDAES ``heat_duty``), never to a fresh independent
-Var, and Ports keep pointing at their referents.
+their contents (feature 005). A Block carrying further indexes, a 1D control
+volume's ``Block(t, x)`` or an MSContactor's ``Block(t, element)``, collapses
+the same way per spatial point. The ``t0`` member of every combination
+survives, so the spatial structure is kept and only time goes. Spatial
+discretization equations are algebra, not grid machinery, and stay, while
+only the declared time set's collocation and continuity equations are
+discarded. A time-indexed Reference is a view rather than a variable, so it
+collapses to a view of the surviving member (a Port entry) or of the
+collapsed Var (an IDAES ``heat_duty``), never to a fresh independent Var, and
+Ports keep pointing at their referents.
 
-A derivative is fixed, not eliminated: ``dz/dt = 0`` is what steady state
-means, so pinning it keeps the user's equations readable instead of leaving a
-side missing, and the solver folds a fixed Var in as a constant. Pyomo cannot
-hold a DerivativeVar that is not indexed by a ContinuousSet, and the time set
-leaves the model, so the collapsed derivative is a plain scalar Var of the same
-name. There are still no ``dz/dt == 0`` constraints: the Var is fixed, not constrained.
-The transform applies to the declared or discretized model,
-before any drto transformation: applied control profiles or an attached
-terminal segment error, the sibling-branch rule. On a discretized model
-the discretization artifacts (the collocation equations and continuity
-equations pyomo.dae adds) are discarded, grid machinery rather than model
-content, and the reduction gives the same steady system either way.
-Objective assembly is not performed here; an existing objective only has
-its references collapsed.
+A derivative is fixed rather than eliminated, since ``dz/dt = 0`` is what
+steady state means, so pinning it keeps the user's equations readable instead
+of leaving a side missing, and the solver treats a fixed Var as a constant.
+Pyomo cannot hold a DerivativeVar that is not indexed by a ContinuousSet, and
+the time set leaves the model, so the collapsed derivative is a plain scalar
+Var of the same name. There are still no ``dz/dt == 0`` constraints, because
+the Var is fixed rather than constrained. The transform applies to the
+declared or discretized model, before any drto transformation. Applied
+control profiles or an attached terminal segment error, the sibling-branch
+rule. On a discretized model the discretization artifacts (the collocation
+equations and continuity equations pyomo.dae adds) are discarded, grid
+machinery rather than model content, and the reduction gives the same steady
+system either way. Objective assembly is not performed here. An existing
+objective only has its references collapsed.
 """
 from pyomo.common.collections import ComponentSet
 from pyomo.common.config import ConfigDict
@@ -57,7 +57,7 @@ from pyomo.dae import DerivativeVar
 from pyomo.network import Port
 
 from drto.declarations import pyomo_cvp_available
-from drto.infinite_horizon import _split_index, _time_index
+from drto.infinite_horizon import _split_index, _time_artifact, _time_index
 from drto.info import info
 
 #: The declarations the transform requires.
@@ -68,11 +68,12 @@ _REMOVED_KINDS = (
     "initial_condition",
     "terminal_constraint",
     "tracking_terminal_cost",
+    "estimation_terminal_cost",
     # the moves are zero at any steady point, so the move cost leaves
     "move_suppression",
 )
 
-#: The stage-cost kinds, indexed by the sample list: they collapse to scalars.
+#: The stage-cost kinds, indexed by the sample list. They collapse to scalars.
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
 
 
@@ -81,37 +82,37 @@ _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
     doc="Reduce a declared dynamic model to its steady-state form (drto).",
 )
 class DynamicToSteadyStateTransformation(Transformation):
-    """Collapse a declared dynamic model to its equilibrium; see the module
+    """Collapse a declared dynamic model to its equilibrium. See the module
     docstring.
 
-    ``apply_to`` reduces in place; ``create_using`` reduces a clone and
+    ``apply_to`` reduces in place. ``create_using`` reduces a clone and
     leaves the dynamic source unchanged.
     """
 
     CONFIG = ConfigDict("drto.dynamic_to_steady_state")
 
     def _apply_to(self, model, **kwds):
-        self.CONFIG(kwds)  # no options; unknown keywords error
+        self.CONFIG(kwds)  # no options, so unknown keywords error
         reg = info(model)
         missing = [k for k in _REQUIRED if not reg.has_declaration(k)]
         if missing:
             raise ValueError(
                 f"drto: dynamic_to_steady_state requires the declarations "
-                f"{', '.join(_REQUIRED)}; missing: {', '.join(missing)}."
+                f"{', '.join(_REQUIRED)}. Missing: {', '.join(missing)}."
             )
         time = reg.components("horizon")[0]
         for name in ("drto.infinite_horizon", "drto.parameterize"):
             if reg.has_transformation(name):
                 raise ValueError(
                     f"drto: dynamic_to_steady_state applies before any drto "
-                    f"transformation; '{name}' is already applied. The steady "
+                    f"transformation, and '{name}' is already applied. The steady "
                     f"reduction and the dynamic transforms are sibling "
                     f"branches of the same declarations."
                 )
 
         states_set = ComponentSet(reg.components("state"))
         # a state may be a Reference over a member subset of an indexed Var
-        # (gh #20): a container with any declared member is covered, its
+        # (gh #20). A container with any declared member is covered, its
         # dynamics constraints accepted and every one of its accumulations pinned
         # at zero, including the algebraic entries (the water holdup),
         # since steady state holds for them as well
@@ -120,7 +121,7 @@ class DynamicToSteadyStateTransformation(Transformation):
             for vd in s.values() if s.is_indexed() else (s,):
                 covered.add(id(vd.parent_component()))
         # every dynamics row carrying a time derivative must differentiate
-        # a declared state; the scan reads the row's variables directly, so
+        # a declared state. The scan reads the row's variables directly, so
         # a derivative side written as a sum (a balance carrying a noise
         # term) checks the same as a bare one, and a container's algebraic
         # members with no time derivative pass through
@@ -149,44 +150,26 @@ class DynamicToSteadyStateTransformation(Transformation):
                     comp.parent_block().del_component(comp)
             if reg.has_declaration(kind):
                 removed.append(kind.replace("_", " "))
-            # same-package registry surgery: the records describe components
-            # that no longer exist on the reduced model
+            # the records describe components that no longer exist on the
+            # reduced model, so this reaches into the registry's own store
             reg._declarations.pop(kind, None)
 
         # --- discretization artifacts are grid machinery, not model
-        # content: discarded, so a discretized model reduces to the same
+        # content, so they are discarded and a discretized model reduces to
         # steady system as the declared one ------------------------------
-        def _time_artifact(con):
-            """Whether a pyomo.dae artifact belongs to the declared time
-            set. A discretization equation is the time set's when its
-            derivative is taken with respect to it; one over another
-            ContinuousSet (a spatial axis) is real algebra the steady
-            model keeps (a settler's ``material_flow_dx_disc_eq``).
-            Continuity equations carry no derivative and arise from the
-            declared-time collocation in the meshes drto supports."""
-            members = con.values() if con.is_indexed() else (con,)
-            cd = next(iter(members), None)
-            if cd is None:
-                return True
-            for v in identify_variables(cd.body, include_fixed=True):
-                dv = v.parent_component()
-                if isinstance(dv, DerivativeVar):
-                    return time in dv.get_continuousset_list()
-            return True
-
         n_artifacts = 0
         for con in list(model.component_objects(Constraint, active=True)):
             if (
                 "_disc_" in con.local_name or con.local_name.endswith("_cont_eq")
-            ) and _time_artifact(con):
+            ) and _time_artifact(con, time):
                 con.parent_block().del_component(con)
                 n_artifacts += 1
 
         # --- time-indexed Blocks collapse to their single steady member --
         # a Block(time) member is per-time structure (the IDAES
-        # property-block idiom): the t0 member is the steady point and
+        # property-block idiom). The t0 member is the steady point and
         # stays as written, values, bounds, units, and fixed status
-        # untouched; the other members leave the model with their contents
+        # untouched, and the other members leave with their contents
         t0 = time.first()
         tblocks = []
         for B in model.component_objects(Block, active=True):
@@ -215,7 +198,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                     n_members += 1
 
         # --- time-indexed References leave the Var collapse ---------------
-        # a Reference is a view, not a variable: it collapses to a view of
+        # a Reference is a view rather than a variable, so it collapses to
         # the surviving member (a Port entry) or of the collapsed Var (an
         # IDAES heat_duty), never to a fresh independent Var. The t0 slice
         # is recorded here and rebuilt after the collapse maps its referents.
@@ -256,7 +239,7 @@ class DynamicToSteadyStateTransformation(Transformation):
 
         # --- the declared states' time derivatives -----------------------
         # a DerivativeVar is its own ctype before discretization and is
-        # reclassified to Var by pyomo.dae afterward: scan both
+        # reclassified to Var by pyomo.dae afterward, so scan both
         seen, derivs = set(), []
         for query in (DerivativeVar, Var):
             for dv in model.component_objects(query):
@@ -273,7 +256,7 @@ class DynamicToSteadyStateTransformation(Transformation):
 
         # --- collapse the time-indexed Vars, the derivatives included ----
         # a derivative collapses like any other time-indexed Var and is then
-        # fixed at zero: dz/dt = 0 is what steady state means, so the declared
+        # fixed at zero, since dz/dt = 0 is what steady state means, so the
         # dynamics stay readable as written instead of losing a side
         submap = {}
         replaced = {}
@@ -291,7 +274,7 @@ class DynamicToSteadyStateTransformation(Transformation):
             for idx, vd in comp.items():
                 o, t = _split_index(idx, pos, len(subs))
                 members[(o, t)] = vd
-                # the t0 representative; a combo with no t0 member (a
+                # the t0 representative. A combo with no t0 member (a
                 # sparse Var) falls back to its first
                 if t == t0 or o not in attrs:
                     attrs[o] = (vd.domain, vd.lb, vd.ub, vd.value, vd.fixed)
@@ -313,7 +296,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 new = Var(domain=dom, bounds=(lb, ub), initialize=val)
             parent.add_component(name, new)
             if id(comp) in deriv_ids:
-                # zero at steady state, by definition: every accumulation
+                # zero at steady state by definition, since every accumulation
                 # rests, including the algebraic entries', which is what
                 # closes their balances at the point (the water balance
                 # determining the outlet flow)
@@ -340,7 +323,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 )
             parent.add_component(name, new)
             replaced[old_id] = new
-        # a Port holds its entries by object: swap in the rebuilt views
+        # a Port holds its entries by object, so swap in the rebuilt views
         for port in model.component_objects(Port, active=True):
             for pname, item in list(port.vars.items()):
                 new = replaced.get(id(item))
@@ -356,8 +339,8 @@ class DynamicToSteadyStateTransformation(Transformation):
             pos, subs = _time_index(con, time)
             name, parent = con.local_name, con.parent_block()
             if pos is not None:
-                # one member per other-combo: the t0 representative's
-                # expression, since only the t0 Block members survive; a
+                # one member per other-combo, the t0 representative's
+                # expression, since only the t0 Block members survive. A
                 # family with no t0 member falls back to its first
                 others = [s for n, s in enumerate(subs) if n != pos]
                 chosen = {}
@@ -379,7 +362,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                 replaced[id(con)] = new
                 n_cons += 1
             elif con in stage_cons and con.is_indexed():
-                # indexed by the sample list: the single-point cost
+                # indexed by the sample list, so the single-point cost
                 expr = replace_expressions(next(iter(con.values())).expr, submap)
                 parent.del_component(con)
                 new = Constraint(expr=expr)
@@ -415,7 +398,7 @@ class DynamicToSteadyStateTransformation(Transformation):
                         record[key] = new
         for kind in ("control", "disturbance"):
             for record in reg.declarations(kind):
-                # a single-point control or disturbance has no profile: the
+                # a single-point control or disturbance has no profile, so the
                 # annotation came from the dynamic declaration and describes
                 # nothing here
                 record.pop("profile", None)
