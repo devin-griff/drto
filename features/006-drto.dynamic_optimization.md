@@ -62,7 +62,7 @@ frameworks run.
   steady-state targets (`steady_state`, `steady_state_control`)
   are optional. The transform uses them if declared.
 - The estimation-category declarations (feature 018) are neutralized so the
-  control problem carries only what it uses, and the registry mirrors the
+  control problem keeps only what it uses, and the registry mirrors the
   model: a component removed from the model has its record purged, one left on
   the model keeps its record. The estimation costs (`estimation_stage_cost`,
   `estimation_terminal_cost`, `arrival_cost`) and the `measurement` Params are
@@ -73,10 +73,18 @@ frameworks run.
   It is fixed, not eliminated, so the model keeps the structure showing
   where the noise enters, the fixing works however the noise enters the
   equations, additive or not, and the solver treats a fixed Var as a
-  constant, so the NLP is identical to substituting zero. An `estimated_parameter` is fixed at its
-  current value and keeps its record, since it stays a live coefficient in the
-  equations the controller solves and that value is the estimate the
-  controller should use.
+  constant, so the NLP is identical to substituting zero. An
+  `estimated_parameter` is fixed at its current value and keeps its
+  record, since it stays a live coefficient in the equations the
+  controller solves and that value is the estimate the controller should
+  use.
+- After the objective is assembled, the transform declares the
+  initial-condition Params as pounce sensitivity parameters when
+  pyomo-pounce is importable, and the transformation log records how many
+  were declared. The declaration is inert metadata that every other
+  solver ignores, while a pounce solve keeps the converged factorization
+  for the advanced-step correction (feature 012). Without pyomo-pounce
+  the transform runs unchanged and the log shows no sensitivity entry.
 - The transform keeps the time horizon and does not reduce the model to steady
   state.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
