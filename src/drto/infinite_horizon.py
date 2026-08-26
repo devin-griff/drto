@@ -75,7 +75,6 @@ from drto.declarations import (
     pyomo_cvp,
     pyomo_cvp_available,
 )
-from drto.dynamic_optimization import _spread
 from drto.info import info
 
 #: The block the transform adds to the model.
@@ -266,9 +265,8 @@ class InfiniteHorizonTransformation(Transformation):
         ):
             raise ValueError(
                 "drto: infinite_horizon requires a tracking stage cost. An "
-                "economic stage cost alone is rejected: it is nonzero at the "
-                "equilibrium, so its tail integral diverges and its "
-                "quadrature would be mesh-dependent."
+                "economic stage cost alone is rejected. Declare a tracking "
+                "stage cost (drto.tracking_stage_cost)."
             )
         if missing:
             raise ValueError(
@@ -799,8 +797,17 @@ class InfiniteHorizonTransformation(Transformation):
                 if name not in declared_names:
                     raise ValueError(
                         f"drto: infinite_horizon got a disturbance value for "
-                        f"'{name}', which is not a declared disturbance; "
-                        f"declared: {', '.join(declared_names) or '(none)'}."
+                        f"'{name}', which is not a declared disturbance. "
+                        f"The declared disturbances are "
+                        f"{', '.join(declared_names) or '(none)'}."
+                    )
+                if not any(d.name == name for d in disturbed):
+                    raise ValueError(
+                        f"drto: infinite_horizon got a disturbance value for "
+                        f"'{name}', but no replicated equation involves it, "
+                        f"so the value would do nothing. The segment copies "
+                        f"only the disturbances its replicated equations "
+                        f"reference."
                     )
         dist_values = {}
         for d in disturbed:
@@ -1231,7 +1238,7 @@ class InfiniteHorizonTransformation(Transformation):
         for (B, _bo, lname), v in bseg.items():
             reg._record_segment("block_member", B, member=lname, copy=v)
         for pcomp, v in pseg.items():
-            reg._record_segment("packed_member", pcomp, copy=v)
+            reg._record_segment("member_subset", pcomp, copy=v)
         for con, row in alg_rows.items():
             reg._record_segment("algebraic_row", con, copy=row)
         for (B, _bo, cname), row in block_rows.items():
@@ -1280,8 +1287,8 @@ class InfiniteHorizonTransformation(Transformation):
             ),
             **(
                 {
-                    "partial": f"{len(flat_partial)} partially declared "
-                    f"container(s) copied per member"
+                    "partial": f"algebraic entries of "
+                    f"{len(flat_partial)} indexed Var(s) copied per member"
                 }
                 if flat_partial
                 else {}
