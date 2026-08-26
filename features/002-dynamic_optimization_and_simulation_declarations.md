@@ -163,7 +163,10 @@ rather than re-deriving them.
   captures that grid in the registry. The samples define the stage-cost
   sum (feature 003) and the sampling time `dt`, so `horizon` errors if
   the set is already discretized (Pyomo itself enforces the two-point
-  minimum at construction).
+  minimum at construction). The samples must be uniformly spaced to a
+  relative tolerance, since the loops and the terminal segment read the
+  sampling time off the first interval, and irregular spacing is a
+  descriptive error naming that requirement.
 - States may be indexed by time alone or by time plus other sets (a tray
   composition x(tray, comp, t)). The validations that reference a
   specific time point (the initial condition's t0, the terminal
