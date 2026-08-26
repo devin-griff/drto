@@ -5,9 +5,9 @@
 ## Description
 
 As a user of DRTO, I want a transformation that assembles the dynamic
-optimization problem from my declarations, so that I can solve for the optimal
-control trajectory over the horizon without hand-wiring the objective and the
-free and fixed variables.
+optimization problem from my declarations, so that I can solve for the
+optimal control trajectory over the horizon without hand-writing the
+objective or choosing the free and fixed variables myself.
 
 ```python
 import pyomo.environ as pyo
@@ -30,10 +30,11 @@ SolverFactory("ipopt").solve(m)
 
 ## Benefit hypothesis
 
-Assembling the horizon optimization from the same declarations that describe
-the model keeps the problem model-consistent and frees the user from rebuilding
-the objective and the decision-variable set by hand. This is the headline
-dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
+The user states the model once and gets the horizon optimization
+assembled from it, with no objective or decision-variable set rebuilt by
+hand and the problem model-consistent by construction. This is the
+headline dynamic-optimization mode (NMPC and D-RTO) that the closed-loop
+frameworks run.
 
 ## Acceptance criteria
 
@@ -67,12 +68,12 @@ dynamic-optimization mode (NMPC and D-RTO) that the closed-loop frameworks run.
   `estimation_terminal_cost`, `arrival_cost`) and the `measurement` Params are
   deleted and their records purged, since nothing in a control problem reads
   them and a measurement is reachable only from those costs (`h(z)` is written
-  inline in the cost). A `disturbance` is fixed at zero and keeps its record:
-  the controller predicts on its own model with the process noise off. It is
-  fixed, not eliminated, so the "noise enters here" structure stays in the
-  model and the fixing works however the noise enters the equations, additive
-  or not; the solver folds a fixed Var in as a constant, so the NLP is
-  identical to substituting zero. An `estimated_parameter` is fixed at its
+  inline in the cost). A `disturbance` is fixed at zero and keeps its record,
+  the controller predicting on its own model with the process noise off.
+  It is fixed, not eliminated, so the model keeps the structure showing
+  where the noise enters, the fixing works however the noise enters the
+  equations, additive or not, and the solver treats a fixed Var as a
+  constant, so the NLP is identical to substituting zero. An `estimated_parameter` is fixed at its
   current value and keeps its record, since it stays a live coefficient in the
   equations the controller solves and that value is the estimate the
   controller should use.
