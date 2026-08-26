@@ -205,8 +205,13 @@ on the first move.
   (gh #27).
 - Acceptance tests mirror the reference notebook: the short-horizon-plus-
   segment solution reproduces a long-horizon baseline, the explicit-weight
-  tail equals the quadrature-state tail to machine precision, and the
+  tail equals the quadrature-state tail to about 1e-7 relative, and the
   endpoint settles at the setpoint equilibrium driven by the cost alone.
+  The two tails are the same quadrature and would agree exactly, but
+  `pyomo.dae` stores the segment's element boundaries rounded to six
+  decimals, so the elements are not exactly equal while the transform
+  derives one weight set from the first element and reuses it. The
+  weights are exact for the nodes they are built from.
   The pin penalty's form is pinned by retuning `mu`. At unit slacks the
   objective moves by the linear and the quadratic part alike, two per
   slack per unit of `mu`.
