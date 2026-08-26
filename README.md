@@ -206,10 +206,10 @@ closed-loop frameworks, listed here alongside its siblings for completeness.
 drto is declaration-first, and each declaration tags a Pyomo component you
 already wrote: a Variable, a Constraint, a Parameter, or a Set. You build your dynamic model as
 an ordinary Pyomo model, then point the declarations at its pieces;
-drto assembles the horizon problem and runs the loop. It bolts onto an
-existing model rather than replacing how you build one. The same functions
-also wrap construction (`m.z = state(pyo.Var(m.t))` registers at
-attachment), and the constraint-role declarations double as decorators
+drto assembles the horizon problem and runs the loop. Nothing here
+replaces how you build the model. The same functions also wrap
+construction (`m.z = state(pyo.Var(m.t))` registers at attachment), and
+the constraint-role declarations double as decorators
 (`@drto.dynamics(m, m.t)`); the styles mix freely per component (feature
 002 shows both in full). The pieces are the
 object types of a dynamic optimization or simulation problem:

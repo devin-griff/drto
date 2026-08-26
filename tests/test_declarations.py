@@ -938,3 +938,66 @@ def test_tracking_cost_requires_the_states_declared_first():
 
     with pytest.raises(ValueError, match="declare the states and controls before"):
         drto.tracking_stage_cost(m.stage)
+
+
+# ----------------------------------------------------------------------
+# the member-subset slice form (gh #20)
+# ----------------------------------------------------------------------
+def slice_model():
+    """An indexed Var carrying a member that is not a state.
+
+    ``x`` carries a species index. Only the A member is a state, so it is
+    declared through the member-subset slice ``x[:, "A"]`` and the W
+    member stays undeclared.
+    """
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=pyo.RangeSet(0, 4, 1))
+    m.j = pyo.Set(initialize=["A", "W"])
+    m.x = pyo.Var(m.t, m.j, initialize=0.2)
+    m.dx = DerivativeVar(m.x, wrt=m.t)
+    m.xA_ss = pyo.Param(initialize=0.5, mutable=True)
+    drto.horizon(m.t)
+    return m
+
+
+def test_a_slice_declares_as_an_attached_reference():
+    m = slice_model()
+    drto.state(m.x[:, "A"])
+    (state,) = drto.info(m).components("state")
+    # the slice is wrapped as a Reference, attached to the sliced
+    # component's parent block under the name built from the component
+    # and the constant coordinates
+    assert state.is_reference()
+    assert m.component("x_A") is state
+    assert state.index_set() is m.t
+    assert [id(vd) for vd in state.values()] == [id(m.x[t, "A"]) for t in m.t]
+
+
+def test_the_containers_other_members_stay_undeclared():
+    m = slice_model()
+    drto.state(m.x[:, "A"])
+    declared = drto.info(m).components("state")
+    # the container itself is not the declared state, and no member of the
+    # W species is reachable through what was declared
+    assert not any(c is m.x for c in declared)
+    members = {id(vd) for c in declared for vd in c.values()}
+    assert all(id(m.x[t, "W"]) not in members for t in m.t)
+    assert all(id(m.x[t, "A"]) in members for t in m.t)
+
+
+def test_steady_state_resolves_a_slice_to_the_declared_reference():
+    m = slice_model()
+    drto.state(m.x[:, "A"])
+    (state,) = drto.info(m).components("state")
+    # the pairing takes the same slice and resolves to that Reference
+    # rather than wrapping a second one
+    drto.steady_state(m.x[:, "A"], m.xA_ss)
+    (pair,) = drto.info(m).declarations("steady_state")
+    assert pair["component"] is m.xA_ss
+    assert pair["of"] is state
+
+
+def test_steady_state_rejects_a_slice_with_no_declared_state():
+    m = slice_model()
+    with pytest.raises(ValueError, match="the slice matches no declared state"):
+        drto.steady_state(m.x[:, "A"], m.xA_ss)

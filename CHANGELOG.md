@@ -348,6 +348,14 @@ All notable changes to this project are documented here. The format is based on
   `cost_group` per weighted term set for `drto.build_objective` to sum,
   so the records stay in the registry and only the view drops them.
 
+- Two declaration error messages and the move-suppression docstrings use
+  the project's own vocabulary (gh #105). The stage-cost error now says
+  that discretization expands a time-indexed cost family to every
+  collocation point and that the objective sums the cost at the samples
+  only, so it never includes the members discretization added. The
+  move-suppression text says the cost penalizes the control moves, the
+  word the spec uses.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added

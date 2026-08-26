@@ -13,9 +13,9 @@ SSO = "drto.steady_state_optimization"
 
 
 def moved_model(declare_moves=True):
-    """dz/dt = -z + u with a tracking cost and a priced move.
+    """dz/dt = -z + u with a tracking cost and a penalized move.
 
-    The move members price u against the previous sample, the first one
+    The move members penalize u against the previous sample, the first one
     against the ``u_prev`` Param.
     """
     m = pyo.ConcreteModel()
