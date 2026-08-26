@@ -56,9 +56,10 @@ transform demonstrating that one declared model serves every mode.
   and errors clearly otherwise. Derivative references outside the dynamics
   (an index-reduced energy balance) are permitted. They get the zero
   substitution like every other reference.
-- It removes, if present, the declared initial condition, terminal constraint,
-  and both terminal costs (the tracking terminal cost and the estimation
-  terminal cost).
+- It removes, if present, the declared initial condition, terminal
+  constraint, both terminal costs (the tracking terminal cost and the
+  estimation terminal cost), and the move-suppression cost, whose moves
+  are zero at any steady point.
 - Each declared state's derivative collapses to a single point like
   every other time-indexed Var and is fixed at zero, not eliminated.
   `dz/dt = 0` is what steady state means, so the declared dynamics and
@@ -86,3 +87,12 @@ transform demonstrating that one declared model serves every mode.
   time point, since that cannot be reduced to a single point.
 - A model keeping per-time structure in `Block(time)` members reduces to a
   square steady system.
+- A time-indexed Reference collapses to a view of the surviving member
+  or of the collapsed Var, never to a fresh independent Var, and Ports
+  keep pointing at their referents.
+- A fixed input stays fixed through the collapse.
+- A dynamics family with Skip members reduces to its members.
+- The registry's records are re-pointed at the collapsed components, and
+  a control's or disturbance's profile annotation is dropped along with
+  any pending profile over the deleted time set, since a single point
+  has no profile.
