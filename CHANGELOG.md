@@ -366,6 +366,18 @@ All notable changes to this project are documented here. The format is based on
   meets. No transform deactivates such a block today, so no model in
   the package changes behavior.
 
+- `drto.infinite_horizon` rejects a `disturbances=` value naming a
+  declared disturbance that no replicated equation references (gh #109).
+  The value was accepted and did nothing, since the segment copies only
+  the disturbances its replicated equations reference.
+
+- The `drto.infinite_horizon` transformation outcome names what it did.
+  The row read "N partially declared container(s) copied per member" and
+  now reads "algebraic entries of N indexed Var(s) copied per member"
+  (gh #109). The economic-alone rejection drops its claim about the tail
+  integral diverging, which the spec does not make, and keeps the
+  rejection.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
