@@ -366,6 +366,15 @@ All notable changes to this project are documented here. The format is based on
   meets. No transform deactivates such a block today, so no model in
   the package changes behavior.
 
+- `drto.horizon` requires a uniformly spaced sample grid (gh #118). It
+  accepted any set of points, while `drto.infinite_horizon` reads the
+  sampling time off the first interval for the gamma rule and the tail
+  weights, and `drto.ideal_nmpc` reads it there too and steps its
+  history times by it, so an irregular grid gave a wrong tail and a
+  drifting time axis with no error anywhere. Intervals must now match
+  the first to 1e-9 relative, which passes the grids floating-point
+  arithmetic builds and names the offending interval otherwise.
+
 - `drto.dynamic_to_steady_state` removes a declared estimation terminal
   cost (gh #111). It removed the initial condition, the terminal
   constraint, the tracking terminal cost, and the move-suppression cost,

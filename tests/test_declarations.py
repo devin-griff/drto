@@ -166,6 +166,29 @@ def test_time_must_be_a_continuousset():
         drto.horizon(m.s)
 
 
+def test_horizon_rejects_an_irregular_sample_grid():
+    # the loops and the terminal segment read the sampling time off the first
+    # interval, so an irregular grid would go through wrong and unremarked
+    # (gh #118)
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[0, 1, 2, 4, 5])
+    m.v = pyo.Var(m.t)
+    with pytest.raises(ValueError, match="must be sampled uniformly"):
+        drto.horizon(m.t)
+
+
+def test_horizon_accepts_a_grid_built_by_floating_point_arithmetic():
+    # h = 0.1 over 50 samples accumulates about 9e-15 of relative spread
+    # between intervals, which the tolerance passes
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[i * 0.1 for i in range(51)])
+    m.v = pyo.Var(m.t)
+    drto.horizon(m.t)
+    (rec,) = drto.info(m).declarations("horizon")
+    assert rec["samples"] == tuple(sorted(m.t))
+    assert len(rec["samples"]) == 51
+
+
 def test_state_must_be_a_var():
     m = base_model()
     with pytest.raises(TypeError, match="expects a Var"):

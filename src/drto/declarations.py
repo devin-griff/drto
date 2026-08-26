@@ -350,6 +350,32 @@ def _members(con):
 # ----------------------------------------------------------------------
 # the declaration surface
 # ----------------------------------------------------------------------
+#: How far a sample interval may sit from the first one, relative. The grids
+#: built by floating-point arithmetic in this repository deviate by at most
+#: 9e-15, so this leaves six orders of margin over that while any irregular
+#: grid misses by orders more (gh #118).
+_UNIFORM_RTOL = 1e-9
+
+
+def _check_uniform(samples, component, fn):
+    """Error unless every sample interval matches the first one.
+
+    The closed loops and the terminal segment read the sampling time off the
+    first interval, so an irregular grid gives a wrong tail and a drifting
+    history time axis with nothing to catch it (gh #118).
+    """
+    first = samples[1] - samples[0]
+    for n, (a, b) in enumerate(zip(samples[1:], samples[2:]), start=1):
+        gap = b - a
+        if abs(gap - first) > _UNIFORM_RTOL * abs(first):
+            raise ValueError(
+                f"drto: {fn}: '{component.name}' must be sampled uniformly. "
+                f"Interval {n} is {gap} against {first} for the first, and "
+                f"the closed loops and the terminal segment read the sampling "
+                f"time off the first interval."
+            )
+
+
 def horizon(component):
     """Declare the horizon time set, a ``pyomo.dae`` ContinuousSet.
 
@@ -376,6 +402,7 @@ def horizon(component):
         # a constructed ContinuousSet always holds at least two points
         # (Pyomo enforces it), so the grid is the set's points as written
         samples = tuple(sorted(component))
+        _check_uniform(samples, component, fn)
         _declare_single("horizon", component, fn, samples=samples)
 
     if not component.is_constructed():
