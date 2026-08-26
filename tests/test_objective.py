@@ -71,6 +71,22 @@ def test_registered_cost_group_is_included():
     assert pyo.value(obj.expr) == pytest.approx(2.5)
 
 
+def test_deactivated_cost_group_leaves_the_sum():
+    # a group is live on the same terms as a declared cost, so deactivating
+    # its backing block drops the group's terms from the sum (gh #108)
+    m = declared_model()
+    m.tail = pyo.Block()
+    m.tail.phi = pyo.Var(initialize=1.0)
+    drto.info(m).record_declaration("cost_group", m.tail, terms=((m.tail.phi, 2.5),))
+    assert m.tail.phi in cost_vars(drto.build_objective(m))
+
+    m.tail.deactivate()
+    obj = drto.build_objective(m)
+    assert m.tail.phi not in cost_vars(obj)
+    # the declared stage cost stays, so the sum is not empty
+    assert cost_vars(obj) == ComponentSet(m.cost[t] for t in m.t if t != m.t.last())
+
+
 def test_zero_installs_a_constant_zero_objective():
     m = declared_model()
     obj = drto.build_objective(m, zero=True)

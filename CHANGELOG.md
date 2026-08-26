@@ -356,6 +356,16 @@ All notable changes to this project are documented here. The format is based on
   move-suppression text says the cost penalizes the control moves, the
   word the spec uses.
 
+- `drto.build_objective` drops a registered `cost_group` whose backing
+  component is deactivated (gh #108). It skipped a group whose component
+  had been removed from the model but never read the component's
+  `active` flag, so a deactivated block's terms would still enter the
+  objective, while the declared cost kinds checked activity per member.
+  Feature 003 states that a group is live when its backing components
+  are present and active at assembly time, which the assembly now
+  meets. No transform deactivates such a block today, so no model in
+  the package changes behavior.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
