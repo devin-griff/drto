@@ -20,7 +20,7 @@ import drto
 ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
 # ss is the steady-state system: time collapsed to a single point, each
 # dz/dt collapsed with it and fixed at zero, initial and terminal pieces
-# removed; m is unchanged
+# removed. m is unchanged
 drto.build_objective(ss)              # e.g. the single-point cost
 SolverFactory("ipopt").solve(ss)
 ```
