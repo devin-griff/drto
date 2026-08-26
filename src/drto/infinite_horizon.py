@@ -3,8 +3,9 @@
 """The infinite-horizon terminal segment: ``drto.infinite_horizon``
 (feature 004).
 
-Appends a terminal segment to a declared, discretized dynamic model: the tail
-of the horizon to t = infinity, compressed onto [0, 1] by the transformation
+Appends a terminal segment to a declared, discretized dynamic model. The
+segment is the tail of the horizon to t = infinity, compressed onto [0, 1]
+by the transformation
 ``tau = tanh(gamma*(t - tN))`` of Dinh et al. (2025,
 doi:10.1016/j.jprocont.2025.103565). The segment carries copies of the
 declared states and controls, the declared dynamics dilated by the
@@ -13,7 +14,7 @@ collocation points, and the declared tracking stage cost replicated at those
 points. The tail cost enters the objective as explicit Gauss-weighted terms,
 the paper's ``(beta/dt)*phi_f`` with the quadrature state eliminated,
 registered as a ``cost_group`` that ``drto.build_objective`` (feature 003)
-picks up wherever it runs. There is no coupling option: applying this
+picks up wherever it runs. There is no coupling option, since applying this
 transform before the mode transform is the whole composition.
 
 The segment endpoint is pinned to the steady state by default (the paper's
@@ -21,28 +22,29 @@ eq 36). The endpoint ``z(tau=1)`` is the Legendre extrapolation of the last
 element (Pyomo's continuity equation), the paper's evaluated endpoint z_e.
 ``terminal='soft'`` (the default) adds, per state, the relaxed endpoint
 equality ``z(tau=1) + eps_up - eps_lo == z_s`` with the penalty
-``mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`` in the objective: the
-linear part is the exact L1 pin, and the quadratic part makes the pin's
-multipliers unique (gh #37); ``terminal='none'`` imposes no
+``mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`` in the objective, whose
+linear part is the exact L1 pin and whose quadratic part makes the pin's
+multipliers unique (gh #37). ``terminal='none'`` imposes no
 endpoint condition, leaving the singular tail cost as the only terminal
 enforcement (the endpoint settles as close to the setpoint as the horizon's
 freedoms allow). A pin requires a declared ``drto.steady_state`` target for
 every state.
 
-States may carry index sets besides time; copies, linking, and replication
-run per member. Algebraic variables and equations need no declarations:
-any time-indexed variable the replicated equations reference that
+States may carry index sets besides time, and copies, linking, and
+replication run per member. Algebraic variables and equations need no
+declarations. Any time-indexed variable the replicated equations reference
+that
 is not a declared state or control gets a segment copy, and every active
 time-indexed constraint not declared as something else (and not a
 discretization artifact of the declared time set) is replicated at the
 interior collocation points. A time-indexed Block family may carry further
-indices (an IDAES stage element, a spatial node): each non-time combination
-replicates as its own family. A derivative over another ContinuousSet (a
+indices such as an IDAES stage element or a spatial node, and each non-time
+combination replicates as its own family. A derivative over another ContinuousSet (a
 spatial axis) is ordinary algebra, its discretization equations replicating with
 it, and same-named components from different units take distinct segment
 names.
-A replicated equation may reference a declared state's derivative (the
-index-reduced energy-balance case): the reference maps to the segment
+A replicated equation may reference a declared state's derivative, as the
+index-reduced energy balance does. The reference maps to the segment
 derivative with the dilation factor, the same rewrite the dynamics get.
 A variable copied to the segment with no replicated equation involving it
 is an error, not a silent free variable.
@@ -85,7 +87,7 @@ _REQUIRED = ("horizon", "state", "dynamics", "control", "tracking_stage_cost")
 
 
 def _units_of(comp):
-    """The component's declared units, read off one member; None if unitless.
+    """The component's declared units, read off one member, or None.
 
     The segment copies, derivatives and pin slacks are built with these, so a
     unit-carrying model keeps its units across the transform (gh #10). tau is
@@ -99,8 +101,8 @@ def _gauss_weights(nodes):
     """Quadrature weights for interior ``nodes`` on [0, 1], by moment solve.
 
     ``pyomo.dae`` stores the collocation nodes but no quadrature weights, so
-    they are derived from the nodes the discretization actually used: the
-    K-point rule integrating 1, x, ..., x^(K-1) exactly.
+    they are derived from the nodes the discretization actually used. The
+    K-point rule integrates 1, x, ..., x^(K-1) exactly.
     """
     k = len(nodes)
     a = numpy.array([[x**p for x in nodes] for p in range(k)], dtype=float)
@@ -142,7 +144,7 @@ def _join_index(other, t, pos):
     "to a declared, discretized dynamic model (drto).",
 )
 class InfiniteHorizonTransformation(Transformation):
-    """Append the terminal segment; see the module docstring.
+    """Append the terminal segment. See the module docstring.
 
     Options: ``nfe`` and ``ncp`` set the segment mesh (defaults 3 and 5),
     ``beta`` the tail overestimation factor (mutable Param, default 1.2,
@@ -163,8 +165,8 @@ class InfiniteHorizonTransformation(Transformation):
             default=None,
             description="Mapping of declared disturbance (component or name) "
             "to the constant its segment copy is fixed at. Disturbances not "
-            "in the mapping fix at zero: the tail continues under nominal "
-            "disturbance unless told otherwise.",
+            "in the mapping fix at zero, so the tail continues under "
+            "nominal disturbance unless told otherwise.",
         ),
     )
     CONFIG.declare(
@@ -198,7 +200,7 @@ class InfiniteHorizonTransformation(Transformation):
             default="rule",
             description="Time-compression rate: 'rule' (the default) derives "
             "it from the mesh rule, the segment's first collocation point "
-            "one sampling time past the junction; a number overrides.",
+            "one sampling time past the junction. A number overrides it.",
         ),
     )
     CONFIG.declare(
@@ -215,11 +217,11 @@ class InfiniteHorizonTransformation(Transformation):
             default="soft",
             domain=In(("none", "soft")),
             description="Endpoint pin on the extrapolated segment endpoint "
-            "z(tau=1). 'soft' (the default): eq 36, z(tau=1) + eps_up - eps_lo "
-            "== z_s with the penalty mu*(eps_up + eps_lo + eps_up**2 + "
-            "eps_lo**2) in the objective. "
-            "'none': no pin, the singular tail cost is the only terminal "
-            "enforcement. A pin requires a drto.steady_state target for every "
+            "z(tau=1). 'soft', the default, adds eq 36, z(tau=1) + eps_up - "
+            "eps_lo == z_s with the penalty mu*(eps_up + eps_lo + "
+            "eps_up**2 + eps_lo**2) in the objective. "
+            "'none' adds no pin, leaving the singular tail cost as the "
+            "only terminal enforcement. A pin requires a drto.steady_state target for every "
             "state.",
         ),
     )
@@ -229,7 +231,7 @@ class InfiniteHorizonTransformation(Transformation):
             default=1000.0,
             domain=float,
             description="Penalty weight for the soft endpoint pin "
-            "(terminal='soft'); ignored otherwise. Weights the linear and the "
+            "(terminal='soft'), ignored otherwise. Weights the linear and the "
             "quadratic slack terms alike. A mutable Param on the "
             "segment, so it retunes with set_value and no re-apply. The paper "
             "requires mu above the endpoint multiplier norm for the penalty to "
@@ -242,7 +244,7 @@ class InfiniteHorizonTransformation(Transformation):
         if config.beta <= 1:
             raise ValueError(
                 f"drto: infinite_horizon requires beta > 1 (the terminal "
-                f"cost must overestimate the tail; the margin beta - 1 "
+                f"cost must overestimate the tail, and the margin beta - 1 "
                 f"covers the quadrature error). Got beta={config.beta}."
             )
         if not pyomo_cvp_available:
@@ -254,8 +256,8 @@ class InfiniteHorizonTransformation(Transformation):
             raise RuntimeError(
                 "drto: infinite_horizon requires numpy for the quadrature " "weights."
             )
-        # validate before anything is added to the model: a bad profile must
-        # not error midway through the segment construction
+        # validate before anything is added to the model, so a bad profile
+        # does not error midway through the segment construction
         pyomo_cvp.parameterize._validate_profile(config.profile)
 
         reg = info(model)
@@ -281,7 +283,7 @@ class InfiniteHorizonTransformation(Transformation):
         drto_obj = model.component("drto_objective")
         if drto_obj is not None and drto_obj.active:
             raise ValueError(
-                "drto: the objective is already assembled; apply "
+                "drto: the objective is already assembled. Apply "
                 "drto.infinite_horizon first, then rebuild with "
                 "drto.build_objective."
             )
@@ -304,7 +306,7 @@ class InfiniteHorizonTransformation(Transformation):
 
         if reg.has_transformation("drto.parameterize"):
             raise ValueError(
-                "drto: the control profiles are already applied; apply "
+                "drto: the control profiles are already applied. Apply "
                 "drto.infinite_horizon before drto.parameterize (it "
                 "replicates the controls in their original time indexing)."
             )
@@ -312,17 +314,17 @@ class InfiniteHorizonTransformation(Transformation):
             if comp.index_set() is not time:
                 raise ValueError(
                     f"drto: infinite_horizon supports controls indexed by "
-                    f"the declared time set only; '{comp.name}' is not."
+                    f"the declared time set only, and '{comp.name}' is not."
                 )
         for comp in states:
             pos, _ = _time_index(comp, time)
             if pos is None:
                 raise ValueError(
                     f"drto: infinite_horizon requires states indexed by the "
-                    f"declared time set; '{comp.name}' is not."
+                    f"declared time set, and '{comp.name}' is not."
                 )
 
-        # the endpoint pin needs a steady-state target per state; validate now,
+        # the endpoint pin needs a steady-state target per state, validated
         # before the segment block is built, so a missing target does not leave
         # a half-built block on the model
         ss_target = None
@@ -335,7 +337,7 @@ class InfiniteHorizonTransformation(Transformation):
                 raise ValueError(
                     f"drto: infinite_horizon terminal={config.terminal!r} pins "
                     f"the segment endpoint z(tau=1) to the steady state, so "
-                    f"every declared state needs a drto.steady_state target; "
+                    f"every declared state needs a drto.steady_state target, and "
                     f"missing: {', '.join(missing)}. Declare "
                     f"drto.steady_state(state, target) for each, or pass "
                     f"terminal='none'."
@@ -344,8 +346,8 @@ class InfiniteHorizonTransformation(Transformation):
         states_set = ComponentSet(states)
         controls_set = ComponentSet(controls)
 
-        # declared disturbances, by member data-id: a disturbance may be
-        # declared as a flat Var or as a time-indexed Reference into Block
+        # declared disturbances, keyed by member data-id. A disturbance may
+        # be declared as a flat Var or as a time-indexed Reference into Block
         # members (the IDAES inlet idiom), and data identity covers both
         disturbances = list(reg.components("disturbance"))
         disturbance_data = {}
@@ -354,8 +356,8 @@ class InfiniteHorizonTransformation(Transformation):
                 disturbance_data[id(vd)] = d
         disturbed = ComponentSet()
 
-        # declared controls likewise, by member data-id: a control declared
-        # as a Reference into Block members routes its members to the
+        # declared controls likewise, keyed by member data-id. A control
+        # declared as a Reference into Block members routes its members to the
         # declared control, so the control's own segment copy serves and no
         # separate member family is built (gh #18)
         control_data = {}
@@ -364,7 +366,7 @@ class InfiniteHorizonTransformation(Transformation):
                 control_data[id(vd)] = u
 
         # declared state members by data-id, with their declared component
-        # and other-index: a state may be a Reference over a member subset
+        # and other-index. A state may be a Reference over a member subset
         # of an indexed Var (gh #20). A container with any declared member is
         # covered for the derivative checks, and the undeclared members of
         # a covered container (with their derivatives) copy per member as
@@ -410,7 +412,7 @@ class InfiniteHorizonTransformation(Transformation):
 
         # --- discovery: algebraic constraints are every active
         # time-indexed constraint not declared as something else and not a
-        # discretization artifact; algebraic variables are every
+        # discretization artifact. Algebraic variables are every
         # time-indexed variable the replicated equations reference that is
         # not a declared state or control ------------------------------
         declared_cons = ComponentSet()
@@ -427,7 +429,7 @@ class InfiniteHorizonTransformation(Transformation):
         def _time_artifact(con):
             """Whether a pyomo.dae artifact belongs to the declared time
             set. A discretization equation is the time set's when its
-            derivative is taken with respect to it; one over another
+            derivative is taken with respect to it. One over another
             ContinuousSet (a spatial axis) is real algebra the segment
             must replicate (a settler's ``material_flow_dx_disc_eq``).
             Continuity equations carry no derivative and arise from the
@@ -442,7 +444,7 @@ class InfiniteHorizonTransformation(Transformation):
         alg_cons = []
         for con in model.component_objects(Constraint, active=True):
             # pyomo.dae artifacts: collocation equations ('_disc_') and the
-            # Legendre continuity equations ('_cont_eq'); the segment builds
+            # Legendre continuity equations ('_cont_eq'). The segment builds
             # its own discretization with its own continuity
             if con in declared_cons:
                 continue
@@ -461,10 +463,10 @@ class InfiniteHorizonTransformation(Transformation):
         def _block_key(v, where=None):
             """(B, other-coords, t, local_name) for data reached through a
             time-indexed Block member, or None. A Block family may carry
-            indices besides time (an IDAES stage or a spatial node); each
-            non-time combination is its own family, replicated separately.
-            With ``where`` set, unsupported shapes raise; without it they
-            return None (the guard's silent mode)."""
+            indices besides time (an IDAES stage or a spatial node), and
+            each non-time combination is its own family, replicated
+            separately. With ``where`` set, unsupported shapes raise.
+            Without it they return None (the guard's silent mode)."""
             comp = v.parent_component()
             first = comp.parent_block()
             bd, found = first, None
@@ -504,19 +506,19 @@ class InfiniteHorizonTransformation(Transformation):
             return "".join(f"_{str(x).replace('.', 'p')}" for x in bo)
 
         def _scan(expr, t_rep, where):
-            """Validate a template; collect the algebraic components."""
+            """Validate a template and collect the algebraic components."""
             for v in identify_variables(expr, include_fixed=True):
                 comp = v.parent_component()
                 if isinstance(
                     comp, DerivativeVar
                 ) and comp.get_continuousset_list() == [time]:
-                    # a declared state's time derivative is allowed: the
+                    # a declared state's time derivative is allowed. The
                     # replication maps it to the segment derivative with
                     # the dilation factor, the same rewrite the dynamics
                     # get (an index-reduced energy balance is the real case).
                     # A derivative over another ContinuousSet (a spatial
-                    # axis) is ordinary algebra: copied per member, closed
-                    # by its replicated discretization equation
+                    # axis) is ordinary algebra, copied per member and
+                    # closed by its replicated discretization equation
                     if id(comp.get_state_var()) not in covered:
                         raise ValueError(
                             f"drto: infinite_horizon cannot replicate "
@@ -540,7 +542,7 @@ class InfiniteHorizonTransformation(Transformation):
                     if id(v) in disturbance_data:
                         disturbed.add(disturbance_data[id(v)])
                     elif id(v) in control_data:
-                        # the declared control's segment copy serves; a
+                        # the declared control's segment copy serves. A
                         # member family here would shadow it in the
                         # expression map and orphan the control copy
                         pass
@@ -564,14 +566,14 @@ class InfiniteHorizonTransformation(Transformation):
                     pass  # routed to the declared component's copy
                 elif isinstance(comp, DerivativeVar):
                     # an algebraic entry's derivative copies entry by
-                    # entry; a declared state's derivative maps to the
+                    # entry. A declared state's derivative maps to the
                     # dilated segment derivative
                     xvd = comp.get_state_var()[v.index()]
                     if id(xvd) not in state_member:
                         o2, _t2 = _split_index(v.index(), pos, len(subs))
                         flat_partial.setdefault(comp, set()).add(o2)
                 elif id(comp) in covered:
-                    # only some entries of this Var are states: the
+                    # only some entries of this Var are states, so the
                     # algebraic entry copies alone, not the whole Var
                     o2, _t2 = _split_index(v.index(), pos, len(subs))
                     flat_partial.setdefault(comp, set()).add(o2)
@@ -655,7 +657,7 @@ class InfiniteHorizonTransformation(Transformation):
             pass
 
         # every variable copied to the segment must have at least one
-        # replicated equation involving it; a variable with none would be
+        # replicated equation involving it. A variable with none would be
         # free there, and the solver would exploit it silently
         defined = ComponentSet()
         bdefined = set()
@@ -675,7 +677,7 @@ class InfiniteHorizonTransformation(Transformation):
             for expr, _ in entries.values():
                 _note_defined(expr)
         # block-borne variables are additionally credited by the dilated
-        # dynamics and the tail integrand: a member arrives with its whole
+        # dynamics and the tail integrand. A member arrives with its whole
         # point-wise subsystem, where closure through the balances is the
         # norm (an outlet flow determined jointly by the component
         # balances). The flat guard stays strict, since a flat variable
@@ -698,19 +700,19 @@ class InfiniteHorizonTransformation(Transformation):
                 at = "[t]" if not bo else f"[t, {', '.join(map(str, bo))}]"
                 raise ValueError(
                     f"drto: infinite_horizon copies '{B.name}{at}.{lname}' to "
-                    f"the segment, but no replicated equation involves it; "
-                    f"its defining equation must live in the Block members "
+                    f"the segment, but no replicated equation involves it. "
+                    f"Its defining equation must live in the Block members "
                     f"or be indexed by the declared time set '{time.name}'."
                 )
         for comp in algebraic:
             if comp not in defined:
                 raise ValueError(
                     f"drto: infinite_horizon copies '{comp.name}' to the "
-                    f"segment, but no replicated equation involves it; its "
+                    f"segment, but no replicated equation involves it. Its "
                     f"defining equation must be indexed by the declared "
                     f"time set '{time.name}'."
                 )
-        # the same strictness for partially copied containers: their
+        # the same strictness for partially copied containers, whose
         # members appearing only in the dilated dynamics would be free
         # inputs on the tail (a spatial flow derivative whose
         # discretization equation was mistaken for a time artifact)
@@ -719,7 +721,7 @@ class InfiniteHorizonTransformation(Transformation):
                 raise ValueError(
                     f"drto: infinite_horizon copies members of "
                     f"'{pcomp.name}' to the segment, but no replicated "
-                    f"equation involves them; their defining equations "
+                    f"equation involves them. Their defining equations "
                     f"must be indexed by the declared time set "
                     f"'{time.name}'."
                 )
@@ -732,7 +734,7 @@ class InfiniteHorizonTransformation(Transformation):
         b.beta = Param(initialize=config.beta, mutable=True)
 
         def _fresh(base, full):
-            """A segment-unique component name: the local name, or the
+            """A segment-unique component name, the local name or the
             sanitized full path when two model components share it (the
             two settlers of a mixer-settler both carry ``_flow_terms``)."""
             if b.component(base) is None:
@@ -899,7 +901,7 @@ class InfiniteHorizonTransformation(Transformation):
         )
 
         # --- the algebraic copies live on the interior collocation
-        # points only: every point that exists is one a replicated
+        # points only, so every point that exists is one a replicated
         # equation determines (gh #32). Created here, after the
         # discretization, when the interior points exist ---
         _fe = set(b.tau.get_finite_elements())
@@ -986,7 +988,7 @@ class InfiniteHorizonTransformation(Transformation):
         alg_rows = {}
         # --- algebraic equations, replicated as written at the interior
         # collocation points, where the dilated dynamics reference their
-        # variables; no boundary or endpoint values ----------------------
+        # variables, no boundary or endpoint values -----------------------
         for con in alg_cons:
             pos, subs = _time_index(con, time)
             others = [s_ for n, s_ in enumerate(subs) if n != pos]
@@ -1033,7 +1035,7 @@ class InfiniteHorizonTransformation(Transformation):
             except (TypeError, ValueError):
                 raise ValueError(
                     f"drto: gamma must be 'rule' (derive from the mesh "
-                    f"rule) or a number; got {config.gamma!r}."
+                    f"rule) or a number. Got {config.gamma!r}."
                 ) from None
         b.gamma.set_value(gamma_val)
 
@@ -1049,7 +1051,7 @@ class InfiniteHorizonTransformation(Transformation):
                     v.setlb(src.lb)
                     v.setub(src.ub)
                     v.set_value(src.value)
-                    # fixed means fixed: a given input's copy holds the
+                    # fixed means fixed, so a given input's copy holds the
                     # horizon-end value on the tail
                     if comp in algebraic and src.fixed:
                         v.fix()
@@ -1080,8 +1082,8 @@ class InfiniteHorizonTransformation(Transformation):
         # --- disturbance copies fixed at their realization, after the mesh
         # exists (fixing at construction touches only the endpoints) and
         # after the horizon-end init, which would overwrite the values. A
-        # scalar holds one constant everywhere; a dict gives one constant
-        # per non-time index (a multi-component feed) ---
+        # scalar holds one constant everywhere, and a dict gives one
+        # constant per non-time index (a multi-component feed) ---
         for d in disturbed:
             val = dist_values[d]
             for o in _combos(d):
@@ -1099,7 +1101,7 @@ class InfiniteHorizonTransformation(Transformation):
                     _seg_at(d, o, sp).fix(vo)
 
         # --- the tracking stage cost, replicated as named Expressions at the
-        # interior collocation points: the tail integrand. Expressions add no
+        # interior collocation points, the tail integrand. Expressions add no
         # variables and no constraints (a replicated cost Var would sit on an
         # active bound as the tail cost vanishes at the equilibrium), and
         # cvp's substitution sweep rewrites them like any constraint ---
@@ -1113,14 +1115,14 @@ class InfiniteHorizonTransformation(Transformation):
         b.add_component(cost_var.local_name, seg_cost)
 
         # --- segment control profiles: applied now, so raw unparameterized
-        # copies are never left on the segment; one call, one pass over
+        # copies are never left on the segment. One call, one pass over
         # the block ---
         if controls:
             TransformationFactory("cvp.parameterize").apply_to(
                 b, var=[seg[u] for u in controls], contset=b.tau, profile=config.profile
             )
             for u in controls:
-                # cvp swapped each copy under its own name; follow the swap
+                # cvp swapped each copy under its own name, so follow the swap
                 seg[u] = b.component(seg[u].local_name)
 
         # --- the tail cost: explicit Gauss weights, (beta/dt) * phi_f with
@@ -1139,10 +1141,10 @@ class InfiniteHorizonTransformation(Transformation):
 
         # --- the terminal endpoint pin (Dinh et al. 2025): constrain the
         # extrapolated endpoint z(tau=1) to the steady state. The endpoint is
-        # the Legendre continuity extrapolation, the paper's evaluated z_e; the
-        # derivative there is undefined, so the pin is on the state value. It
-        # references only states (cvp never replaces those), so it is order-free
-        # relative to the control parameterization above ---
+        # the Legendre continuity extrapolation, the paper's evaluated z_e.
+        # The derivative there is undefined, so the pin is on the state
+        # value. It references only states (cvp never replaces those), so
+        # it is order-free relative to the control parameterization above ---
         pins = {}
         if config.terminal != "none":
             # 'soft': the L1-relaxed endpoint of eq 36, split-nonneg slacks
@@ -1186,12 +1188,12 @@ class InfiniteHorizonTransformation(Transformation):
                 for o in _combos(z):
                     eu = up[tuple(o)] if o else up
                     el = lo[tuple(o)] if o else lo
-                    # the linear part is the exact L1 pin; the quadratic
+                    # the linear part is the exact L1 pin, and the quadratic
                     # part gives the pin a strictly convex penalty at the
                     # kink, so its multipliers are unique and consecutive
                     # solves agree on them (gh #37). Zero slack stays
-                    # optimal whenever the pin can hold: the quadratic's
-                    # gradient vanishes there
+                    # optimal whenever the pin can hold, since the
+                    # quadratic's gradient vanishes there
                     pin_terms.append((eu, b.mu))
                     pin_terms.append((el, b.mu))
                     pin_terms.append((eu**2, b.mu))
@@ -1200,8 +1202,8 @@ class InfiniteHorizonTransformation(Transformation):
             reg.record_declaration("cost_group", b, terms=tuple(pin_terms))
 
         # the tail integral IS the cost-to-go, so a declared terminal cost
-        # would double-count: deactivate it (build_objective's liveness rule
-        # then drops its term) and record the outcome
+        # would double-count, so deactivate it (build_objective's liveness
+        # rule then drops its term) and record the outcome
         terminal = None
         for comp in reg.components("tracking_terminal_cost"):
             if comp.active:
@@ -1210,7 +1212,7 @@ class InfiniteHorizonTransformation(Transformation):
 
         # --- record the segment pairing on the registry: which tail
         # component belongs to which declaration. Internal bookkeeping,
-        # never rendered; the consumers read this instead of rebuilding
+        # never rendered. The consumers read this instead of rebuilding
         # component names (gh #27) ---
         for z in states:
             pin_eq, up, lo = pins.get(z) or (None, None, None)
