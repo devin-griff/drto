@@ -101,11 +101,11 @@ transform demonstrating that one declared model serves every mode.
   entirely. The function owns the model it just built, so it reduces in
   place rather than cloning, and a user holding a model keeps
   `create_using` for the preserving form. The builder contract is
-  feature 006's: a builder returns a declared model, its first two
-  parameters are the interval count and the sampling time, every
-  parameter has a default so `build()`, `build(N)`, and `build(N, h)`
-  are all legal, and the returned model may be discretized or not. The
-  steady modes use only the bare call.
+  feature 006's: a builder returns a declared, undiscretized model, its
+  first two parameters are `N`, the interval count, and `h`, the
+  sampling time, passed by keyword, and every parameter has a default
+  so `build()`, `build(N)`, and `build(N, h)` are all legal. The steady
+  modes use only the bare call.
 - It errors clearly on a time-indexed constraint that spans more than one
   time point, since that cannot be reduced to a single point.
 - A model keeping per-time structure in `Block(time)` members reduces to a
