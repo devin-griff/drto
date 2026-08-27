@@ -77,6 +77,48 @@ _REMOVED_KINDS = (
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
 
 
+def dynamic_to_steady_state(build):
+    """Build a model and reduce it to its steady-state form.
+
+    Takes the model statement rather than a model, so a script that already
+    has a builder reaches its steady system in one call. The builder
+    contract is feature 006's: ``build`` returns a declared model, its
+    first two parameters are the interval count and the sampling time, and
+    every parameter has a default, so the bare ``build()`` this makes is
+    legal. The returned model may be discretized or not.
+
+    A result declaring a horizon is reduced through the registered
+    ``drto.dynamic_to_steady_state`` transformation. A result with no
+    declared horizon is already steady and is returned untouched, so a
+    statement that constructs its steady form natively (an IDAES flowsheet
+    built with ``dynamic=False``) never builds the dynamic model at all.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement, called with no arguments.
+
+    Returns
+    -------
+    Block
+        The steady-state model. This is the object ``build`` returned, since
+        the function owns the model it just built and reduces it in place.
+        A caller holding a model of its own keeps
+        ``TransformationFactory('drto.dynamic_to_steady_state').create_using``
+        for the form that leaves the source unchanged.
+
+    Examples
+    --------
+    ::
+
+        ss = drto.dynamic_to_steady_state(build)
+    """
+    m = build()
+    if info(m).has_declaration("horizon"):
+        TransformationFactory("drto.dynamic_to_steady_state").apply_to(m)
+    return m
+
+
 @TransformationFactory.register(
     "drto.dynamic_to_steady_state",
     doc="Reduce a declared dynamic model to its steady-state form (drto).",
@@ -86,7 +128,8 @@ class DynamicToSteadyStateTransformation(Transformation):
     docstring.
 
     ``apply_to`` reduces in place. ``create_using`` reduces a clone and
-    leaves the dynamic source unchanged.
+    leaves the dynamic source unchanged. :func:`dynamic_to_steady_state`
+    is the function form, which takes the model statement instead.
     """
 
     CONFIG = ConfigDict("drto.dynamic_to_steady_state")

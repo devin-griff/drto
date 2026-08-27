@@ -505,3 +505,64 @@ def test_the_estimation_terminal_cost_leaves_the_model():
     assert not drto.info(ss).has_declaration("estimation_terminal_cost")
     # the source model keeps its own
     assert m.component("est_term_con") is not None
+
+
+# ----------------------------------------------------------------------
+# the builder-consuming function form (gh #115)
+# ----------------------------------------------------------------------
+def test_the_function_reduces_a_dynamic_builder_in_place():
+    calls = []
+
+    def build():
+        calls.append(1)
+        return declared_model()
+
+    ss = drto.dynamic_to_steady_state(build)
+    assert calls == [1]  # called once, with no arguments
+    reg = drto.info(ss)
+    assert reg.has_transformation(SS)
+    assert not reg.has_declaration("horizon")
+    assert not ss.z.is_indexed()
+
+
+def test_the_function_returns_the_model_the_builder_made():
+    # it owns the model it just built, so it reduces in place rather than
+    # cloning, and the caller can hold on to what came back
+    built = {}
+
+    def build():
+        built["m"] = declared_model()
+        return built["m"]
+
+    ss = drto.dynamic_to_steady_state(build)
+    assert ss is built["m"]
+
+
+def test_the_function_returns_a_steady_build_untouched():
+    # no declared horizon means the statement built its steady form
+    # natively, so there is nothing to reduce
+    def build():
+        m = pyo.ConcreteModel()
+        m.z = pyo.Var(initialize=0.5)
+        m.u = pyo.Var(initialize=0.2)
+
+        @m.Constraint()
+        def balance(mm):
+            return mm.u == mm.z
+
+        drto.info(m).record_declaration("state", m.z)
+        return m
+
+    ss = drto.dynamic_to_steady_state(build)
+    assert not drto.info(ss).has_transformation(SS)
+    assert ss.component("balance") is not None
+    assert drto.info(ss).components("state") == (ss.z,)
+
+
+def test_the_factory_form_still_preserves_the_source():
+    # the export shadows the module attribute, and the registered
+    # transformation is reached through the factory either way
+    m = declared_model()
+    ss = pyo.TransformationFactory(SS).create_using(m)
+    assert drto.info(m).has_declaration("horizon")  # the source is untouched
+    assert not drto.info(ss).has_declaration("horizon")
