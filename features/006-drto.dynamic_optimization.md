@@ -28,6 +28,26 @@ pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
 SolverFactory("ipopt").solve(m)
 ```
 
+From a model statement rather than a model, the function form calls the
+builder, discretizes what it returns, and assembles:
+
+```python
+m = drto.dynamic_optimization(
+    build,                      # the model statement, a function
+    N=50,                       # intervals, passed to the builder.
+                                # Omitted, the builder's default
+    h=1.0,                      # sampling time, likewise
+    ncp=3,                      # collocation points per element
+    scheme="LAGRANGE-RADAU",    # the default
+    infinite_horizon={"nfe": 3, "ncp": 5},   # False (default) adds no
+                                # terminal segment. True applies
+                                # drto.infinite_horizon with defaults,
+                                # a mapping passes its options
+    tracking_weight=10.0,       # as above, both cost kinds declared
+)
+SolverFactory("ipopt").solve(m)
+```
+
 ## Benefit hypothesis
 
 The user states the model once and gets the horizon optimization
@@ -37,6 +57,39 @@ headline dynamic-optimization mode (NMPC and D-RTO) that the closed-loop
 frameworks run.
 
 ## Acceptance criteria
+
+### The builder contract
+
+A builder is a function returning a declared, undiscretized model. Its
+first two parameters are the interval count and the sampling time, named
+`N` and `h`, and a mode function passes them by keyword. Every parameter
+has a default, so the bare `build()` is legal. The mode function owns
+discretization, so a builder never discretizes what it returns. The
+other mode functions reference this contract rather than restating it.
+
+### The function form
+
+- `drto.dynamic_optimization(build, ...)` is the function form under the
+  transformation's own name, the dual form feature 003 sets with
+  `build_objective`. It calls `build` with whichever of `N` and `h` were
+  given, by keyword, so an omitted one takes the builder's default.
+- It discretizes the declared sample grid with `dae.collocation` at one
+  finite element per declared interval, taking `ncp` and `scheme` from
+  its own arguments. The interval count is read from the horizon record,
+  which holds the grid as declared.
+- A builder returning a model whose declared set is already discretized
+  is a descriptive error naming the contract, since the function owns
+  the mesh.
+- `infinite_horizon=False`, the default, adds no terminal segment.
+  `True` applies `drto.infinite_horizon` with its own defaults, and a
+  mapping passes its contents as that transformation's options.
+- It then applies the registered `drto.dynamic_optimization`
+  transformation, passing `tracking_weight` when given, and returns the
+  model. The model is assembled and uninitialized, so
+  `drto.cold_start_dynamic` and the other initializers run on it
+  afterward.
+
+### The registered transformation
 
 - `TransformationFactory('drto.dynamic_optimization')` requires `horizon`,
   `state`, `dynamics`, `control`, `initial_condition`, and at
