@@ -25,7 +25,7 @@ def controller(z_hat=0.1):
     return m
 
 
-def test_dynamic_optimization_declares_the_hooks():
+def test_dynamic_optimization_declares_the_initial_condition_params():
     m = controller()
     assert pyomo_pounce.sens.has_declarations(m)
     assert "1 initial-condition Params declared" in repr(drto.info(m))
@@ -75,7 +75,7 @@ def test_estimate_agrees_with_a_resolve_and_leaves_the_model_alone():
 
 
 @needs_pounce
-def test_gradient_maps_controls_to_hooks():
+def test_gradient_maps_controls_to_initial_condition_params():
     m = controller(z_hat=0.1)
     drto.scaling.solver_by_name("pounce").solve(m)
     grads = drto.advanced_step_controller(m, gradient=True)

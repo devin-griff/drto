@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Five `drto.dynamic_optimization` messages read as sentences (gh #120).
+  The errors for a value sequence of the wrong length, an unknown
+  disturbance name, an estimated parameter holding no value, missing
+  declarations, and a missing stage cost each joined two clauses with a
+  semicolon. The error for missing declarations now ends its first
+  sentence with a period, so a test matching its tail matches
+  `Missing:` rather than `missing:`, as
+  `drto.dynamic_to_steady_state`'s already does.
+
 - Every solve goes through Pyomo's native solver interface
   (`pyomo.contrib.solver`). Solver options travel as `solver_options`,
   results carry the native structured termination and solution status,

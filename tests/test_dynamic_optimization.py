@@ -96,7 +96,7 @@ def both_costs_model():
 def test_requires_the_declarations():
     m = base_model()
     drto.horizon(m.t)
-    with pytest.raises(ValueError, match="missing: state, dynamics"):
+    with pytest.raises(ValueError, match="Missing: state, dynamics"):
         pyo.TransformationFactory(DO).apply_to(m)
 
 
