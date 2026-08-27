@@ -12,7 +12,7 @@ steady-state model.
 ```python
 import pyomo.environ as pyo
 import pyomo_pounce  # registers the pounce solver
-from pyomo.contrib.solver.common.factory import SolverFactory
+from pyomo.contrib.solver.common.factory import SolverFactory as SF2
 
 import drto
 
@@ -23,7 +23,7 @@ ss = pyo.TransformationFactory("drto.dynamic_to_steady_state").create_using(m)
 # dz/dt collapsed with it and fixed at zero, initial and terminal pieces
 # removed. m is unchanged
 drto.build_objective(ss)              # e.g. the single-point cost
-SolverFactory("pounce").solve(ss)
+SF2("pounce").solve(ss)
 ```
 
 From a model statement rather than a model, the function form calls the
