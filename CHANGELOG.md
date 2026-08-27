@@ -366,6 +366,16 @@ All notable changes to this project are documented here. The format is based on
   meets. No transform deactivates such a block today, so no model in
   the package changes behavior.
 
+- `drto.dynamic_to_steady_state` is also a function taking the model
+  statement (gh #115, feature 005). `drto.dynamic_to_steady_state(build)`
+  calls `build()` with no arguments, reduces the result in place when it
+  declares a horizon, and returns it unchanged when it does not, so a
+  statement that constructs its steady form natively never builds the
+  dynamic model. The registered transformation is unchanged, and a
+  caller holding a model keeps `create_using` for the form that leaves
+  the source alone. The steady-state notebook
+  (`examples/hicks_steady_state.ipynb`) shows both.
+
 - `drto.horizon` requires a uniformly spaced sample grid (gh #118). It
   accepted any set of points, while `drto.infinite_horizon` reads the
   sampling time off the first interval for the gamma rule and the tail

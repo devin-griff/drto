@@ -4,8 +4,10 @@ Generated from the docstrings, grouped the way a session uses them. The
 transformations (`drto.infinite_horizon`, `drto.dynamic_optimization`,
 `drto.dynamic_simulation`, `drto.dynamic_to_steady_state`,
 `drto.steady_state_simulation`, `drto.steady_state_optimization`,
-`drto.parameterize`) are Pyomo `TransformationFactory` entries; their
-options are documented in the [user guide](guide.md).
+`drto.parameterize`) are Pyomo `TransformationFactory` entries, and
+their options are documented in the [user guide](guide.md).
+`drto.dynamic_to_steady_state` is also a function taking the model
+statement, documented below.
 
 ## The registry
 
@@ -49,6 +51,15 @@ The estimation-side surface:
 
 ```{eval-rst}
 .. autofunction:: drto.build_objective
+```
+
+## The steady-state reduction
+
+The registered transformation reduces a model you hold. This function
+takes the model statement instead and reduces what it builds.
+
+```{eval-rst}
+.. autofunction:: drto.dynamic_to_steady_state
 ```
 
 ## Diagnostics
