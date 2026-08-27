@@ -25,6 +25,13 @@ drto.build_objective(ss)              # e.g. the single-point cost
 SolverFactory("ipopt").solve(ss)
 ```
 
+From a model statement rather than a model, the function form calls the
+builder and reduces what it returns:
+
+```python
+ss = drto.dynamic_to_steady_state(build)   # build() is the model statement
+```
+
 A `Block(time)` family collapses to its `t0` member, one per non-time
 index combination, discarding only the declared time set's discretization
 equations. A nested time-indexed Block errors.
@@ -83,6 +90,21 @@ transform demonstrating that one declared model serves every mode.
   state, the solution matches it.
 - The transform works through both `apply_to` (in place) and `create_using`
   (leaving the source dynamic model unchanged).
+- `drto.dynamic_to_steady_state(build)` is the function form under the
+  transformation's own name, the dual form feature 003 sets with
+  `build_objective`. It calls `build()` with no arguments. A result
+  declaring a horizon is reduced in place through the registered
+  transformation, and a result with no declared horizon is returned
+  unchanged, so a statement constructing its steady form natively (an
+  IDAES flowsheet built with `dynamic=False`) skips the dynamic build
+  entirely. The function owns the model it just built, so it reduces in
+  place rather than cloning, and a user holding a model keeps
+  `create_using` for the preserving form. The builder contract is
+  feature 006's: a builder returns a declared model, its first two
+  parameters are the interval count and the sampling time, every
+  parameter has a default so `build()`, `build(N)`, and `build(N, h)`
+  are all legal, and the returned model may be discretized or not. The
+  steady modes use only the bare call.
 - It errors clearly on a time-indexed constraint that spans more than one
   time point, since that cannot be reduced to a single point.
 - A model keeping per-time structure in `Block(time)` members reduces to a
