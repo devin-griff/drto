@@ -9,6 +9,7 @@ the surface fills in feature by feature, starting with the registry
 """
 from importlib.metadata import PackageNotFoundError, version
 
+from drto.dynamic_optimization import dynamic_optimization
 from drto.dynamic_to_steady_state import dynamic_to_steady_state
 from drto.declarations import (
     arrival_cost,
@@ -56,7 +57,6 @@ from drto.plotting import (
 )
 
 # importing registers the drto.* transformations
-from drto import dynamic_optimization as _dynamic_optimization  # noqa: F401
 from drto import dynamic_simulation as _dynamic_simulation  # noqa: F401
 from drto import infinite_horizon as _infinite_horizon  # noqa: F401
 from drto import parameterize as _parameterize  # noqa: F401
@@ -72,6 +72,7 @@ __all__ = [
     "Info",
     "info",
     "build_objective",
+    "dynamic_optimization",
     "dynamic_to_steady_state",
     "advanced_step_controller",
     "cold_start_dynamic",

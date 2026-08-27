@@ -67,7 +67,7 @@ VOLUME, AREA, LENGTH = 0.4, 1.0, 0.4    # m3 mixer, m2 and m per settler
 TEMPERATURE = 305.15                    # K
 
 
-def build(N=8, h=1, ncp=3, noise=True):
+def build(N=8, h=1, noise=True):
     """One declared stage on an ``N``-sample horizon of ``h`` hours."""
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(
@@ -100,8 +100,6 @@ def build(N=8, h=1, ncp=3, noise=True):
     )
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.fs.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
 
     ms = m.fs.ms
     msc = ms.mixer[1].unit.mscontactor
@@ -110,14 +108,23 @@ def build(N=8, h=1, ncp=3, noise=True):
     # finite-difference cascade, one inventory per species per tank
     xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
 
-    # the feed streams: compositions fixed; the organic flow is the
-    # manipulated input (initialized, not fixed); the aqueous flow is
-    # closed by the disturbance equation below
-    for j, v in AQ_FEED.items():
-        ms.aqueous_inlet.conc_mass_comp[:, j].fix(v)
-    for j, v in OG_FEED.items():
-        ms.organic_inlet.conc_mass_comp[:, j].fix(v)
-    ms.organic_inlet.conc_mass_comp[:, "DEHPA"].fix(975.8e3 * DOSAGE / 100)
+    # the feed streams. The compositions are held by equations over the time
+    # set rather than fixed, since a fixed status covers only the members
+    # present when it is set and the caller discretizes after this returns.
+    # The organic flow is the manipulated input (initialized, not held), and
+    # the aqueous flow is closed by the disturbance equation below
+    feed_conc = dict(AQ_FEED)
+    feed_conc_og = dict(OG_FEED)
+    feed_conc_og["DEHPA"] = 975.8e3 * DOSAGE / 100
+
+    @m.Constraint(m.fs.time, list(feed_conc))
+    def aqueous_feed_conc(mm, t, j):
+        return ms.aqueous_inlet.conc_mass_comp[t, j] == feed_conc[j]
+
+    @m.Constraint(m.fs.time, list(feed_conc_og))
+    def organic_feed_conc(mm, t, j):
+        return ms.organic_inlet.conc_mass_comp[t, j] == feed_conc_og[j]
+
     m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
     m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
     for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
@@ -129,10 +136,20 @@ def build(N=8, h=1, ncp=3, noise=True):
             ref[t].setub(75.0)
     m.fs.aq_feed[:].unfix()
 
-    # geometry and temperatures, PrOMMiS's dynamic flowsheet values
+    # geometry and temperatures, PrOMMiS's dynamic flowsheet values. The
+    # volume is indexed by element alone, so fixing it covers every member.
+    # The temperatures carry time, so they are equations for the same reason
+    # as the feed
     msc.volume[:].fix(VOLUME * U.m**3)
-    msc.aqueous[:, :].temperature.fix(TEMPERATURE * U.K)
-    msc.organic[:, :].temperature.fix(TEMPERATURE * U.K)
+
+    @m.Constraint(m.fs.time, msc.elements)
+    def aqueous_temperature(mm, t, e):
+        return msc.aqueous[t, e].temperature == TEMPERATURE * U.K
+
+    @m.Constraint(m.fs.time, msc.elements)
+    def organic_temperature(mm, t, e):
+        return msc.organic[t, e].temperature == TEMPERATURE * U.K
+
     for st in (aq, og):
         st.area.fix(AREA)
         st.length.fix(LENGTH)

@@ -185,6 +185,94 @@ def _neutralize_estimation(reg, fn):
     return outcome
 
 
+def dynamic_optimization(
+    build,
+    N=None,
+    h=None,
+    ncp=3,
+    scheme="LAGRANGE-RADAU",
+    infinite_horizon=False,
+    tracking_weight=None,
+):
+    """Build a model, discretize it, and assemble the horizon optimization.
+
+    Takes the model statement rather than a model, so one call reaches a
+    problem ready to solve. The builder contract is feature 006's: ``build``
+    returns a declared, undiscretized model, its first two parameters are
+    the interval count and the sampling time named ``N`` and ``h``, and
+    every parameter has a default, so the bare ``build()`` is legal.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement. Called with whichever of ``N`` and ``h`` were
+        given, by keyword, so an omitted one takes the builder's default.
+    N : int, optional
+        Intervals, passed to the builder.
+    h : float, optional
+        Sampling time, passed to the builder.
+    ncp : int, optional
+        Collocation points per finite element (default 3).
+    scheme : str, optional
+        The collocation scheme (default ``"LAGRANGE-RADAU"``).
+    infinite_horizon : bool or mapping, optional
+        ``False`` (the default) adds no terminal segment. ``True`` applies
+        ``drto.infinite_horizon`` with its own defaults, and a mapping
+        passes its contents as that transformation's options.
+    tracking_weight : float, optional
+        Passed to the registered transformation when given, weighting the
+        tracking stage cost against the economic one.
+
+    Returns
+    -------
+    Block
+        The model the builder returned, discretized and assembled in place.
+        It is uninitialized, so ``drto.cold_start_dynamic`` and the other
+        initializers run on it afterward.
+
+    Raises
+    ------
+    ValueError
+        If the builder returns a model whose declared time set is already
+        discretized, since this function owns the mesh.
+
+    Examples
+    --------
+    ::
+
+        m = drto.dynamic_optimization(build, N=50, infinite_horizon=True)
+    """
+    kwargs = {}
+    if N is not None:
+        kwargs["N"] = N
+    if h is not None:
+        kwargs["h"] = h
+    m = build(**kwargs)
+
+    reg = info(m)
+    time = reg.components("horizon")[0]
+    if time.get_discretization_info():
+        raise ValueError(
+            f"drto: dynamic_optimization discretizes the model the builder "
+            f"returns, but '{time.name}' is already discretized. A builder "
+            f"returns a declared, undiscretized model (feature 006)."
+        )
+    # one finite element per declared interval. The horizon record holds the
+    # grid as declared, since horizon errors once the set is discretized
+    samples = reg.declarations("horizon")[0]["samples"]
+    TransformationFactory("dae.collocation").apply_to(
+        m, wrt=time, nfe=len(samples) - 1, ncp=ncp, scheme=scheme
+    )
+
+    if infinite_horizon:
+        opts = infinite_horizon if infinite_horizon is not True else {}
+        TransformationFactory("drto.infinite_horizon").apply_to(m, **opts)
+
+    opts = {} if tracking_weight is None else {"tracking_weight": tracking_weight}
+    TransformationFactory("drto.dynamic_optimization").apply_to(m, **opts)
+    return m
+
+
 @TransformationFactory.register(
     "drto.dynamic_optimization",
     doc="Assemble the dynamic optimization problem from the declarations (drto).",

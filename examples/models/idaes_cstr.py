@@ -46,16 +46,44 @@ T_START = 318.0                             # K, the perturbed start
 DC_START = 20.0                             # mol/m3, conversion knocked back
 
 
-def feed(blk, t):
-    # the flow is a manipulated variable: initialized, not fixed
-    blk.inlet.flow_vol[t].set_value(F_IN)
-    blk.inlet.conc_mol_comp[t, "H2O"].fix(55388.0)
-    blk.inlet.conc_mol_comp[t, "NaOH"].fix(C_NAOH)
-    blk.inlet.conc_mol_comp[t, "EthylAcetate"].fix(C_EA)
-    blk.inlet.conc_mol_comp[t, "SodiumAcetate"].fix(0.0)
-    blk.inlet.conc_mol_comp[t, "Ethanol"].fix(0.0)
-    blk.inlet.temperature[t].fix(T_IN)
-    blk.inlet.pressure[t].fix(P_IN)
+#: The fed inlet composition, mol/m3.
+FEED_CONC = {
+    "H2O": 55388.0,
+    "NaOH": C_NAOH,
+    "EthylAcetate": C_EA,
+    "SodiumAcetate": 0.0,
+    "Ethanol": 0.0,
+}
+
+
+def hold_feed(m, blk):
+    """Hold the fed inlet and the volume by equations over the time set.
+
+    Declared before discretization, so ``dae.collocation`` builds each at
+    every collocation point. Fixing the members instead would cover only
+    the sample grid, since the fixed status does not survive the
+    expansion. The flow is the manipulated variable, initialized rather
+    than held.
+    """
+    U = pyo.units
+    for t in m.fs.time:
+        blk.inlet.flow_vol[t].set_value(F_IN)
+
+    @m.Constraint(m.fs.time, list(FEED_CONC))
+    def feed_conc(mm, t, j):
+        return blk.inlet.conc_mol_comp[t, j] == FEED_CONC[j] * U.mol / U.m**3
+
+    @m.Constraint(m.fs.time)
+    def feed_temperature(mm, t):
+        return blk.inlet.temperature[t] == T_IN * U.K
+
+    @m.Constraint(m.fs.time)
+    def feed_pressure(mm, t):
+        return blk.inlet.pressure[t] == P_IN * U.Pa
+
+    @m.Constraint(m.fs.time)
+    def held_volume(mm, t):
+        return blk.volume[t] == VOLUME * U.m**3
 
 
 @declare_process_block_class("NoisyCSTR")
@@ -148,7 +176,7 @@ def cstr(m, noisy=False):
                      has_heat_transfer=True)
     return m
 
-def build(N=10, h=1, ncp=3, disturbance=False):
+def build(N=10, h=1, disturbance=False):
     samples = [i * h for i in range(N + 1)]
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=True, time_set=samples, time_units=pyo.units.s)
@@ -165,11 +193,7 @@ def build(N=10, h=1, ncp=3, disturbance=False):
     cstr(m, noisy=disturbance)
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.fs.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
-    for t in m.fs.time:
-        feed(m.fs.cstr, t)
-        m.fs.cstr.volume[t].fix(VOLUME)
+    hold_feed(m, m.fs.cstr)
 
     cv, t0 = m.fs.cstr.control_volume, m.fs.time.first()
     fin = m.fs.cstr.inlet.flow_vol
