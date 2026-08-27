@@ -17,16 +17,17 @@ import drto
 # ... declared model m (feature 002), discretized ...
 
 pyo.TransformationFactory("drto.dynamic_simulation").apply_to(m)
-# controls fixed at the values they already hold, objective zero; a
-# supplied constant or profile is the option: apply_to(m, controls={m.u: 0.3})
+# controls fixed at the values they already hold, the objective zero.
+# A supplied constant or profile is the option: apply_to(m, controls={m.u: 0.3})
 SolverFactory("ipopt").solve(m)   # square forward integration
 ```
 
 ## Benefit hypothesis
 
-Reusing the one declared model to simulate keeps simulation and optimization
-consistent, and it is the building block the cold-start initializer and
-validation runs rely on.
+The user simulates the model exactly as declared, with no separate
+simulation model to write and none to keep consistent with the
+optimization, since both modes read the same declarations. The
+cold-start initializer and validation runs use this mode.
 
 ## Acceptance criteria
 
@@ -43,7 +44,7 @@ validation runs rely on.
   per free point the applied profile leaves. With nothing supplied a control
   is fixed at the value it already holds, and a control holding no value
   errors rather than fixing at nothing.
-- A simulation carries no cost and no terminal set: the declared stage costs,
+- A simulation has no cost and no terminal set. The declared stage costs,
   terminal cost, and terminal constraint leave the model and their records are
   purged, as in `drto.steady_state_simulation` (feature 008), through the
   routine both simulation modes share. A terminal constraint would
@@ -51,20 +52,21 @@ validation runs rely on.
   unused.
 - The estimation-category declarations (feature 018) are neutralized exactly
   as in `drto.dynamic_optimization` (feature 006), through the same shared
-  routine so the two modes cannot drift apart: the estimation costs and the
-  measurement Params are deleted and purged, and an estimated parameter is
-  fixed at the value it holds and keeps its record.
+  routine so the two modes cannot drift apart. The estimation costs and
+  the measurement Params are deleted and purged, and an estimated
+  parameter is fixed at the value it holds and keeps its record.
 - Each disturbance is fixed at its realization, the same way the controls are
   fixed, after the profiles are applied. A `disturbances` option maps a
   declared disturbance to its realized noise, a constant held across the
   horizon or one value per free point, so the plant can be driven by a
-  supplied noise sequence; a disturbance not in the mapping is fixed at zero.
+  supplied noise sequence. A disturbance not in the mapping is fixed at
+  zero.
   Fixing keeps the disturbance in the model and keeps the forward integration
   square, and it works however the noise enters the equations.
-- The objective is zero: the transform calls `drto.build_objective` (feature
-  003) with the option for a simulation, which installs a constant-zero
-  `Objective` and gives an NLP solver a well-posed square problem for the
-  fixed-control model.
+- The objective is zero. The transform calls `drto.build_objective`
+  (feature 003) with the option for a simulation, which installs a
+  constant-zero `Objective` and gives an NLP solver a well-posed square
+  problem for the fixed-control model.
 - The transform keeps the time horizon.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
   clone).
