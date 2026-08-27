@@ -41,15 +41,22 @@ cold-start initializer and validation runs use this mode.
 - The parameterized controls are then fixed, so the mode frees nothing and
   solves the model as declared over the horizon. A `controls` option sets the
   values they are fixed at: a constant, held across the horizon, or one value
-  per free point the applied profile leaves. With nothing supplied a control
-  is fixed at the value it already holds, and a control holding no value
-  errors rather than fixing at nothing.
-- A simulation has no cost and no terminal set. The declared stage costs,
-  terminal cost, and terminal constraint leave the model and their records are
-  purged, as in `drto.steady_state_simulation` (feature 008), through the
-  routine both simulation modes share. A terminal constraint would
-  over-constrain the square forward integration. The cost variables are left
-  unused.
+  per free point the applied profile leaves. The mapping's key is the
+  declared component or its name, resolved by name, since parameterizing
+  replaces the control components, so keys from the source model work
+  through `create_using` and a control on a sub-Block passes as a
+  component. With nothing supplied a control is fixed at the value it
+  already holds, and a control holding no value errors rather than fixing
+  at nothing.
+- A simulation has no cost and no terminal set. The declared stage
+  costs, move suppression, terminal cost, and terminal constraint leave
+  the model and their records are purged, as in
+  `drto.steady_state_simulation` (feature 008), through the routine both
+  simulation modes share. A terminal constraint would over-constrain the
+  square forward integration. The cost variables are left unused.
+- The steady-state target Params (`steady_state`, `steady_state_control`)
+  stay on the model and keep their records, since a deviation-form
+  model's equations may reference them.
 - The estimation-category declarations (feature 018) are neutralized exactly
   as in `drto.dynamic_optimization` (feature 006), through the same shared
   routine so the two modes cannot drift apart. The estimation costs and
@@ -58,9 +65,9 @@ cold-start initializer and validation runs use this mode.
 - Each disturbance is fixed at its realization, the same way the controls are
   fixed, after the profiles are applied. A `disturbances` option maps a
   declared disturbance to its realized noise, a constant held across the
-  horizon or one value per free point, so the plant can be driven by a
-  supplied noise sequence. A disturbance not in the mapping is fixed at
-  zero.
+  horizon or one value per free point, with the same key forms as
+  `controls`, so the plant can be driven by a supplied noise sequence. A
+  disturbance not in the mapping is fixed at zero.
   Fixing keeps the disturbance in the model and keeps the forward integration
   square, and it works however the noise enters the equations.
 - The objective is zero. The transform calls `drto.build_objective`
