@@ -375,8 +375,8 @@ def test_the_solver_lists_agree():
 
 
 def test_both_pounce_names_resolve_natively():
-    from pyomo.contrib.solver.common.factory import SolverFactory as SF2
+    from pyomo.contrib.solver.common.factory import SolverFactory
 
     for name in ("pounce", "pounce_v2"):
         solver = drto.scaling.solver_by_name(name)
-        assert type(solver) is type(SF2("pounce"))
+        assert type(solver) is type(SolverFactory("pounce"))
