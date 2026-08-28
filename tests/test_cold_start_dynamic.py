@@ -320,3 +320,21 @@ def test_the_report_carries_no_clone():
         m.scaling_factor[vd] = 2.0
     report = drto.cold_start_dynamic(m)
     assert not hasattr(report, "scaled_model")
+
+
+def test_the_segment_controls_reach_their_targets_after_parameterize():
+    # drto.parameterize replaces the declared control, and the segment
+    # record keeps the component as declared, so a lookup keyed on that
+    # alone finds nothing and the segment controls are skipped (gh #125)
+    m = seeded()
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    pyo.TransformationFactory("drto.parameterize").apply_to(m)
+    drto.cold_start_dynamic(m)
+
+    target = pyo.value(
+        drto.info(m).declarations("steady_state_control")[0]["component"]
+    )
+    copy = drto.info(m)._segment_records("control")[0]["copy"]
+    assert len(copy) > 0
+    for vd in copy.values():
+        assert pyo.value(vd) == pytest.approx(target)

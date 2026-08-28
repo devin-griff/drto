@@ -119,7 +119,9 @@ def test_a_parameterized_control_keeps_its_segment_copy():
     pyo.TransformationFactory("drto.parameterize").apply_to(m)
     _valued(m)
     control = drto.info(m).components("control")[0]
-    assert id(control) in _tail(m)[3]
+    # the live control, which cvp replaced, still reaches its segment copy
+    rec = _tail(m)[3]._segment_record(control)
+    assert rec is not None and rec["copy"] is not None
 
 
 def test_a_parameterized_control_draws_its_tail():
