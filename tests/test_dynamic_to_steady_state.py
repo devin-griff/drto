@@ -455,6 +455,7 @@ def test_the_mixer_settler_stage_reduces_square():
     from pyomo.core.expr import identify_variables
 
     m = prommis_sx.build(N=1, h=0.25)
+    prommis_sx.hold_feed(m)  # the caller's step, since the builder no longer holds
     sm = pyo.TransformationFactory(SS).create_using(m)
     reg = drto.info(sm)
     ms = sm.fs.ms

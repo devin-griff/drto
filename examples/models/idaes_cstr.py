@@ -56,34 +56,22 @@ FEED_CONC = {
 }
 
 
-def hold_feed(m, blk):
-    """Hold the fed inlet and the volume by equations over the time set.
+def hold_feed(m):
+    """Fix the fed inlet and the volume at every time point.
 
-    Declared before discretization, so ``dae.collocation`` builds each at
-    every collocation point. Fixing the members instead would cover only
-    the sample grid, since the fixed status does not survive the
-    expansion. The flow is the manipulated variable, initialized rather
-    than held.
+    Called after the mesh exists, since a fixed status covers only the
+    members present when it is set. The builder returns the undiscretized
+    model, so this is the caller's step. The flow is the manipulated
+    variable, initialized rather than held.
     """
-    U = pyo.units
+    blk = m.fs.cstr
     for t in m.fs.time:
         blk.inlet.flow_vol[t].set_value(F_IN)
-
-    @m.Constraint(m.fs.time, list(FEED_CONC))
-    def feed_conc(mm, t, j):
-        return blk.inlet.conc_mol_comp[t, j] == FEED_CONC[j] * U.mol / U.m**3
-
-    @m.Constraint(m.fs.time)
-    def feed_temperature(mm, t):
-        return blk.inlet.temperature[t] == T_IN * U.K
-
-    @m.Constraint(m.fs.time)
-    def feed_pressure(mm, t):
-        return blk.inlet.pressure[t] == P_IN * U.Pa
-
-    @m.Constraint(m.fs.time)
-    def held_volume(mm, t):
-        return blk.volume[t] == VOLUME * U.m**3
+        for j, v in FEED_CONC.items():
+            blk.inlet.conc_mol_comp[t, j].fix(v)
+        blk.inlet.temperature[t].fix(T_IN)
+        blk.inlet.pressure[t].fix(P_IN)
+        blk.volume[t].fix(VOLUME)
 
 
 @declare_process_block_class("NoisyCSTR")
@@ -193,7 +181,6 @@ def build(N=10, h=1, disturbance=False):
     cstr(m, noisy=disturbance)
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
-    hold_feed(m, m.fs.cstr)
 
     cv, t0 = m.fs.cstr.control_volume, m.fs.time.first()
     fin = m.fs.cstr.inlet.flow_vol

@@ -225,17 +225,6 @@ def build(N=8, h=1, noise=True):
         m.time, m.OG, rule=lambda b, t, j:
         b.n_og[t, j] == VOLUME * b.th_og[t] * b.c_og[t, j] / mw_og[j])
 
-    # the solvents' bulk concentrations are constants by assumption, held by
-    # equations over the time set rather than fixed, since a fixed status
-    # covers only the members present when it is set and the caller
-    # discretizes after this returns
-    @m.Constraint(m.time)
-    def bulk_water(b, t):
-        return b.c_aq[t, "H2O"] == AQ_FEED["H2O"]
-
-    @m.Constraint(m.time)
-    def bulk_kerosene(b, t):
-        return b.c_og[t, "Kerosene"] == OG_FEED["Kerosene"]
 
     # the vessel and the withdrawal (the withdrawal is skipped at the
     # first point, where both outlet flows are fixed data)
@@ -347,13 +336,6 @@ def build(N=8, h=1, noise=True):
     m.sholdup_og = pyo.Constraint(
         m.time, m.TK, m.OG, rule=lambda b, t, i, j:
         b.sn_og[t, i, j] == VTANK * b.sc_og[t, i, j] / mw_og[j])
-    @m.Constraint(m.time, m.TK)
-    def settler_water(b, t, i):
-        return b.sc_aq[t, i, "H2O"] == AQ_FEED["H2O"]
-
-    @m.Constraint(m.time, m.TK)
-    def settler_kerosene(b, t, i):
-        return b.sc_og[t, i, "Kerosene"] == OG_FEED["Kerosene"]
 
     m.smolar = pyo.Constraint(
         m.time, m.TK, ACID, rule=lambda b, t, i, j:
@@ -419,15 +401,6 @@ def build(N=8, h=1, noise=True):
     if noise:
         drto.disturbance(m.w_metal, m.w_h, m.w_s, m.w_a, m.w_h2o,
                          m.w_cl, m.w_sa, m.w_sh, m.w_ss, m.w_so)
-    else:
-        # held at zero by equations for the same reason as the solvents,
-        # and undeclared, so no drto transform fixes them later
-        for w in (m.w_metal, m.w_h, m.w_s, m.w_a, m.w_h2o, m.w_cl,
-                  m.w_sa, m.w_sh, m.w_ss, m.w_so):
-            m.add_component(
-                w.local_name + "_zero",
-                pyo.Constraint(w.index_set(), rule=lambda b, *k, _w=w: _w[k] == 0.0),
-            )
 
     # the initial state, one Param per state, filled by the caller
     m.ic_metal = pyo.Param(elements, initialize=1.0, mutable=True)
@@ -564,6 +537,24 @@ def build(N=8, h=1, noise=True):
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
     return m
+
+
+def hold_feed(m, noise=True):
+    """Fix the constant solvent concentrations at every time point.
+
+    Called after the mesh exists, since a fixed status covers only the
+    members present when it is set, and the builder returns the model
+    undiscretized. With ``noise=False`` the process-noise terms are held
+    at zero here too, matching the build that leaves them undeclared.
+    """
+    m.c_aq[:, "H2O"].fix(AQ_FEED["H2O"])
+    m.c_og[:, "Kerosene"].fix(OG_FEED["Kerosene"])
+    m.sc_aq[:, :, "H2O"].fix(AQ_FEED["H2O"])
+    m.sc_og[:, :, "Kerosene"].fix(OG_FEED["Kerosene"])
+    if not noise:
+        for w in (m.w_metal, m.w_h, m.w_s, m.w_a, m.w_h2o, m.w_cl,
+                  m.w_sa, m.w_sh, m.w_ss, m.w_so):
+            w.fix(0.0)
 
 
 def noise_sigmas(m, frac=0.3):

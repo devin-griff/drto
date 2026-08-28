@@ -108,48 +108,16 @@ def build(N=8, h=1, noise=True):
     # finite-difference cascade, one inventory per species per tank
     xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
 
-    # the feed streams. The compositions are held by equations over the time
-    # set rather than fixed, since a fixed status covers only the members
-    # present when it is set and the caller discretizes after this returns.
-    # The organic flow is the manipulated input (initialized, not held), and
-    # the aqueous flow is closed by the disturbance equation below
-    feed_conc = dict(AQ_FEED)
-    feed_conc_og = dict(OG_FEED)
-    feed_conc_og["DEHPA"] = 975.8e3 * DOSAGE / 100
-
-    @m.Constraint(m.fs.time, list(feed_conc))
-    def aqueous_feed_conc(mm, t, j):
-        return ms.aqueous_inlet.conc_mass_comp[t, j] == feed_conc[j]
-
-    @m.Constraint(m.fs.time, list(feed_conc_og))
-    def organic_feed_conc(mm, t, j):
-        return ms.organic_inlet.conc_mass_comp[t, j] == feed_conc_og[j]
-
+    # the feed flows are the manipulated inputs, referenced here so the
+    # declarations can name them. Their values, limits, and the held feed
+    # compositions and temperatures are the caller's step, run once the
+    # mesh exists (see hold_feed)
     m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
     m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
-    for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
-        for t in ref:
-            ref[t].set_value(nominal)
-            # MV limits: the plant's phase-split algebra is solved
-            # reliably inside this envelope; the controller respects it
-            ref[t].setlb(45.0)
-            ref[t].setub(75.0)
-    m.fs.aq_feed[:].unfix()
 
-    # geometry and temperatures, PrOMMiS's dynamic flowsheet values. The
-    # volume is indexed by element alone, so fixing it covers every member.
-    # The temperatures carry time, so they are equations for the same reason
-    # as the feed
+    # geometry, PrOMMiS's dynamic flowsheet values. The volume is indexed
+    # by element alone, so fixing it covers every member
     msc.volume[:].fix(VOLUME * U.m**3)
-
-    @m.Constraint(m.fs.time, msc.elements)
-    def aqueous_temperature(mm, t, e):
-        return msc.aqueous[t, e].temperature == TEMPERATURE * U.K
-
-    @m.Constraint(m.fs.time, msc.elements)
-    def organic_temperature(mm, t, e):
-        return msc.organic[t, e].temperature == TEMPERATURE * U.K
-
     for st in (aq, og):
         st.area.fix(AREA)
         st.length.fix(LENGTH)
@@ -311,6 +279,35 @@ def build(N=8, h=1, noise=True):
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
     return m
+
+
+def hold_feed(m):
+    """Fix the fed streams and the mixer temperatures at every time point.
+
+    Called after the mesh exists, since a fixed status covers only the
+    members present when it is set, and the builder returns the model
+    undiscretized. The organic flow is the manipulated input, initialized
+    and bounded rather than held, and the aqueous flow is closed by the
+    disturbance equation.
+    """
+    U = pyo.units
+    ms = m.fs.ms
+    msc = ms.mixer[1].unit.mscontactor
+    for j, v in AQ_FEED.items():
+        ms.aqueous_inlet.conc_mass_comp[:, j].fix(v)
+    for j, v in OG_FEED.items():
+        ms.organic_inlet.conc_mass_comp[:, j].fix(v)
+    ms.organic_inlet.conc_mass_comp[:, "DEHPA"].fix(975.8e3 * DOSAGE / 100)
+    for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
+        for t in ref:
+            ref[t].set_value(nominal)
+            # MV limits: the plant's phase-split algebra is solved
+            # reliably inside this envelope, and the controller respects it
+            ref[t].setlb(45.0)
+            ref[t].setub(75.0)
+    m.fs.aq_feed[:].unfix()
+    msc.aqueous[:, :].temperature.fix(TEMPERATURE * U.K)
+    msc.organic[:, :].temperature.fix(TEMPERATURE * U.K)
 
 
 def noise_sigmas(m, frac=0.3):
