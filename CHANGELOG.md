@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- `drto.cold_start_dynamic` sets the terminal segment's controls to
+  their declared targets when it runs after `drto.parameterize`
+  (gh #125). It found them by looking up the declared control's
+  identity, and `parameterize` replaces that component, so the lookup
+  found nothing and the segment controls kept whatever pyomo-cvp left.
+  The registry now answers that lookup, matching the component as
+  declared and the replacement alike, so `drto.plot_controls` and
+  `drto.warm_start_dynamic` stop rebuilding it themselves.
+
 - Five `drto.dynamic_optimization` messages read as sentences (gh #120).
   The errors for a value sequence of the wrong length, an unknown
   disturbance name, an estimated parameter holding no value, missing

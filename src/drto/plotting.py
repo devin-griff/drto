@@ -58,26 +58,19 @@ _MEMBER = re.compile(r"^\s*(\w+)\s*\[([^\]]+)\]\s*$")
 
 
 def _tail(m):
-    """Return (segment block, tN, gamma, copies) or None if no segment.
+    """Return (segment block, tN, gamma, registry) or None if no segment.
 
-    ``copies`` maps ``id(declared component)`` to its segment copy, from
-    the pairing the transform records on the registry (gh #27). A control
-    whose profile has been applied is keyed under both the component as
-    declared and the replacement cvp put in its place (gh #70).
+    The caller asks the registry for a component's segment record through
+    ``_segment_record``, which matches the component as declared and the
+    replacement cvp put in its place, so a control whose profile has been
+    applied still reaches its copy (gh #27, gh #70, gh #125).
     """
     b = m.component("drto_ih")
     if b is None:
         return None
     reg = drto.info(m)
     time = reg.components("horizon")[0]
-    copies = {}
-    for r in reg._segment_records():
-        if r.get("copy") is None:
-            continue
-        copies[id(r["of"])] = r["copy"]
-        if r.get("live") is not None:
-            copies[id(r["live"])] = r["copy"]
-    return b, time.last(), pyo.value(b.gamma), copies
+    return b, time.last(), pyo.value(b.gamma), reg
 
 
 def _time_pos(comp, time):
@@ -373,8 +366,9 @@ def _draw(m, panels, targets, sample_slice, t_max, boundary_squares, staircase=F
             ax.axhline(pyo.value(tval), color="C0", linestyle=":")
             drew_target = True
         if tail is not None:
-            b, tN, gamma, copies = tail
-            seg = copies.get(id(comp))
+            b, tN, gamma, reg_t = tail
+            rec = reg_t._segment_record(comp)
+            seg = rec["copy"] if rec is not None else None
             if seg is not None:
                 # a member panel iterates the tau grid; a time-only panel
                 # iterates the copy's own index set (a parameterized segment

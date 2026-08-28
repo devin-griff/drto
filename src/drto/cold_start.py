@@ -241,12 +241,10 @@ def cold_start_dynamic(
 
     # a terminal segment rests at the targets; the transform recorded
     # which tail component belongs to which declaration (gh #27)
-    seg_state = {id(r["of"]): r for r in reg._segment_records("state")}
-    seg_control = {id(r["of"]): r for r in reg._segment_records("control")}
-    if seg_state or seg_control:
+    if reg._segment_records("state") or reg._segment_records("control"):
         n_seg = 0
         for z in states:
-            rec = seg_state.get(id(z))
+            rec = reg._segment_record(z, "state")
             if rec is None:
                 continue
             tgt_param = z_target[id(z)]
@@ -268,7 +266,7 @@ def cold_start_dynamic(
                     for vd in slack.values():
                         vd.set_value(0.0)
         for u in controls:
-            rec = seg_control.get(id(u))
+            rec = reg._segment_record(u, "control")
             if rec is None or rec["copy"] is None:
                 continue
             tgt = pyo.value(u_target[id(u)])

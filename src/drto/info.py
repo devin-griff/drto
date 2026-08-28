@@ -178,6 +178,30 @@ class Info:
     def _segment_records(self, kind=None):
         return [r for r in self._segment if kind is None or r["kind"] == kind]
 
+    def _segment_record(self, component, kind=None):
+        """The segment record ``component`` is paired with, or None.
+
+        Matches the component as declared and the replacement
+        ``drto.parameterize`` swaps in, so a consumer holding either
+        reaches the same record. The identity question is answered here
+        rather than in each consumer, which is what let gh #70 and gh #125
+        happen (``of`` stays the component as declared, since
+        ``drto.warm_start_dynamic`` shifts a replaced Reference's members
+        through it).
+        """
+        for r in self._segment_records(kind):
+            if r["of"] is component or r.get("live") is component:
+                return r
+        return None
+
+    def _segment_live(self, record):
+        """The live component ``record`` is paired with.
+
+        The replacement ``drto.parameterize`` swapped in, or the component
+        as declared when no swap has happened.
+        """
+        return record.get("live") or record["of"]
+
     # ------------------------------------------------------------------
     # recording
     # ------------------------------------------------------------------

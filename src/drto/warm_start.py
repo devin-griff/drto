@@ -172,13 +172,12 @@ def warm_start_dynamic(m):
     controls = list(reg.components("control"))
     ctrl_ids = {id(u) for u in controls}
     if recs:
-        ctrl_recs = [r for r in recs if r["kind"] == "control"]
         for r in recs:
             if r["kind"] not in ("state", "control", "algebraic"):
                 continue
             sources = [r["of"]]
             if r["kind"] == "control":
-                live = controls[ctrl_recs.index(r)]
+                live = reg._segment_live(r)
                 if live is not r["of"]:
                     # cvp replaced the component; the original reference's
                     # underlying members still shift through the same copy
