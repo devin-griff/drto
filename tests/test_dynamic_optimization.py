@@ -248,3 +248,117 @@ def test_infinite_horizon_tail_reaches_the_objective():
     assert reg.has_declaration("cost_group")
     r = drto.scaling.solver_by_name("ipopt").solve(m)
     assert drto.scaling.solved_to_optimality(r)
+
+
+# ----------------------------------------------------------------------
+# the builder-consuming function form (gh #98)
+# ----------------------------------------------------------------------
+def linear_builder(N=4, h=2.5):
+    """A conforming builder: declared, undiscretized, N and h defaulted."""
+    m = pyo.ConcreteModel()
+    m.t = ContinuousSet(initialize=[i * h for i in range(N + 1)])
+    m.z_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.u_ss = pyo.Param(initialize=0.5, mutable=True)
+    m.z_hat = pyo.Param(initialize=0.4, mutable=True)
+    m.z = pyo.Var(m.t, initialize=0.4)
+    m.dzdt = DerivativeVar(m.z, wrt=m.t)
+    m.u = pyo.Var(m.t, bounds=(0, 1), initialize=0.5)
+    m.cost = pyo.Var(m.t)
+
+    @m.Constraint(m.t)
+    def ode(mm, t):
+        return mm.dzdt[t] == -mm.z[t] + mm.u[t]
+
+    @m.Constraint(sorted(m.t)[:-1])
+    def stage(mm, t):
+        return mm.cost[t] == 10 * (mm.z[t] - mm.z_ss) ** 2 + (mm.u[t] - mm.u_ss) ** 2
+
+    @m.Constraint()
+    def init(mm):
+        return mm.z[0] == mm.z_hat
+
+    drto.horizon(m.t)
+    drto.state(m.z)
+    drto.dynamics(m.ode)
+    drto.control(m.u, profile="piecewise_constant")
+    drto.tracking_stage_cost(m.stage)
+    drto.initial_condition(m.init)
+    drto.steady_state(m.z, m.z_ss)
+    drto.steady_state_control(m.u, m.u_ss)
+    return m
+
+
+def test_the_function_discretizes_one_element_per_interval():
+    m = drto.dynamic_optimization(linear_builder, N=4, h=2.5)
+    time = drto.info(m).components("horizon")[0]
+    assert time.get_discretization_info()["nfe"] == 4
+    assert time.get_discretization_info()["ncp"] == 3
+    assert drto.info(m).has_transformation(DO)
+    assert m.component("drto_objective") is not None
+
+
+def test_the_function_passes_N_and_h_by_keyword():
+    seen = {}
+
+    def build(N=4, h=2.5):
+        seen.update(N=N, h=h)
+        return linear_builder(N=N, h=h)
+
+    drto.dynamic_optimization(build, N=6, h=0.5)
+    assert seen == {"N": 6, "h": 0.5}
+
+
+def test_the_function_leaves_the_builders_defaults_when_omitted():
+    seen = {}
+
+    def build(N=4, h=2.5):
+        seen.update(N=N, h=h)
+        return linear_builder(N=N, h=h)
+
+    drto.dynamic_optimization(build)
+    assert seen == {"N": 4, "h": 2.5}
+
+
+def test_the_function_rejects_an_already_discretized_return():
+    def build(N=4, h=2.5):
+        m = linear_builder(N=N, h=h)
+        pyo.TransformationFactory("dae.collocation").apply_to(
+            m, wrt=m.t, nfe=N, ncp=3, scheme="LAGRANGE-RADAU"
+        )
+        return m
+
+    with pytest.raises(ValueError, match="already discretized"):
+        drto.dynamic_optimization(build)
+
+
+def test_the_function_appends_the_terminal_segment_when_asked():
+    plain = drto.dynamic_optimization(linear_builder)
+    assert plain.component("drto_ih") is None
+
+    flagged = drto.dynamic_optimization(linear_builder, infinite_horizon=True)
+    assert flagged.component("drto_ih") is not None
+
+    mapped = drto.dynamic_optimization(
+        linear_builder, infinite_horizon={"nfe": 2, "ncp": 4}
+    )
+    assert mapped.drto_ih.tau.get_discretization_info()["nfe"] == 2
+    assert mapped.drto_ih.tau.get_discretization_info()["ncp"] == 4
+
+
+def test_the_function_passes_the_tracking_weight():
+    # the weight is recorded as a number only when both cost kinds are
+    # declared, which is the case it weighs
+    def build(N=4, h=2.5):
+        m = linear_builder(N=N, h=h)
+        m.ecost = pyo.Var(m.t)
+
+        @m.Constraint(sorted(m.t)[:-1])
+        def econ(mm, t):
+            return mm.ecost[t] == -mm.u[t]
+
+        drto.economic_stage_cost(m.econ)
+        return m
+
+    m = drto.dynamic_optimization(build, tracking_weight=10.0)
+    (rec,) = [r for r in drto.info(m).transformations if r["name"] == DO]
+    assert "10" in str(rec["outcome"]["tracking_weight"])
