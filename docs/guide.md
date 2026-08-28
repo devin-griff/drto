@@ -128,6 +128,20 @@ drto.plot_states(m)
 drto.plot_controls(m)
 ```
 
+From a function that builds the model rather than a model, steps 1, 2,
+and 4 are one call:
+
+```python
+m = drto.dynamic_optimization(build, N=10, infinite_horizon=True)
+drto.cold_start_dynamic(m)          # step 3 is still yours
+SolverFactory("ipopt").solve(m)
+```
+
+`build` returns a declared, undiscretized model, its first two parameters
+are `N` and `h`, and every parameter has a default (feature 006). Reach
+for the four calls above when the page needs to touch the model between
+them, and for the one call when it does not.
+
 **The terminal segment** (`drto.infinite_horizon`) maps the tail
 `t in [tN, inf)` onto `tau in (0, 1]` through `tau = tanh(gamma*(t - tN))`
 and appends it as a block: copies of the states, controls, and algebra,

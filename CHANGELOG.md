@@ -17,6 +17,14 @@ All notable changes to this project are documented here. The format is based on
   declared and the replacement alike, so `drto.plot_controls` and
   `drto.warm_start_dynamic` stop rebuilding it themselves.
 
+- The four example builders that discretized internally return the
+  undiscretized model and drop their `ncp` parameter (gh #98), which the
+  builder contract requires. `idaes_cstr`, `prommis_sx`, and
+  `prommis_sx_index_one` expose `hold_feed`, which fixes the constant
+  feed streams and which the caller runs once the mesh exists, since a
+  fixed status covers only the members present when it is set. The
+  problem handed to the solver is unchanged.
+
 - Five `drto.dynamic_optimization` messages read as sentences (gh #120).
   The errors for a value sequence of the wrong length, an unknown
   disturbance name, an estimated parameter holding no value, missing
@@ -47,6 +55,15 @@ All notable changes to this project are documented here. The format is based on
   is held outside the repository until the solve is diagnosed.
 
 ### Added
+
+- `drto.dynamic_optimization` is also a function taking the model
+  statement (gh #98, feature 006). `drto.dynamic_optimization(build, ...)`
+  calls `build` with whichever of `N` and `h` are given, discretizes what
+  it returns at one finite element per declared interval, appends the
+  terminal segment when asked, applies the registered transformation, and
+  returns the model ready to solve. A builder returning an already
+  discretized model is a descriptive error. The registered transformation
+  is unchanged.
 
 - `drto.dynamic_to_steady_state` is also a function taking the model
   statement (gh #115, feature 005). `drto.dynamic_to_steady_state(build)`
