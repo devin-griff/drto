@@ -67,6 +67,11 @@ has a default, so the bare `build()` is legal. The mode function owns
 discretization, so a builder never discretizes what it returns. The
 other mode functions reference this contract rather than restating it.
 
+A builder holds a constant input by fixing it at the declared sample
+points, which is all an undiscretized model has, and the mode function
+completes it. A fixed status covers only the members present when it is
+set, so the members `dae.collocation` adds would otherwise be free.
+
 ### The function form
 
 - `drto.dynamic_optimization(build, ...)` is the function form under the
@@ -80,6 +85,13 @@ other mode functions reference this contract rather than restating it.
 - A builder returning a model whose declared set is already discretized
   is a descriptive error naming the contract, since the function owns
   the mesh.
+- Before `dae.collocation` runs, it records the members fixed at every
+  declared sample point together with their values, grouped by the index
+  with the time entry removed. After the call returns, it fixes the
+  members added to those groups, each at the value of the sample before
+  it. The declared controls and disturbances are left out, since
+  `drto.parameterize` and the modes set those, and so is a group fixed
+  at only some samples, an initial-condition pin.
 - `infinite_horizon=False`, the default, adds no terminal segment.
   `True` applies `drto.infinite_horizon` with its own defaults, and a
   mapping passes its contents as that transformation's options.
