@@ -26,6 +26,15 @@ All notable changes to this project are documented here. The format is based on
   members present when it is set. The problem handed to the solver is
   unchanged.
 
+- Three `drto.dynamic_simulation` messages read as sentences (gh #124).
+  The errors for missing declarations, an unknown control name, and a
+  control holding no value each joined two clauses with a semicolon. The
+  error for missing declarations now ends its first sentence with a
+  period, so a test matching its tail matches `Missing:` rather than
+  `missing:`, as `drto.dynamic_optimization`'s already does. The error
+  for an unknown control name states the declared controls in a second
+  sentence.
+
 - Five `drto.dynamic_optimization` messages read as sentences (gh #120).
   The errors for a value sequence of the wrong length, an unknown
   disturbance name, an estimated parameter holding no value, missing
