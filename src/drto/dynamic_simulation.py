@@ -23,6 +23,7 @@ from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
 from drto.dynamic_optimization import (
+    _build_and_discretize,
     _fix_disturbances,
     _members,
     _neutralize_estimation,
@@ -105,6 +106,77 @@ def _fix_controls(reg, requested):
             vd.fix()
         fixed.append(f"{name}={wanted[name]}" if name in wanted else f"{name} (held)")
     return fixed
+
+
+def dynamic_simulation(
+    build,
+    N=None,
+    h=None,
+    ncp=3,
+    scheme="LAGRANGE-RADAU",
+    controls=None,
+    disturbances=None,
+):
+    """Build a model, discretize it, and prepare the forward integration.
+
+    Takes the model statement rather than a model, so one call reaches a
+    square system ready to solve. The builder contract is feature 006's:
+    ``build`` returns a declared, undiscretized model, its first two
+    parameters are the interval count and the sampling time named ``N``
+    and ``h``, and every parameter has a default, so the bare ``build()``
+    is legal.
+
+    A builder holds its constant inputs by fixing them at the declared
+    sample points, which is all an undiscretized model has, and
+    discretization here completes them, the same rule feature 006 states
+    for ``drto.dynamic_optimization`` and the same code.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement. Called with whichever of ``N`` and ``h`` were
+        given, by keyword, so an omitted one takes the builder's default.
+    N : int, optional
+        Intervals, passed to the builder.
+    h : float, optional
+        Sampling time, passed to the builder.
+    ncp : int, optional
+        Collocation points per finite element (default 3).
+    scheme : str, optional
+        The collocation scheme (default ``"LAGRANGE-RADAU"``).
+    controls : mapping, optional
+        Passed to the registered transformation when given, mapping a
+        declared control to the value it is fixed at.
+    disturbances : mapping, optional
+        Passed to the registered transformation when given, mapping a
+        declared disturbance to its realization.
+
+    Returns
+    -------
+    Block
+        The model the builder returned, discretized and prepared in place.
+        It is square, so an NLP solver integrates it forward.
+
+    Raises
+    ------
+    ValueError
+        If the builder returns a model whose declared time set is already
+        discretized, since this function owns the mesh.
+
+    Examples
+    --------
+    ::
+
+        plant = drto.dynamic_simulation(build, N=1, controls={"u": 0.3})
+    """
+    m = _build_and_discretize(build, N, h, ncp, scheme, "dynamic_simulation")
+    opts = {}
+    if controls is not None:
+        opts["controls"] = controls
+    if disturbances is not None:
+        opts["disturbances"] = disturbances
+    TransformationFactory("drto.dynamic_simulation").apply_to(m, **opts)
+    return m
 
 
 @TransformationFactory.register(

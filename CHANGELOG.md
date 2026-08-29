@@ -66,6 +66,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.dynamic_simulation` is also a function taking the model
+  statement (gh #99, feature 007). `drto.dynamic_simulation(build, ...)`
+  calls `build` with whichever of `N` and `h` are given, discretizes what
+  it returns at one finite element per declared interval, applies the
+  registered transformation with `controls` and `disturbances` passed
+  through, and returns the square model ready to solve. The builder call,
+  the mesh, the held-input completion, and the already-discretized error
+  are the code `drto.dynamic_optimization`'s function form runs, moved to
+  one place so the two modes cannot drift apart. The registered
+  transformation is unchanged.
+
 - `drto.dynamic_optimization` is also a function taking the model
   statement (gh #98, feature 006). `drto.dynamic_optimization(build, ...)`
   calls `build` with whichever of `N` and `h` are given, discretizes what
