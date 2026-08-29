@@ -22,6 +22,14 @@ pyo.TransformationFactory("drto.dynamic_simulation").apply_to(m)
 SolverFactory("ipopt").solve(m)   # square forward integration
 ```
 
+From a model statement rather than a model, the function form calls the
+builder, discretizes what it returns, and prepares the integration:
+
+```python
+plant = drto.dynamic_simulation(build, N=1, controls={"u": 0.3})
+SolverFactory("ipopt").solve(plant)
+```
+
 ## Benefit hypothesis
 
 The user simulates the model exactly as declared, with no separate
@@ -30,6 +38,27 @@ optimization, since both modes read the same declarations. The
 cold-start initializer and validation runs use this mode.
 
 ## Acceptance criteria
+
+### The function form
+
+- `drto.dynamic_simulation(build, ...)` is the function form under the
+  transformation's own name, the dual form feature 003 sets with
+  `build_objective`. It calls `build` with whichever of `N` and `h` were
+  given, by keyword, so an omitted one takes the builder's default. The
+  builder contract is feature 006's.
+- It discretizes the declared sample grid with `dae.collocation` at one
+  finite element per declared interval, taking `ncp` and `scheme` from
+  its own arguments, and completes the held inputs by feature 006's
+  rule. A builder returning a model whose declared set is already
+  discretized is a descriptive error naming the contract. The builder
+  call, the mesh, the completion, and that error are the code feature
+  006's function form runs, shared rather than restated, so the two
+  modes cannot drift apart.
+- It then applies the registered `drto.dynamic_simulation`
+  transformation, passing `controls` and `disturbances` when given, and
+  returns the square model ready to solve.
+
+### The registered transformation
 
 - `TransformationFactory('drto.dynamic_simulation')` requires `horizon`,
   `state`, `dynamics`, `control`, and `initial_condition`, and errors clearly
