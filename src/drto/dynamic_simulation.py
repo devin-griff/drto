@@ -13,8 +13,9 @@ takes the shape the model declared. The user chooses that shape at declaration
 time through ``control(profile=...)``.
 
 The mode installs no cost, so the declared stage and terminal cost equations
-leave the model, as in ``drto.steady_state_simulation`` (feature 008). The estimation costs and measurements are neutralized through the routine
-shared with the other control-side modes, and each disturbance is fixed at its
+leave the model, as in ``drto.steady_state_simulation`` (feature 008). The
+estimation costs and measurements are neutralized through the routine shared
+with the other control-side modes, and each disturbance is fixed at its
 realization (default zero), the same way the controls are fixed, so the plant
 can be driven by a supplied noise sequence and the system stays square.
 """
