@@ -6,6 +6,7 @@ import pytest
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
+from drto.dynamic_optimization import _held_inputs
 from test_declarations import base_model, declared_model
 from test_infinite_horizon import ready_model
 
@@ -286,6 +287,64 @@ def linear_builder(N=4, h=2.5):
     drto.steady_state(m.z, m.z_ss)
     drto.steady_state_control(m.u, m.u_ss)
     return m
+
+
+def held_builder(N=4, h=2.5):
+    """A conforming builder holding one input at the declared sample points.
+
+    ``feed`` is indexed by time and by two channels. The ``held`` channel
+    is fixed at every sample, at a different value each, so the value a
+    member added between them takes names which sample it came from. The
+    ``pinned`` channel is fixed at the first sample alone, the shape of an
+    initial-condition pin, and the two share a component so the rule has
+    to separate them by index rather than by component.
+    """
+    m = linear_builder(N=N, h=h)
+    samples = sorted(m.t)
+    m.channels = pyo.Set(initialize=["held", "pinned"])
+    m.feed = pyo.Var(m.t, m.channels, initialize=0.0)
+    for i, t in enumerate(samples):
+        m.feed[t, "held"].fix(float(i))
+    m.feed[samples[0], "pinned"].fix(7.0)
+    return m
+
+
+def test_the_function_holds_a_fixed_input_at_the_points_it_adds():
+    m = drto.dynamic_optimization(held_builder, N=4, h=2.5)
+    samples = [i * 2.5 for i in range(5)]
+    added = [t for t in sorted(m.t) if t not in samples]
+    assert added, "collocation added no points"
+    assert all(m.feed[t, "held"].fixed for t in sorted(m.t))
+    for t in added:
+        previous = max(s for s in samples if s < t)
+        assert m.feed[t, "held"].value == pytest.approx(samples.index(previous))
+
+
+def test_the_function_leaves_a_partly_fixed_index_alone():
+    m = drto.dynamic_optimization(held_builder, N=4, h=2.5)
+    samples = [i * 2.5 for i in range(5)]
+    added = [t for t in sorted(m.t) if t not in samples]
+    assert all(m.feed[t, "held"].fixed for t in added)
+    assert m.feed[0, "pinned"].fixed and m.feed[0, "pinned"].value == pytest.approx(7.0)
+    assert not any(m.feed[t, "pinned"].fixed for t in sorted(m.t)[1:])
+
+
+def test_the_hold_skips_the_declared_controls_and_disturbances():
+    m = held_builder(N=4, h=2.5)
+    for t in sorted(m.t):
+        m.u[t].fix(0.25)
+    reg = drto.info(m)
+    recorded = {
+        comp.name
+        for comp, _, _, _ in _held_inputs(
+            m,
+            reg.components("horizon")[0],
+            reg.declarations("horizon")[0]["samples"],
+            reg,
+        )
+    }
+    assert "feed" in recorded
+    assert "u" not in recorded
 
 
 def test_the_function_discretizes_one_element_per_interval():

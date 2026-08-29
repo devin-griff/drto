@@ -189,16 +189,9 @@ def _example_module(name):
     return module
 
 
-def _held(mod, **kwargs):
-    """The model with its constant streams held, the caller's step."""
-    m = mod.build(N=1, h=0.25)
-    mod.hold_feed(m, **kwargs)
-    return m
-
-
 def test_the_mscontactor_form_fails_with_the_extents_named():
     mod = _example_module("prommis_sx")
-    report = drto.check_index(_held(mod))
+    report = drto.check_index(mod.build(N=1, h=0.25))
     assert "not index one" in report.verdict
     assert any("heterogeneous_reaction_extent" in n for n in report.unmatched_variables)
     assert any("_reaction_extent" in n for n in report.unmatched_variables)
@@ -206,5 +199,5 @@ def test_the_mscontactor_form_fails_with_the_extents_named():
 
 def test_the_reaction_invariant_form_passes():
     mod = _example_module("prommis_sx_index_one")
-    report = drto.check_index(_held(mod))
+    report = drto.check_index(mod.build(N=1, h=0.25))
     assert report.verdict == "index one"

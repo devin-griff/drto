@@ -56,24 +56,6 @@ FEED_CONC = {
 }
 
 
-def hold_feed(m):
-    """Fix the fed inlet and the volume at every time point.
-
-    Called after the mesh exists, since a fixed status covers only the
-    members present when it is set. The builder returns the undiscretized
-    model, so this is the caller's step. The flow is the manipulated
-    variable, initialized rather than held.
-    """
-    blk = m.fs.cstr
-    for t in m.fs.time:
-        blk.inlet.flow_vol[t].set_value(F_IN)
-        for j, v in FEED_CONC.items():
-            blk.inlet.conc_mol_comp[t, j].fix(v)
-        blk.inlet.temperature[t].fix(T_IN)
-        blk.inlet.pressure[t].fix(P_IN)
-        blk.volume[t].fix(VOLUME)
-
-
 @declare_process_block_class("NoisyCSTR")
 class NoisyCSTRData(CSTRData):
     """The packaged CSTR with additive noise in every balance equation.
@@ -181,6 +163,18 @@ def build(N=10, h=1, disturbance=False):
     cstr(m, noisy=disturbance)
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
+
+    # the fed inlet and the volume, held at the declared sample points. The
+    # flow is the manipulated variable, initialized rather than fixed. The
+    # mode function fixes the members collocation adds to these
+    blk = m.fs.cstr
+    for t in m.fs.time:
+        blk.inlet.flow_vol[t].set_value(F_IN)
+        for j, v in FEED_CONC.items():
+            blk.inlet.conc_mol_comp[t, j].fix(v)
+        blk.inlet.temperature[t].fix(T_IN)
+        blk.inlet.pressure[t].fix(P_IN)
+        blk.volume[t].fix(VOLUME)
 
     cv, t0 = m.fs.cstr.control_volume, m.fs.time.first()
     fin = m.fs.cstr.inlet.flow_vol
