@@ -23,11 +23,12 @@ SolverFactory("ipopt").solve(rto)   # the optimal steady operating point
 
 ## Benefit hypothesis
 
-The economic RTO point derived this way is a true equilibrium of the dynamics,
-so the setpoint the NMPC tracks is model-consistent rather than a hand-typed
-pair. This is what makes the D-RTO name literal. Because the reduction is
-optional, the mode runs on a model reduced from dynamic or one the user wrote
-directly as steady-state, so the same declaration surface serves both.
+The user gets the optimal steady operating point from the one declared
+model, and the setpoint the NMPC then tracks is a true equilibrium of
+the dynamics rather than a hand-typed pair. This is what makes the
+D-RTO name literal. Because the reduction is optional, the mode runs on
+a model reduced from dynamic or one the user wrote directly as
+steady-state, so the same declaration surface serves both.
 
 ## Acceptance criteria
 
@@ -46,22 +47,24 @@ directly as steady-state, so the same declaration surface serves both.
   regularizes the economic optimum toward a known operating point, the
   RTO-layer equivalent of move suppression. With both declared,
   `tracking_weight` scales the tracking side, mirroring
-  `drto.dynamic_optimization` (feature 006): it defaults to 1, and the
+  `drto.dynamic_optimization` (feature 006). It defaults to 1, and the
   economic cost is in currency units and is never scaled. With only a
-  tracking stage cost declared, the objective is that cost alone: the
+  tracking stage cost declared, the objective is that cost alone, the
   steady point nearest the declared targets.
-- The estimation-category declarations (feature 018) are neutralized through
-  the routine shared with the other control-side modes: the estimation costs
-  and the measurement Params are deleted, and an estimated parameter is fixed
-  at the value it holds and keeps its record. Each disturbance is fixed at
-  zero, after the reduction collapses it to a point. This matters more here
-  than in a simulation: a disturbance left free would be a decision variable
-  the optimizer exploits to lower the economic cost, optimizing against
+- The estimation-category declarations (feature 018) are neutralized
+  through the routine shared with the other control-side modes. The
+  estimation costs and the measurement Params are deleted, and an
+  estimated parameter is fixed at the value it holds and keeps its
+  record. Each disturbance is fixed at zero, after the reduction
+  collapses it to a point. This matters more here than in a simulation,
+  because a disturbance left free would be a decision variable the
+  optimizer exploits to lower the economic cost, optimizing against
   fictitious noise. Fixing it keeps it in the model without making it a
   decision.
-- Unlike the simulation modes, the cost equations stay: this mode needs them.
-  The terminal constraint and terminal cost need no handling either, since
-  the reduction removes both and a steady-authored model cannot have them.
+- Unlike the simulation modes, the cost equations stay, since this mode
+  needs them. The terminal constraint and terminal cost need no handling
+  either, since the reduction removes both and a steady-authored model
+  cannot have them.
 - Solving the transformed model gives the optimal steady operating point.
   Writing that solution back into the declared steady-state targets is an
   algorithmic step outside this transform, which does nothing after a solve.
