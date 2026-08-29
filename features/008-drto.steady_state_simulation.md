@@ -45,16 +45,21 @@ modes.
 - A `controls` option sets the values the fixed controls take: supplied
   control values, or with nothing supplied, the values the control
   variables are already initialized to on the model. The steady state is
-  a single point, so the supplied form is values, not a profile.
+  a single point, so the supplied form is values, not a profile. The
+  mapping's key is the declared component or its name, resolved by name
+  before the reduction replaces the control components, so keys from the
+  source model work through `create_using`. A control on an
+  already-steady model goes in by name, since a scalar Var cannot be a
+  plain dict key. The `disturbances` mapping takes the same key forms.
 - The objective is zero. The transform calls `drto.build_objective`
   (feature 003) with the option for a simulation, which installs a
   constant-zero `Objective` and gives an NLP solver a well-posed square
   problem for the fixed-control equilibrium.
-- The optimization-only constructs leave the model and the registry, through
-  the routine both simulation modes share: the declared stage costs (tracking
-  and economic), the terminal cost, and the terminal constraint. A
-  simulation has no cost and no terminal set, and the cost variables they
-  defined are left unused.
+- The optimization-only constructs leave the model and the registry,
+  through the routine both simulation modes share: the declared stage
+  costs (tracking and economic), the move suppression, the terminal
+  cost, and the terminal constraint. A simulation has no cost and no
+  terminal set, and the cost variables they defined are left unused.
 - The steady-state pairings are kept. The target Params stay on the model, the
   user's components, and they may appear in the equations of a model written
   in deviations from the steady state, so their records stay with them and the

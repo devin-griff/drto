@@ -12,7 +12,7 @@ the review worktree, and code findings go into one issue per feature.
 - [x] 005 drto.dynamic_to_steady_state (issue #111)
 - [x] 006 drto.dynamic_optimization
 - [x] 007 drto.dynamic_simulation
-- [ ] 008 drto.steady_state_simulation
+- [x] 008 drto.steady_state_simulation
 - [ ] 009 drto.steady_state_optimization
 - [ ] 010 drto.initialize_steady_state
 - [ ] 011 drto.cold_start_dynamic
