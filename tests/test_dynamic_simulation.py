@@ -16,10 +16,10 @@ DS = "drto.dynamic_simulation"
 
 
 def sim_model():
-    """A ready model whose controls carry values to be fixed at.
+    """A ready model whose controls hold values to be fixed at.
 
-    ``declared_model`` builds its control without ``initialize``, and a
-    simulation refuses to fix a control holding no value.
+    ``declared_model`` builds its control without ``initialize``, and the
+    transformation raises on a control holding no value.
     """
     m = ready_model()
     for vd in m.u.values():
@@ -37,7 +37,7 @@ def test_requires_the_declarations():
     drto.dynamics(m.ode)
     drto.control(m.u, profile="piecewise_constant")
     # a forward integration is not square without the initial state pinned
-    with pytest.raises(ValueError, match="missing: initial_condition"):
+    with pytest.raises(ValueError, match="Missing: initial_condition"):
         pyo.TransformationFactory(DS).apply_to(m)
 
 
@@ -67,7 +67,7 @@ def test_control_with_no_value_errors():
 def test_controls_are_fixed_after_the_profile_is_applied():
     m = sim_model()
     pyo.TransformationFactory(DS).apply_to(m)
-    # piecewise constant: the profile is applied, then its free points fix
+    # piecewise constant. The profile is applied, then its free points fix
     assert len(m.u) == 4
     assert all(vd.fixed for vd in m.u.values())
 
@@ -88,8 +88,8 @@ def test_costs_leave_the_model():
 
 
 def test_terminal_constraint_is_shed():
-    # a terminal constraint is an optimization construct: a simulation would be
-    # over-constrained by it
+    # a terminal constraint is an optimization construct. A simulation would
+    # be over-constrained by it
     m = declared_model()
 
     @m.Constraint()
@@ -154,7 +154,7 @@ def test_a_constant_is_held_across_the_horizon():
 
 def test_a_nested_control_component_resolves():
     # parameterizing replaces the control component, detaching the mapping's
-    # key, whose name then degrades to its local name; resolution happens
+    # key, whose name then degrades to its local name. Resolution happens
     # while the key is still attached, so a control below the top level
     # passes as a component
     from pyomo.dae import ContinuousSet, DerivativeVar
@@ -221,7 +221,7 @@ def test_estimation_declarations_are_neutralized():
 
 def test_disturbance_realization_drives_the_plant():
     # the plant is stepped with a supplied noise realization, held across the
-    # horizon; the disturbance is fixed at it
+    # horizon. The disturbance is fixed at it
     m = estimation_model()
     pyo.TransformationFactory(DS).apply_to(m, disturbances={"w": 0.1})
     assert all(vd.fixed and pyo.value(vd) == 0.1 for vd in m.w.values())
