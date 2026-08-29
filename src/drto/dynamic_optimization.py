@@ -18,7 +18,7 @@ because the objective is assembled here as the final step, so the tail's
 cost group must be registered by then.
 """
 from pyomo.common.config import ConfigDict, ConfigValue
-from pyomo.core import Transformation, TransformationFactory
+from pyomo.core import Transformation, TransformationFactory, Var
 
 from drto.declarations import _is_var_member, _side_matching
 from drto.info import info
@@ -57,6 +57,82 @@ def _spread(val, n_free, name, fn):
             )
         return list(val)
     return [val] * n_free
+
+
+def _time_position(comp, time):
+    """The position of ``time`` in this component's index, or None.
+
+    None when the component is not indexed by the horizon, or when the
+    horizon appears more than once, or when another index set is not
+    one-dimensional, in which case a position in the index tuple does not
+    follow from a position among the subsets.
+    """
+    index = comp.index_set()
+    subsets = list(index.subsets()) if hasattr(index, "subsets") else [index]
+    at = [i for i, sub in enumerate(subsets) if sub is time]
+    if len(at) != 1 or any(sub.dimen != 1 for sub in subsets):
+        return None
+    return at[0]
+
+
+def _held_inputs(m, time, samples, reg):
+    """Record the values of the members held at every declared sample point.
+
+    Walks the Vars indexed by the horizon and groups their members by the
+    index with the time entry removed. A group whose members are fixed at
+    every declared sample point is one the builder holds, and this returns
+    it as ``(component, at, rest, {sample: value})``, where ``at`` is the
+    position of the time entry in the index and ``rest`` is the index
+    without it. ``dae.collocation`` adds members afterward, and
+    ``_hold_new_members`` fixes them from the values recorded here.
+
+    The declared controls and disturbances are left out, since
+    ``drto.parameterize`` and the modes set those. A group fixed at only
+    some samples, an initial-condition pin, is left out too.
+    """
+    owned = {
+        id(vd)
+        for kind in ("control", "disturbance")
+        for comp in reg.components(kind)
+        for vd in _members(comp)
+    }
+    held = []
+    for comp in m.component_objects(Var, active=True, descend_into=True):
+        at = _time_position(comp, time)
+        if at is None:
+            continue
+        groups = {}
+        for key, vd in comp.items():
+            key = key if isinstance(key, tuple) else (key,)
+            groups.setdefault(key[:at] + key[at + 1 :], {})[key[at]] = vd
+        for rest, group in groups.items():
+            members = [group.get(t) for t in samples]
+            if any(vd is None or not vd.fixed for vd in members) or any(
+                id(vd) in owned for vd in group.values()
+            ):
+                continue
+            held.append((comp, at, rest, {t: group[t].value for t in samples}))
+    return held
+
+
+def _hold_new_members(held, samples):
+    """Fix the members ``dae.collocation`` added, at the previous sample.
+
+    Each entry names a component and the index it was grouped by, which
+    is the component's index with the time entry removed, recorded by
+    ``_held_inputs`` before the mesh was refined. Every member added sits
+    inside an element, so the sample before it is that element's left end.
+    Returns the number fixed.
+    """
+    n = 0
+    for comp, at, rest, values in held:
+        for key, vd in comp.items():
+            key = key if isinstance(key, tuple) else (key,)
+            if key[:at] + key[at + 1 :] != rest or key[at] in values:
+                continue
+            vd.fix(values[max(s for s in samples if s < key[at])])
+            n += 1
+    return n
 
 
 def _initial_condition_params(reg, fn):
@@ -183,6 +259,105 @@ def _neutralize_estimation(reg, fn):
     if pinned:
         outcome["fixed"] = ", ".join(pinned)
     return outcome
+
+
+def dynamic_optimization(
+    build,
+    N=None,
+    h=None,
+    ncp=3,
+    scheme="LAGRANGE-RADAU",
+    infinite_horizon=False,
+    tracking_weight=None,
+):
+    """Build a model, discretize it, and assemble the horizon optimization.
+
+    Takes the model statement rather than a model, so one call reaches a
+    problem ready to solve. The builder contract is feature 006's: ``build``
+    returns a declared, undiscretized model, its first two parameters are
+    the interval count and the sampling time named ``N`` and ``h``, and
+    every parameter has a default, so the bare ``build()`` is legal.
+
+    A builder holds its constant inputs by fixing them at the declared
+    sample points, which is all an undiscretized model has, and
+    discretization here completes them. Before ``dae.collocation`` runs,
+    the members fixed at every sample point are recorded with their values,
+    and the members it adds to those are fixed afterward at the value of
+    the sample before them. The declared controls and disturbances are left
+    out, since ``drto.parameterize`` and the modes set those, and so is
+    anything fixed at only some samples, an initial-condition pin.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement. Called with whichever of ``N`` and ``h`` were
+        given, by keyword, so an omitted one takes the builder's default.
+    N : int, optional
+        Intervals, passed to the builder.
+    h : float, optional
+        Sampling time, passed to the builder.
+    ncp : int, optional
+        Collocation points per finite element (default 3).
+    scheme : str, optional
+        The collocation scheme (default ``"LAGRANGE-RADAU"``).
+    infinite_horizon : bool or mapping, optional
+        ``False`` (the default) adds no terminal segment. ``True`` applies
+        ``drto.infinite_horizon`` with its own defaults, and a mapping
+        passes its contents as that transformation's options.
+    tracking_weight : float, optional
+        Passed to the registered transformation when given, weighting the
+        tracking stage cost against the economic one.
+
+    Returns
+    -------
+    Block
+        The model the builder returned, discretized and assembled in place.
+        It is uninitialized, so ``drto.cold_start_dynamic`` and the other
+        initializers run on it afterward.
+
+    Raises
+    ------
+    ValueError
+        If the builder returns a model whose declared time set is already
+        discretized, since this function owns the mesh.
+
+    Examples
+    --------
+    ::
+
+        m = drto.dynamic_optimization(build, N=50, infinite_horizon=True)
+    """
+    kwargs = {}
+    if N is not None:
+        kwargs["N"] = N
+    if h is not None:
+        kwargs["h"] = h
+    m = build(**kwargs)
+
+    reg = info(m)
+    time = reg.components("horizon")[0]
+    if time.get_discretization_info():
+        raise ValueError(
+            f"drto: dynamic_optimization discretizes the model the builder "
+            f"returns, but '{time.name}' is already discretized. A builder "
+            f"returns a declared, undiscretized model (feature 006)."
+        )
+    # one finite element per declared interval. The horizon record holds the
+    # grid as declared, since horizon errors once the set is discretized
+    samples = reg.declarations("horizon")[0]["samples"]
+    held = _held_inputs(m, time, samples, reg)
+    TransformationFactory("dae.collocation").apply_to(
+        m, wrt=time, nfe=len(samples) - 1, ncp=ncp, scheme=scheme
+    )
+    _hold_new_members(held, samples)
+
+    if infinite_horizon:
+        opts = infinite_horizon if infinite_horizon is not True else {}
+        TransformationFactory("drto.infinite_horizon").apply_to(m, **opts)
+
+    opts = {} if tracking_weight is None else {"tracking_weight": tracking_weight}
+    TransformationFactory("drto.dynamic_optimization").apply_to(m, **opts)
+    return m
 
 
 @TransformationFactory.register(

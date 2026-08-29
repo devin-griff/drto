@@ -43,14 +43,16 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 
-def klatt_engell(N=20, h=0.005, ncp=2, move_penalty=True):
+def klatt_engell(N=20, h=0.005, move_penalty=True):
     """Return the declared Klatt-Engell CSTR with an ``N``-step horizon.
 
     The time set is initialized with the sample grid (``N`` steps of the
-    sampling time ``h``, hours), the convention ``drto.horizon`` captures,
-    and discretized by Radau collocation of degree ``ncp`` with one
-    finite element per step, do-mpc's settings. Physical constants and
-    setpoints are mutable Params; the initial state is set through
+    sampling time ``h``, hours), the convention ``drto.horizon`` captures.
+    The model comes back undiscretized, as the builder contract requires
+    (feature 006), so the caller discretizes it. do-mpc's settings are
+    Radau collocation of degree 2 with one finite element per step.
+    Physical constants and setpoints are mutable Params. The initial
+    state is set through
     ``m.ca_hat`` .. ``m.tk_hat``, and the previous control action through
     ``m.F_prev`` / ``m.Q_dot_prev``.
 
@@ -258,7 +260,4 @@ def klatt_engell(N=20, h=0.005, ncp=2, move_penalty=True):
     drto.steady_state(m.T_K, m.tk_sp)
     drto.steady_state_control(m.F, m.f_sp)
     drto.steady_state_control(m.Q_dot, m.q_sp)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU"
-    )
     return m

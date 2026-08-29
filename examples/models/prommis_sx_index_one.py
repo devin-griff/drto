@@ -103,7 +103,7 @@ def _chemistry():
     return elements, z, corr, ka2, mw_aq, mw_og
 
 
-def build(N=8, h=1, ncp=3, noise=True):
+def build(N=8, h=1, noise=True):
     """One stage on an ``N``-sample horizon of ``h`` hours, index one."""
     elements, z, corr, ka2, mw_aq, mw_og = _chemistry()
 
@@ -195,8 +195,6 @@ def build(N=8, h=1, ncp=3, noise=True):
                      [j for j in OG if j != "Kerosene"], initialize=0.0)
 
     drto.horizon(m.time)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
     t0 = m.time.first()
     sog = [j for j in OG if j != "Kerosene"]
 
@@ -227,9 +225,12 @@ def build(N=8, h=1, ncp=3, noise=True):
         m.time, m.OG, rule=lambda b, t, j:
         b.n_og[t, j] == VOLUME * b.th_og[t] * b.c_og[t, j] / mw_og[j])
 
-    # the solvents' bulk concentrations are constants by assumption
+    # the solvents' bulk concentrations are constants by assumption, fixed
+    # at the declared sample points. The mode function fixes the members
+    # collocation adds to them
     m.c_aq[:, "H2O"].fix(AQ_FEED["H2O"])
     m.c_og[:, "Kerosene"].fix(OG_FEED["Kerosene"])
+
 
     # the vessel and the withdrawal (the withdrawal is skipped at the
     # first point, where both outlet flows are fixed data)
@@ -341,6 +342,7 @@ def build(N=8, h=1, ncp=3, noise=True):
     m.sholdup_og = pyo.Constraint(
         m.time, m.TK, m.OG, rule=lambda b, t, i, j:
         b.sn_og[t, i, j] == VTANK * b.sc_og[t, i, j] / mw_og[j])
+
     m.sc_aq[:, :, "H2O"].fix(AQ_FEED["H2O"])
     m.sc_og[:, :, "Kerosene"].fix(OG_FEED["Kerosene"])
 

@@ -67,7 +67,7 @@ VOLUME, AREA, LENGTH = 0.4, 1.0, 0.4    # m3 mixer, m2 and m per settler
 TEMPERATURE = 305.15                    # K
 
 
-def build(N=8, h=1, ncp=3, noise=True):
+def build(N=8, h=1, noise=True):
     """One declared stage on an ``N``-sample horizon of ``h`` hours."""
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(
@@ -100,8 +100,6 @@ def build(N=8, h=1, ncp=3, noise=True):
     )
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.fs.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
 
     ms = m.fs.ms
     msc = ms.mixer[1].unit.mscontactor
@@ -110,29 +108,36 @@ def build(N=8, h=1, ncp=3, noise=True):
     # finite-difference cascade, one inventory per species per tank
     xs = [x for x in aq.length_domain if x != aq.length_domain.first()]
 
-    # the feed streams: compositions fixed; the organic flow is the
-    # manipulated input (initialized, not fixed); the aqueous flow is
-    # closed by the disturbance equation below
+    # the feed flows are the manipulated inputs, referenced here so the
+    # declarations can name them
+    m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
+    m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
+
+    # the fed compositions and the mixer temperatures, fixed at the declared
+    # sample points. The mode function fixes the members collocation adds to
+    # them. The organic flow is the manipulated input, initialized and
+    # bounded rather than fixed, and the aqueous flow is closed by the
+    # disturbance equation. Bounds are set on the members the model has
+    # here, so a caller who discretizes sets them again on the new members
     for j, v in AQ_FEED.items():
         ms.aqueous_inlet.conc_mass_comp[:, j].fix(v)
     for j, v in OG_FEED.items():
         ms.organic_inlet.conc_mass_comp[:, j].fix(v)
     ms.organic_inlet.conc_mass_comp[:, "DEHPA"].fix(975.8e3 * DOSAGE / 100)
-    m.fs.og_feed = pyo.Reference(msc.organic_inlet_state[:].flow_vol)
-    m.fs.aq_feed = pyo.Reference(msc.aqueous_inlet_state[:].flow_vol)
     for ref, nominal in ((m.fs.og_feed, F_OG), (m.fs.aq_feed, F_AQ)):
         for t in ref:
             ref[t].set_value(nominal)
             # MV limits: the plant's phase-split algebra is solved
-            # reliably inside this envelope; the controller respects it
+            # reliably inside this envelope, and the controller respects it
             ref[t].setlb(45.0)
             ref[t].setub(75.0)
     m.fs.aq_feed[:].unfix()
-
-    # geometry and temperatures, PrOMMiS's dynamic flowsheet values
-    msc.volume[:].fix(VOLUME * U.m**3)
     msc.aqueous[:, :].temperature.fix(TEMPERATURE * U.K)
     msc.organic[:, :].temperature.fix(TEMPERATURE * U.K)
+
+    # geometry, PrOMMiS's dynamic flowsheet values. The volume is indexed
+    # by element alone, so fixing it covers every member
+    msc.volume[:].fix(VOLUME * U.m**3)
     for st in (aq, og):
         st.area.fix(AREA)
         st.length.fix(LENGTH)

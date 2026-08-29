@@ -46,16 +46,14 @@ T_START = 318.0                             # K, the perturbed start
 DC_START = 20.0                             # mol/m3, conversion knocked back
 
 
-def feed(blk, t):
-    # the flow is a manipulated variable: initialized, not fixed
-    blk.inlet.flow_vol[t].set_value(F_IN)
-    blk.inlet.conc_mol_comp[t, "H2O"].fix(55388.0)
-    blk.inlet.conc_mol_comp[t, "NaOH"].fix(C_NAOH)
-    blk.inlet.conc_mol_comp[t, "EthylAcetate"].fix(C_EA)
-    blk.inlet.conc_mol_comp[t, "SodiumAcetate"].fix(0.0)
-    blk.inlet.conc_mol_comp[t, "Ethanol"].fix(0.0)
-    blk.inlet.temperature[t].fix(T_IN)
-    blk.inlet.pressure[t].fix(P_IN)
+#: The fed inlet composition, mol/m3.
+FEED_CONC = {
+    "H2O": 55388.0,
+    "NaOH": C_NAOH,
+    "EthylAcetate": C_EA,
+    "SodiumAcetate": 0.0,
+    "Ethanol": 0.0,
+}
 
 
 @declare_process_block_class("NoisyCSTR")
@@ -148,7 +146,7 @@ def cstr(m, noisy=False):
                      has_heat_transfer=True)
     return m
 
-def build(N=10, h=1, ncp=3, disturbance=False):
+def build(N=10, h=1, disturbance=False):
     samples = [i * h for i in range(N + 1)]
     m = pyo.ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=True, time_set=samples, time_units=pyo.units.s)
@@ -165,11 +163,18 @@ def build(N=10, h=1, ncp=3, disturbance=False):
     cstr(m, noisy=disturbance)
 
     drto.horizon(m.fs.time)             # before discretization: it takes the grid
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.fs.time, nfe=N, ncp=ncp, scheme="LAGRANGE-RADAU")
+
+    # the fed inlet and the volume, held at the declared sample points. The
+    # flow is the manipulated variable, initialized rather than fixed. The
+    # mode function fixes the members collocation adds to these
+    blk = m.fs.cstr
     for t in m.fs.time:
-        feed(m.fs.cstr, t)
-        m.fs.cstr.volume[t].fix(VOLUME)
+        blk.inlet.flow_vol[t].set_value(F_IN)
+        for j, v in FEED_CONC.items():
+            blk.inlet.conc_mol_comp[t, j].fix(v)
+        blk.inlet.temperature[t].fix(T_IN)
+        blk.inlet.pressure[t].fix(P_IN)
+        blk.volume[t].fix(VOLUME)
 
     cv, t0 = m.fs.cstr.control_volume, m.fs.time.first()
     fin = m.fs.cstr.inlet.flow_vol
