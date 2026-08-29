@@ -6,7 +6,7 @@ import pytest
 
 import drto
 from test_declarations import base_model, declared_model
-from test_dynamic_optimization import estimation_model
+from test_dynamic_optimization import estimation_model, linear_builder
 from test_infinite_horizon import ready_model
 
 ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
@@ -265,3 +265,88 @@ def test_the_estimation_model_simulates():
     pyo.TransformationFactory(DS).apply_to(m)
     r = drto.scaling.solver_by_name("ipopt").solve(m)
     assert drto.scaling.solved_to_optimality(r)
+
+
+# ----------------------------------------------------------------------
+# the builder-consuming function form (gh #99)
+# ----------------------------------------------------------------------
+def sim_builder(N=4, h=2.5):
+    """A conforming builder carrying a disturbance and one held input.
+
+    ``w`` is declared as a disturbance, so the function has one to pass a
+    realization through to. ``feed`` is fixed at every declared sample
+    point, at a different value each, so the value a member added between
+    them takes names which sample it came from.
+    """
+    m = linear_builder(N=N, h=h)
+    m.w = pyo.Var(m.t, initialize=0.0)
+    m.feed = pyo.Var(m.t, initialize=0.0)
+    for i, t in enumerate(sorted(m.t)):
+        m.feed[t].fix(float(i))
+    drto.disturbance(m.w)
+    return m
+
+
+def test_the_function_discretizes_one_element_per_interval():
+    m = drto.dynamic_simulation(
+        sim_builder, N=4, h=2.5, ncp=2, scheme="LAGRANGE-LEGENDRE"
+    )
+    info = drto.info(m).components("horizon")[0].get_discretization_info()
+    assert info["nfe"] == 4
+    assert info["ncp"] == 2
+    assert info["scheme"] == "LAGRANGE-LEGENDRE"
+    assert drto.info(m).has_transformation(DS)
+    assert m.component("drto_objective") is not None
+
+
+def test_the_function_passes_N_and_h_by_keyword():
+    seen = {}
+
+    def build(N=4, h=2.5):
+        seen.update(N=N, h=h)
+        return sim_builder(N=N, h=h)
+
+    drto.dynamic_simulation(build, N=6, h=0.5)
+    assert seen == {"N": 6, "h": 0.5}
+
+
+def test_the_function_leaves_the_builders_defaults_when_omitted():
+    m = drto.dynamic_simulation(sim_builder, N=2)
+    # h defaults to 2.5, so two intervals reach t = 5.0
+    assert m.t.last() == pytest.approx(5.0)
+    assert drto.info(m).components("horizon")[0].get_discretization_info()["nfe"] == 2
+
+
+def test_the_function_rejects_an_already_discretized_model():
+    def build(N=4, h=2.5):
+        m = sim_builder(N=N, h=h)
+        pyo.TransformationFactory("dae.collocation").apply_to(
+            m, wrt=m.t, nfe=N, ncp=3, scheme="LAGRANGE-RADAU"
+        )
+        return m
+
+    with pytest.raises(ValueError, match="already discretized"):
+        drto.dynamic_simulation(build)
+
+
+def test_the_function_passes_the_controls_through():
+    m = drto.dynamic_simulation(sim_builder, N=4, controls={"u": 0.3})
+    assert all(vd.fixed for vd in m.u.values())
+    assert all(pyo.value(vd) == pytest.approx(0.3) for vd in m.u.values())
+
+
+def test_the_function_passes_the_disturbances_through():
+    m = drto.dynamic_simulation(sim_builder, N=4, disturbances={"w": 0.05})
+    assert all(vd.fixed for vd in m.w.values())
+    assert all(pyo.value(vd) == pytest.approx(0.05) for vd in m.w.values())
+
+
+def test_the_function_holds_a_fixed_input_at_the_points_it_adds():
+    m = drto.dynamic_simulation(sim_builder, N=4, h=2.5)
+    samples = [i * 2.5 for i in range(5)]
+    added = [t for t in sorted(m.t) if t not in samples]
+    assert added, "collocation added no points"
+    assert all(m.feed[t].fixed for t in sorted(m.t))
+    for t in added:
+        previous = max(s for s in samples if s < t)
+        assert m.feed[t].value == pytest.approx(samples.index(previous))

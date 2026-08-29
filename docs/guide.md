@@ -215,6 +215,16 @@ square system integrates forward with any NLP solver. The registry
 records what was fixed and the report names it. This is the plant in the
 closed loop below: the same declarations, simulated one step at a time.
 
+From a function that builds the model rather than a model, the build, the
+discretization, and the transformation are one call:
+
+```python
+plant = drto.dynamic_simulation(build, N=1, controls={"u": 0.3})
+```
+
+`build` follows the same contract the infinite-horizon workflow above
+states, and the call completes its held inputs the same way.
+
 ## Workflow: the closed loop
 
 `drto.ideal_nmpc` runs the receding-horizon loop the declarations

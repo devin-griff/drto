@@ -135,6 +135,44 @@ def _hold_new_members(held, samples):
     return n
 
 
+def _build_and_discretize(build, N, h, ncp, scheme, fn):
+    """Build a model from the statement and discretize it on the declared grid.
+
+    Shared by the mode functions that take the model statement, so the
+    builder contract is enforced in one place. Calls ``build`` with
+    whichever of ``N`` and ``h`` were given, by keyword, so an omitted one
+    takes the builder's default. Applies ``dae.collocation`` at one finite
+    element per declared interval, with ``_held_inputs`` before it and
+    ``_hold_new_members`` after, so a constant input the builder fixed at
+    the sample points is fixed at the members the call adds too. ``fn``
+    names the calling function in the error. Returns the model.
+    """
+    kwargs = {}
+    if N is not None:
+        kwargs["N"] = N
+    if h is not None:
+        kwargs["h"] = h
+    m = build(**kwargs)
+
+    reg = info(m)
+    time = reg.components("horizon")[0]
+    if time.get_discretization_info():
+        raise ValueError(
+            f"drto: {fn} discretizes the model the builder returns, but "
+            f"'{time.name}' is already discretized. A builder returns a "
+            f"declared, undiscretized model (feature 006)."
+        )
+    # one finite element per declared interval. The horizon record holds the
+    # grid as declared, since horizon errors once the set is discretized
+    samples = reg.declarations("horizon")[0]["samples"]
+    held = _held_inputs(m, time, samples, reg)
+    TransformationFactory("dae.collocation").apply_to(
+        m, wrt=time, nfe=len(samples) - 1, ncp=ncp, scheme=scheme
+    )
+    _hold_new_members(held, samples)
+    return m
+
+
 def _initial_condition_params(reg, fn):
     """The initial-condition Params, one ParamData per pinned member.
 
@@ -327,29 +365,7 @@ def dynamic_optimization(
 
         m = drto.dynamic_optimization(build, N=50, infinite_horizon=True)
     """
-    kwargs = {}
-    if N is not None:
-        kwargs["N"] = N
-    if h is not None:
-        kwargs["h"] = h
-    m = build(**kwargs)
-
-    reg = info(m)
-    time = reg.components("horizon")[0]
-    if time.get_discretization_info():
-        raise ValueError(
-            f"drto: dynamic_optimization discretizes the model the builder "
-            f"returns, but '{time.name}' is already discretized. A builder "
-            f"returns a declared, undiscretized model (feature 006)."
-        )
-    # one finite element per declared interval. The horizon record holds the
-    # grid as declared, since horizon errors once the set is discretized
-    samples = reg.declarations("horizon")[0]["samples"]
-    held = _held_inputs(m, time, samples, reg)
-    TransformationFactory("dae.collocation").apply_to(
-        m, wrt=time, nfe=len(samples) - 1, ncp=ncp, scheme=scheme
-    )
-    _hold_new_members(held, samples)
+    m = _build_and_discretize(build, N, h, ncp, scheme, "dynamic_optimization")
 
     if infinite_horizon:
         opts = infinite_horizon if infinite_horizon is not True else {}
