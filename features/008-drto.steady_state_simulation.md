@@ -23,12 +23,14 @@ SolverFactory("ipopt").solve(sim)   # the equilibrium under u = 0.3
 
 ## Benefit hypothesis
 
-Deriving the equilibrium from the same declarations makes the resting state
-model-consistent by construction, and it composes the steady-state reduction
-rather than duplicating it. Because that reduction is optional, this mode also
-runs on a model the user wrote directly as steady-state, not only a dynamic
-model reduced to rest, so one declaration surface lets a steady-state model be
-used across the modes.
+The user finds the resting operating point from the one declared model,
+with the resting state model-consistent by construction because it is
+derived from the same declarations. The mode composes the steady-state
+reduction rather than duplicating it, and because that reduction is
+optional it also runs on a model the user wrote directly as
+steady-state, not only a dynamic model reduced to rest, so one
+declaration surface lets a steady-state model be used across the
+modes.
 
 ## Acceptance criteria
 
@@ -40,33 +42,34 @@ used across the modes.
   a single equilibrium point by composing `drto.dynamic_to_steady_state`
   (feature 005). If the model is already steady-state, that step is skipped.
   Either way the declared controls are fixed.
-- A control option sets the values the fixed controls take: supplied control
-  values, or with nothing supplied, the values the control variables are already
-  initialized to on the model. The steady state is a single point, so the
-  supplied form is values, not a profile.
-- The objective is zero: the transform calls `drto.build_objective` (feature
-  003) with the option for a simulation, which installs a constant-zero
-  `Objective` and gives an NLP solver a well-posed square problem for the
-  fixed-control equilibrium.
+- A `controls` option sets the values the fixed controls take: supplied
+  control values, or with nothing supplied, the values the control
+  variables are already initialized to on the model. The steady state is
+  a single point, so the supplied form is values, not a profile.
+- The objective is zero. The transform calls `drto.build_objective`
+  (feature 003) with the option for a simulation, which installs a
+  constant-zero `Objective` and gives an NLP solver a well-posed square
+  problem for the fixed-control equilibrium.
 - The optimization-only constructs leave the model and the registry, through
   the routine both simulation modes share: the declared stage costs (tracking
-  and economic), the terminal cost, and the terminal constraint. A simulation
-  carries no cost and no terminal set, and the cost variables they defined are
-  left unused.
+  and economic), the terminal cost, and the terminal constraint. A
+  simulation has no cost and no terminal set, and the cost variables they
+  defined are left unused.
 - The steady-state pairings are kept. The target Params stay on the model, the
   user's components, and they may appear in the equations of a model written
   in deviations from the steady state, so their records stay with them and the
   registry mirrors the model.
-- The estimation-category declarations (feature 018) are neutralized, before
-  the reduction, through the routine shared with the dynamic modes: the
-  estimation costs and the measurement Params are deleted, and an estimated
-  parameter is fixed at the value it holds and keeps its record. It runs before
-  the reduction, which collapses the control-side costs and not the
-  window-based estimation costs.
+- The estimation-category declarations (feature 018) are neutralized,
+  before the reduction, through the routine shared with the dynamic
+  modes. The estimation costs and the measurement Params are deleted,
+  and an estimated parameter is fixed at the value it holds and keeps
+  its record. It runs before the reduction, which collapses the
+  control-side costs and not the window-based estimation costs.
 - Each disturbance is fixed after the reduction collapses it to a single
-  point, at a standing value the `disturbances` option supplies, defaulting to
-  zero: the equilibrium under a persistent disturbance. Fixing keeps the
-  equilibrium solve square and keeps the disturbance in the model.
+  point, at a standing value the `disturbances` option supplies,
+  defaulting to zero, so the solved point is the equilibrium under a
+  persistent disturbance. Fixing keeps the equilibrium solve square and
+  keeps the disturbance in the model.
 - Solving the transformed model gives an equilibrium that satisfies the dynamics
   at rest and the model's algebraic relations.
 - It works through both `apply_to` (in place) and `create_using` (a transformed
