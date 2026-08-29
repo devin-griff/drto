@@ -24,10 +24,10 @@ Every model here follows these, and new models should too:
   `h`, since the mode functions pass them by keyword, and every parameter
   has a default, so the bare `build()` is legal. The caller owns
   discretization, which is what `drto.dynamic_optimization` does when it
-  is handed the builder (feature 006). A value that has to be fixed at
-  every time point is fixed by a function the caller runs after the mesh
-  exists, not inside the builder, since a fixed status covers only the
-  members present when it is set.
+  is handed the builder (feature 006). A constant input is fixed at the
+  declared sample points, which is all an undiscretized model has, and
+  the mode function fixes the members `dae.collocation` adds, since a
+  fixed status covers only the members present when it is set.
 - **Model-consistent setpoints.** The steady-state target pair must be a
   true equilibrium of the dynamics. A hand-typed pair that is not a fixed
   point leaves the controller settling at a weighted compromise instead of
@@ -47,7 +47,7 @@ Every model here follows these, and new models should too:
 | `quad_tank.py` | `quad_tank(N=15, h=10)` | Johansson's quadruple tank (IEEE TCST 2000), nonminimum-phase configuration: four levels, two pumps with crossed splits. |
 | `double_column.py` | `double_column(N=25, h=1)` | Two 41-tray distillation columns in series separating a ternary mixture (the Skogestad Column A lineage), the DAE example: tray compositions and holdups are states, eight flow controls, and the weir flows, vapor compositions, temperatures, and purity aliases ride along as undeclared algebraics. |
 | `cart_pole.py` | `cart_pole(N=10, h=1)` | Inverted pendulum on a cart (the Dinh et al. 2025 pendulum example): four states, one force input, underactuated, and the upright setpoint is an unstable equilibrium, the regime where terminal machinery matters. |
-| `idaes_cstr.py` | `build(N=10, h=1)` | The IDAES saponification CSTR, the unmodified-flowsheet example: member-subset holdup states with the water member algebraic, jacket duty and Port-declared feed flow as controls, targets and hooks as Params in the owners' units, and the constant feed streams held by `hold_feed`, which the caller runs once the mesh exists. Needs `idaes-pse`. |
+| `idaes_cstr.py` | `build(N=10, h=1)` | The IDAES saponification CSTR, the unmodified-flowsheet example: member-subset holdup states with the water member algebraic, jacket duty and Port-declared feed flow as controls, targets and hooks as Params in the owners' units, and the constant feed streams fixed at the declared sample points. Needs `idaes-pse`. |
 
 From a notebook in `examples/`:
 

@@ -138,9 +138,11 @@ SolverFactory("ipopt").solve(m)
 ```
 
 `build` returns a declared, undiscretized model, its first two parameters
-are `N` and `h`, and every parameter has a default (feature 006). Reach
-for the four calls above when the page needs to touch the model between
-them, and for the one call when it does not.
+are `N` and `h`, and every parameter has a default (feature 006). A
+constant input is fixed at the declared sample points, which is all an
+undiscretized model has, and the call fixes the members `dae.collocation`
+adds to it. Reach for the four calls above when the workflow has to touch
+the model between them, and for the one call when it does not.
 
 **The terminal segment** (`drto.infinite_horizon`) maps the tail
 `t in [tN, inf)` onto `tau in (0, 1]` through `tau = tanh(gamma*(t - tN))`

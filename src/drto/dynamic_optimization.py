@@ -118,10 +118,11 @@ def _held_inputs(m, time, samples, reg):
 def _hold_new_members(held, samples):
     """Fix the members ``dae.collocation`` added, at the previous sample.
 
-    Each entry names a component and one index of it but for the time
-    entry, recorded by ``_held_inputs`` before the mesh was refined. Every
-    member added sits inside an element, so the sample before it is the
-    element's left end. Returns the number fixed.
+    Each entry names a component and the index it was grouped by, which
+    is the component's index with the time entry removed, recorded by
+    ``_held_inputs`` before the mesh was refined. Every member added sits
+    inside an element, so the sample before it is that element's left end.
+    Returns the number fixed.
     """
     n = 0
     for comp, at, rest, values in held:

@@ -20,10 +20,11 @@ All notable changes to this project are documented here. The format is based on
 - The four example builders that discretized internally return the
   undiscretized model and drop their `ncp` parameter (gh #98), which the
   builder contract requires. `idaes_cstr`, `prommis_sx`, and
-  `prommis_sx_index_one` expose `hold_feed`, which fixes the constant
-  feed streams and which the caller runs once the mesh exists, since a
-  fixed status covers only the members present when it is set. The
-  problem handed to the solver is unchanged.
+  `prommis_sx_index_one` fix their constant feed streams at the declared
+  sample points, and `drto.dynamic_optimization` fixes the members
+  `dae.collocation` adds to them, since a fixed status covers only the
+  members present when it is set. The problem handed to the solver is
+  unchanged.
 
 - Five `drto.dynamic_optimization` messages read as sentences (gh #120).
   The errors for a value sequence of the wrong length, an unknown
@@ -61,7 +62,9 @@ All notable changes to this project are documented here. The format is based on
   calls `build` with whichever of `N` and `h` are given, discretizes what
   it returns at one finite element per declared interval, appends the
   terminal segment when asked, applies the registered transformation, and
-  returns the model ready to solve. A builder returning an already
+  returns the model ready to solve. A builder holds a constant input by
+  fixing it at the declared sample points, and the function fixes the
+  members `dae.collocation` adds to it. A builder returning an already
   discretized model is a descriptive error. The registered transformation
   is unchanged.
 
