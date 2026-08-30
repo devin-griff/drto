@@ -76,6 +76,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.steady_state_simulation` is also a function taking the model
+  statement (gh #116, feature 008). `drto.steady_state_simulation(build,
+  ...)` calls `build()` with no arguments, applies the registered
+  transformation with `controls` and `disturbances` passed through, and
+  returns the square equilibrium problem. Nothing is discretized on this
+  path, since the transformation composes the feature 005 reduction and a
+  statement building its steady form natively takes that reduction's
+  skip. The registered transformation is unchanged.
+
 - `drto.dynamic_simulation` is also a function taking the model
   statement (gh #99, feature 007). `drto.dynamic_simulation(build, ...)`
   calls `build` with whichever of `N` and `h` are given, discretizes what

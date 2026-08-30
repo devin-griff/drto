@@ -22,6 +22,58 @@ from drto.info import info
 from drto.objective import build_objective
 
 
+def steady_state_simulation(build, controls=None, disturbances=None):
+    """Build a model and reduce it to the fixed-input equilibrium.
+
+    Takes the model statement rather than a model, so a script that already
+    has a builder reaches its equilibrium in one call. The builder contract
+    is feature 006's: ``build`` returns a declared model, its first two
+    parameters are the interval count and the sampling time, and every
+    parameter has a default, so the bare ``build()`` this makes is legal.
+    The steady modes pass no ``N`` and no ``h``, since the reduction
+    collapses the grid either way.
+
+    Nothing is discretized on this path. The registered transformation
+    composes ``drto.dynamic_to_steady_state`` (feature 005) for a model
+    declaring a horizon and dynamics, and a statement that constructs its
+    steady form natively takes that reduction's skip.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement, called with no arguments.
+    controls : mapping, optional
+        Passed to the registered transformation when given, mapping a
+        declared control to the value it is fixed at.
+    disturbances : mapping, optional
+        Passed to the registered transformation when given, mapping a
+        declared disturbance to its standing realization.
+
+    Returns
+    -------
+    Block
+        The square equilibrium problem. This is the object ``build``
+        returned, since the function owns the model it just built and
+        transforms it in place. A caller holding a model of its own keeps
+        ``TransformationFactory('drto.steady_state_simulation').create_using``
+        for the form that leaves the source unchanged.
+
+    Examples
+    --------
+    ::
+
+        sim = drto.steady_state_simulation(build, controls={"u": 0.3})
+    """
+    m = build()
+    opts = {}
+    if controls is not None:
+        opts["controls"] = controls
+    if disturbances is not None:
+        opts["disturbances"] = disturbances
+    TransformationFactory("drto.steady_state_simulation").apply_to(m, **opts)
+    return m
+
+
 @TransformationFactory.register(
     "drto.steady_state_simulation",
     doc="Reduce to steady state, fix the controls, and install the zero "

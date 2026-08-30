@@ -313,8 +313,9 @@ before any dynamic transform:
   their steady member, References re-pointed, Ports intact.
 - `drto.steady_state_simulation` is the reduction plus held controls: a
   square equilibrium at given inputs (its `create_using` form leaves the
-  dynamic model untouched). The CSTR example computes its setpoint this
-  way.
+  dynamic model untouched, and `drto.steady_state_simulation(build, ...)`
+  builds the model instead of taking one). The CSTR example computes its
+  setpoint this way.
 - `drto.steady_state_optimization` is the reduction plus the declared
   economic cost: the RTO problem.
 

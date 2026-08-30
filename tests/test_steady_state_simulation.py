@@ -7,7 +7,7 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
 from test_declarations import declared_model
-from test_dynamic_optimization import estimation_model
+from test_dynamic_optimization import estimation_model, linear_builder
 
 ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
@@ -211,3 +211,57 @@ def test_a_model_with_no_declared_control_reports_none():
         )
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(m)
     assert "controls=(none declared)" in repr(drto.info(m))
+
+
+# ----------------------------------------------------------------------
+# the builder-consuming function form (gh #116)
+# ----------------------------------------------------------------------
+def test_the_function_reduces_and_prepares_the_equilibrium():
+    sim = drto.steady_state_simulation(linear_builder)
+    applied = [r["name"] for r in drto.info(sim).transformations]
+    assert "drto.dynamic_to_steady_state" in applied
+    assert "drto.steady_state_simulation" in applied
+    assert sim.component("drto_objective") is not None
+    # the reduction collapsed time rather than discretizing it
+    assert sim.component("t") is None
+    assert not drto.info(sim).has_declaration("horizon")
+
+
+def test_the_function_passes_the_controls_through():
+    sim = drto.steady_state_simulation(linear_builder, controls={"u": 0.3})
+    assert sim.u.fixed and pyo.value(sim.u) == pytest.approx(0.3)
+
+
+def test_the_function_passes_the_disturbances_through():
+    sim = drto.steady_state_simulation(estimation_model, disturbances={"w": 0.1})
+    assert sim.w.fixed and pyo.value(sim.w) == pytest.approx(0.1)
+
+
+def test_the_function_takes_the_reductions_skip_on_a_steady_statement():
+    sim = drto.steady_state_simulation(steady_authored_model)
+    applied = [r["name"] for r in drto.info(sim).transformations]
+    assert "drto.dynamic_to_steady_state" not in applied
+    assert "drto.steady_state_simulation" in applied
+
+
+def test_the_function_builds_what_create_using_gives():
+    import hashlib
+
+    def rows(model):
+        r = [
+            f"V|{v.name}|{v.lb}|{v.ub}|{v.fixed}|{v.value}"
+            for v in model.component_data_objects(pyo.Var, active=True)
+        ]
+        r += [
+            f"C|{c.name}|{c.lower}|{c.upper}|{c.body}"
+            for c in model.component_data_objects(pyo.Constraint, active=True)
+        ]
+        r.sort()
+        return len(r), hashlib.sha256(chr(10).join(r).encode()).hexdigest()
+
+    held = linear_builder()
+    cloned = pyo.TransformationFactory("drto.steady_state_simulation").create_using(
+        held, controls={held.u: 0.3}
+    )
+    built = drto.steady_state_simulation(linear_builder, controls={"u": 0.3})
+    assert rows(built) == rows(cloned)
