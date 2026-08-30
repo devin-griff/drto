@@ -52,7 +52,9 @@ modes.
   `drto.dynamic_to_steady_state(build)` already sets.
 - It applies the registered `drto.steady_state_simulation`
   transformation, passing `controls` and `disturbances` when given, and
-  returns the square equilibrium problem.
+  returns the square equilibrium problem. Their keys are names on this
+  path, since the build happens inside the call and the caller never
+  holds the components the transformation's other key form takes.
 - Nothing is discretized on this path. The transformation composes the
   feature 005 reduction for a model declaring a horizon and dynamics,
   and a statement that constructs its steady form natively takes that
