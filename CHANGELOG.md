@@ -26,6 +26,16 @@ All notable changes to this project are documented here. The format is based on
   members present when it is set. The problem handed to the solver is
   unchanged.
 
+- Two `drto.steady_state_simulation` messages and its factory doc string
+  read as sentences (gh #130). The errors for an unknown control name and
+  a control holding no value each joined two clauses with a semicolon,
+  and the doc string spliced its second clause on with a colon. The
+  mode's control-fixing loop was a copy of `drto.dynamic_simulation`'s,
+  and both now call the one routine, which takes the calling
+  transformation's name for its messages. A supplied value spreads
+  through the shared `_spread`, so a sequence of the wrong length errors
+  rather than being assigned whole.
+
 - Three `drto.dynamic_simulation` messages read as sentences (gh #124).
   The errors for missing declarations, an unknown control name, and a
   control holding no value each joined two clauses with a semicolon. The
