@@ -56,7 +56,9 @@ loop builds its process simulation through this mode.
   modes cannot drift apart.
 - It then applies the registered `drto.dynamic_simulation`
   transformation, passing `controls` and `disturbances` when given, and
-  returns the square model ready to solve.
+  returns the square model ready to solve. Their keys are names on this
+  path, since the build happens inside the call and the caller never
+  holds the components the transformation's other key form takes.
 
 ### The registered transformation
 
