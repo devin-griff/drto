@@ -33,8 +33,8 @@ SolverFactory("ipopt").solve(plant)
 ## Benefit hypothesis
 
 The user simulates the model exactly as declared, with no separate
-simulation model to write and none to keep consistent with the
-optimization, since both modes read the same declarations. The NMPC
+simulation model to write or keep consistent with the optimization,
+since both modes read the same declarations. The NMPC
 loop builds its process simulation through this mode.
 
 ## Acceptance criteria
