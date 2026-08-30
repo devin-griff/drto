@@ -69,12 +69,18 @@ def _shed_optimization_constructs(reg):
     return dropped
 
 
-def _fix_controls(reg, requested):
+def _fix_controls(reg, requested, fn):
     """Fix each declared control, at a supplied value or the one it holds.
 
-    Resolution is by name. ``create_using`` hands keys from the source
-    model, and parameterizing replaces the control components, so the name
-    is the stable handle.
+    Shared by the two simulation modes, which fix their controls the same
+    way, with ``fn`` naming the caller in the errors. Resolution is by
+    name. ``create_using`` hands keys from the source model, and
+    parameterizing and the steady reduction both replace the control
+    components, so the name is the stable handle. Returns the display
+    names for the transformation log.
+
+    ``drto.steady_state_simulation`` does not require a declared control,
+    so a model with none reaches the empty listing in the first error.
     """
     declared = {c.name: c for c in reg.components("control")}
     wanted = {}
@@ -82,9 +88,9 @@ def _fix_controls(reg, requested):
         name = key if isinstance(key, str) else key.name
         if name not in declared:
             raise ValueError(
-                f"drto: dynamic_simulation got a value for '{name}', "
-                f"which is not a declared control. The declared controls "
-                f"are {', '.join(declared)}."
+                f"drto: {fn} got a value for '{name}', which is not a "
+                f"declared control. The declared controls are "
+                f"{', '.join(declared) or '(none)'}."
             )
         wanted[name] = val
 
@@ -92,15 +98,14 @@ def _fix_controls(reg, requested):
     for name, comp in declared.items():
         members = list(_members(comp))
         if name in wanted:
-            val = wanted[name]
-            values = _spread(val, len(members), name, "dynamic_simulation")
+            values = _spread(wanted[name], len(members), name, fn)
             for vd, v in zip(members, values):
                 vd.set_value(v)
         for vd in members:
             if vd.value is None:
                 raise ValueError(
-                    f"drto: dynamic_simulation fixes '{name}' at the "
-                    f"value it already holds, but it has none. Pass "
+                    f"drto: {fn} fixes '{name}' at the value it already "
+                    f"holds, but it has none. Pass "
                     f"controls={{{name}: value}} or initialize it."
                 )
             vd.fix()
@@ -253,7 +258,7 @@ class DynamicSimulationTransformation(Transformation):
         # the declared profiles shape the simulated input, so they are applied
         # before the controls and disturbances are fixed
         TransformationFactory("drto.parameterize").apply_to(model)
-        fixed = _fix_controls(reg, controls)
+        fixed = _fix_controls(reg, controls, "dynamic_simulation")
         noise = _fix_disturbances(reg, disturbances, "dynamic_simulation")
 
         build_objective(model, zero=True)

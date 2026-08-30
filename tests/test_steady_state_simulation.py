@@ -69,7 +69,7 @@ def test_create_using_resolves_source_model_controls_by_name():
 def test_create_using_resolves_a_nested_control_component():
     # create_using remaps the mapping's keys onto the clone and the
     # reduction replaces the control component, detaching the key, whose
-    # name then degrades to its local name; resolution happens while the
+    # name then degrades to its local name. Resolution happens while the
     # key is still attached, so a control below the top level passes too
     m = pyo.ConcreteModel()
     m.t = ContinuousSet(initialize=[0, 1, 2])
@@ -93,7 +93,7 @@ def test_create_using_resolves_a_nested_control_component():
 
 
 def test_stage_cost_is_dropped():
-    # a simulation carries no cost equations
+    # the mode installs no cost equations
     m = declared_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={m.u: 0.3}
@@ -104,8 +104,8 @@ def test_stage_cost_is_dropped():
 
 def test_steady_state_pairings_are_kept():
     # the target Params stay on the model and may appear in a deviation-form
-    # model's equations, so their records stay with them: the registry mirrors
-    # the model
+    # model's equations, so their records stay with them and the registry
+    # mirrors the model
     m = declared_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, controls={m.u: 0.3}
@@ -131,8 +131,8 @@ def test_terminal_constraint_leaves_the_model():
 
 
 def test_estimation_declarations_are_neutralized():
-    # a steady-state simulation of a model carrying the estimation surface
-    # sheds it, so the equilibrium solve stays square
+    # a steady-state simulation of a model that also declares the estimation
+    # surface sheds it, so the equilibrium solve stays square
     m = estimation_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(m)
     reg = drto.info(m)
@@ -148,7 +148,7 @@ def test_estimation_declarations_are_neutralized():
 
 
 def test_disturbance_realization_is_a_standing_value():
-    # the equilibrium under a persistent disturbance: a single constant offset
+    # the equilibrium under a persistent disturbance, a single constant offset
     m = estimation_model()
     pyo.TransformationFactory("drto.steady_state_simulation").apply_to(
         m, disturbances={"w": 0.1}
@@ -191,3 +191,23 @@ def test_steady_authored_simulation_solves():
     )
     drto.scaling.solver_by_name("ipopt").solve(m)
     assert pyo.value(m.z) == pytest.approx(0.8, abs=1e-8)
+
+
+def test_a_model_with_no_declared_control_reports_none():
+    # steady_state_simulation requires states alone, so a model declaring no
+    # control reaches the empty listing in the shared routine's error and in
+    # the transformation log
+    m = pyo.ConcreteModel()
+    m.z = pyo.Var(initialize=1.0)
+
+    @m.Constraint()
+    def balance(mm):
+        return mm.z == 2.0
+
+    drto.state(m.z)
+    with pytest.raises(ValueError, match=r"declared controls are \(none\)"):
+        pyo.TransformationFactory("drto.steady_state_simulation").create_using(
+            m, controls={"x": 1.0}
+        )
+    pyo.TransformationFactory("drto.steady_state_simulation").apply_to(m)
+    assert "controls=(none declared)" in repr(drto.info(m))

@@ -3,10 +3,10 @@
 """Steady-state simulation: ``drto.steady_state_simulation`` (feature 008).
 
 Reduces the model to steady state with the controls fixed and a zero
-objective: the square problem whose solution is the equilibrium under the
+objective, the square problem whose solution is the equilibrium under the
 given inputs. A dynamic model (horizon and dynamics declared) first composes
-``drto.dynamic_to_steady_state`` (feature 005); a model authored directly as
-steady-state skips the reduction. Either way the declared controls are fixed,
+``drto.dynamic_to_steady_state`` (feature 005), and a model authored directly
+as steady-state skips the reduction. Either way the declared controls are fixed,
 at supplied values or at the values they already hold, the optimization-only
 constructs (the costs and the terminal constraint) leave the model through the
 routine the dynamic simulation shares, the estimation declarations are
@@ -17,7 +17,7 @@ from pyomo.common.config import ConfigDict, ConfigValue
 from pyomo.core import Transformation, TransformationFactory
 
 from drto.dynamic_optimization import _fix_disturbances, _neutralize_estimation
-from drto.dynamic_simulation import _shed_optimization_constructs
+from drto.dynamic_simulation import _fix_controls, _shed_optimization_constructs
 from drto.info import info
 from drto.objective import build_objective
 
@@ -25,13 +25,13 @@ from drto.objective import build_objective
 @TransformationFactory.register(
     "drto.steady_state_simulation",
     doc="Reduce to steady state, fix the controls, and install the zero "
-    "objective: the fixed-input equilibrium solve (drto).",
+    "objective, the fixed-input equilibrium solve (drto).",
 )
 class SteadyStateSimulationTransformation(Transformation):
-    """The steady-state simulation mode; see the module docstring.
+    """The steady-state simulation mode. See the module docstring.
 
     Options: ``controls`` maps a declared control (the component, or its
-    name) to the value it is fixed at; controls not in the mapping fix at
+    name) to the value it is fixed at. Controls not in the mapping fix at
     the value they already hold. Components from the source model resolve
     by name, so ``create_using(m, controls={m.u: 0.3})`` works on the
     clone. A scalar Var is unhashable as a plain dict key, so a control on
@@ -60,7 +60,7 @@ class SteadyStateSimulationTransformation(Transformation):
 
     def _apply_to(self, model, **kwds):
         config = self.CONFIG(kwds)
-        # resolve component keys to names before any rebuild: create_using
+        # resolve component keys to names before any rebuild. create_using
         # remaps the mapping onto the clone, and the reduction below
         # replaces the very components the keys point at, detaching them,
         # and a detached component's name degrades to its local name
@@ -78,49 +78,27 @@ class SteadyStateSimulationTransformation(Transformation):
                 "drto: steady_state_simulation requires declared states "
                 "(drto.state first)."
             )
-        # neutralize the estimation costs before the reduction: it collapses
-        # the control-side costs, not the window-based estimation costs, so
-        # those must leave the model before it runs
+        # neutralize the estimation costs before the reduction, which
+        # collapses the control-side costs and not the window-based
+        # estimation costs, so those must leave the model before it runs
         outcome = _neutralize_estimation(reg, "steady_state_simulation")
 
         if reg.has_declaration("horizon") and reg.has_declaration("dynamics"):
             TransformationFactory("drto.dynamic_to_steady_state").apply_to(model)
 
-        # a simulation carries no cost and no terminal set, through the routine
+        # the mode installs no cost and no terminal set, through the routine
         # the dynamic simulation shares. The steady-state target Params stay
         # (they may appear in a deviation-form model's equations), so their
         # records stay with them and the registry mirrors the model.
         dropped = _shed_optimization_constructs(reg)
 
-        # the reduction replaced the control components; names are the
-        # stable handle, resolved above while the keys were still attached
-        declared = {c.name: c for c in reg.components("control")}
-        requested = {}
-        for name, val in controls.items():
-            if name not in declared:
-                raise ValueError(
-                    f"drto: steady_state_simulation got a value for "
-                    f"'{name}', which is not a declared control; declared: "
-                    f"{', '.join(declared) or '(none)'}."
-                )
-            requested[name] = val
+        # the reduction replaced the control components, so names are the
+        # stable handle, resolved above while the keys were still attached.
+        # The dynamic simulation fixes its controls the same way, through
+        # the routine both modes share
+        fixed = _fix_controls(reg, controls, "steady_state_simulation")
 
-        fixed = []
-        for name, comp in declared.items():
-            for vd in comp.values() if comp.is_indexed() else (comp,):
-                if name in requested:
-                    vd.set_value(requested[name])
-                elif vd.value is None:
-                    raise ValueError(
-                        f"drto: steady_state_simulation fixes '{name}' at "
-                        f"the value it already holds, but it has none; pass "
-                        f"controls={{{name}: value}} or initialize it."
-                    )
-                vd.fix()
-            shown = requested.get(name)
-            fixed.append(f"{name}={shown}" if shown is not None else f"{name} (held)")
-
-        # the reduction collapsed a disturbance to a single point; fix it at
+        # the reduction collapsed a disturbance to a single point, so fix it at
         # the standing realization, defaulting to zero
         noise = _fix_disturbances(reg, disturbances, "steady_state_simulation")
 
