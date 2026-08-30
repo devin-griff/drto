@@ -151,10 +151,13 @@ def dynamic_simulation(
         The collocation scheme (default ``"LAGRANGE-RADAU"``).
     controls : mapping, optional
         Passed to the registered transformation when given, mapping a
-        declared control to the value it is fixed at.
+        declared control to the value it is fixed at. The keys are names
+        here, since the build happens inside the call and the caller never
+        holds the components the transformation's other key form takes.
     disturbances : mapping, optional
         Passed to the registered transformation when given, mapping a
-        declared disturbance to its realization.
+        declared disturbance to its realization, keyed by name for the
+        same reason.
 
     Returns
     -------
