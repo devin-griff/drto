@@ -21,6 +21,14 @@ sim = pyo.TransformationFactory("drto.steady_state_simulation").create_using(
 SolverFactory("ipopt").solve(sim)   # the equilibrium under u = 0.3
 ```
 
+From a model statement rather than a model, the function form builds the
+model and prepares the equilibrium:
+
+```python
+sim = drto.steady_state_simulation(build, controls={"u": 0.3})
+SolverFactory("ipopt").solve(sim)
+```
+
 ## Benefit hypothesis
 
 The user finds the resting operating point from the one declared model,
@@ -33,6 +41,26 @@ declaration surface lets a steady-state model be used across the
 modes.
 
 ## Acceptance criteria
+
+### The function form
+
+- `drto.steady_state_simulation(build, ...)` is the function form under
+  the transformation's own name, the dual form feature 003 sets with
+  `build_objective`. It calls `build()` with no arguments. The builder
+  contract is feature 006's, and the steady modes pass no `N` and no
+  `h`, since the reduction collapses the grid either way, the shape
+  `drto.dynamic_to_steady_state(build)` already sets.
+- It applies the registered `drto.steady_state_simulation`
+  transformation, passing `controls` and `disturbances` when given, and
+  returns the square equilibrium problem.
+- Nothing is discretized on this path. The transformation composes the
+  feature 005 reduction for a model declaring a horizon and dynamics,
+  and a statement that constructs its steady form natively takes that
+  reduction's skip.
+- The model it returns is the one the factory's `create_using` gives on
+  the same builder's output.
+
+### The registered transformation
 
 - `TransformationFactory('drto.steady_state_simulation')` requires
   `state`, and errors clearly if it is missing. `horizon` and
