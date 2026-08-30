@@ -35,8 +35,7 @@ SolverFactory("ipopt").solve(plant)
 The user simulates the model exactly as declared, with no separate
 simulation model to write and none to keep consistent with the
 optimization, since both modes read the same declarations. The NMPC
-loop builds its process simulation through this mode, and a user checks
-a declared model by simulating it forward before optimizing over it.
+loop builds its process simulation through this mode.
 
 ## Acceptance criteria
 
