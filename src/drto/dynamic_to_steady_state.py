@@ -82,10 +82,10 @@ def dynamic_to_steady_state(build):
 
     Takes the model statement rather than a model, so a script that already
     has a builder reaches its steady system in one call. The builder
-    contract is feature 006's: ``build`` returns a declared model, its
-    first two parameters are the interval count and the sampling time, and
-    every parameter has a default, so the bare ``build()`` this makes is
-    legal. The returned model may be discretized or not.
+    contract is feature 006's: ``build`` returns a declared, undiscretized
+    model, its first two parameters are the interval count and the sampling
+    time, and every parameter has a default, so the bare ``build()`` this
+    makes is legal.
 
     A result declaring a horizon is reduced through the registered
     ``drto.dynamic_to_steady_state`` transformation. A result with no

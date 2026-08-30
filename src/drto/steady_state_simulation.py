@@ -27,10 +27,10 @@ def steady_state_simulation(build, controls=None, disturbances=None):
 
     Takes the model statement rather than a model, so a script that already
     has a builder reaches its equilibrium in one call. The builder contract
-    is feature 006's: ``build`` returns a declared model, its first two
-    parameters are the interval count and the sampling time, and every
-    parameter has a default, so the bare ``build()`` this makes is legal.
-    The steady modes pass no ``N`` and no ``h``, since the reduction
+    is feature 006's: ``build`` returns a declared, undiscretized model, its
+    first two parameters are the interval count and the sampling time, and
+    every parameter has a default, so the bare ``build()`` this makes is
+    legal. The steady modes pass no ``N`` and no ``h``, since the reduction
     collapses the grid either way.
 
     Nothing is discretized on this path. The registered transformation
@@ -44,10 +44,13 @@ def steady_state_simulation(build, controls=None, disturbances=None):
         The model statement, called with no arguments.
     controls : mapping, optional
         Passed to the registered transformation when given, mapping a
-        declared control to the value it is fixed at.
+        declared control to the value it is fixed at. The keys are names
+        here, since the build happens inside the call and the caller never
+        holds the components the transformation's other key form takes.
     disturbances : mapping, optional
         Passed to the registered transformation when given, mapping a
-        declared disturbance to its standing realization.
+        declared disturbance to its standing realization, keyed by name
+        for the same reason.
 
     Returns
     -------
