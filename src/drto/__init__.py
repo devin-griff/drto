@@ -12,6 +12,7 @@ from importlib.metadata import PackageNotFoundError, version
 from drto.dynamic_optimization import dynamic_optimization
 from drto.dynamic_simulation import dynamic_simulation
 from drto.steady_state_simulation import steady_state_simulation
+from drto.steady_state_optimization import steady_state_optimization
 from drto.dynamic_to_steady_state import dynamic_to_steady_state
 from drto.declarations import (
     arrival_cost,
@@ -61,7 +62,6 @@ from drto.plotting import (
 # importing registers the drto.* transformations
 from drto import infinite_horizon as _infinite_horizon  # noqa: F401
 from drto import parameterize as _parameterize  # noqa: F401
-from drto import steady_state_optimization as _steady_state_optimization  # noqa: F401
 
 try:
     __version__ = version("drto")
@@ -75,6 +75,7 @@ __all__ = [
     "dynamic_optimization",
     "dynamic_simulation",
     "steady_state_simulation",
+    "steady_state_optimization",
     "dynamic_to_steady_state",
     "advanced_step_controller",
     "cold_start_dynamic",

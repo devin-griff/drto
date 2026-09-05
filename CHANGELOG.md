@@ -100,6 +100,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.steady_state_optimization` is also a function taking the model
+  statement (gh #117, feature 009). `drto.steady_state_optimization(build,
+  ...)` calls `build()` with no arguments, applies the registered
+  transformation with `tracking_weight` passed through, and returns the
+  RTO problem ready to solve. Nothing is discretized on this path, since
+  the transformation composes the feature 005 reduction and a statement
+  building its steady form natively takes that reduction's skip. This is
+  the last of the five transformations to get the function form. The
+  registered transformation is unchanged.
+
 - `drto.steady_state_simulation` is also a function taking the model
   statement (gh #116, feature 008). `drto.steady_state_simulation(build,
   ...)` calls `build()` with no arguments, applies the registered

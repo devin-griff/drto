@@ -44,6 +44,51 @@ _REQUIRED = ("state", "control")
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
 
 
+def steady_state_optimization(build, tracking_weight=None):
+    """Build a model and assemble the steady-state optimization.
+
+    Takes the model statement rather than a model, so a script that already
+    has a builder reaches its RTO problem in one call. The builder contract
+    is feature 006's: ``build`` returns a declared, undiscretized model, its
+    first two parameters are the interval count and the sampling time, and
+    every parameter has a default, so the bare ``build()`` this makes is
+    legal. The steady modes pass no ``N`` and no ``h``, since the reduction
+    collapses the grid either way.
+
+    Nothing is discretized on this path. The registered transformation
+    composes ``drto.dynamic_to_steady_state`` (feature 005) for a model
+    declaring a horizon and dynamics, and a statement that constructs its
+    steady form natively takes that reduction's skip.
+
+    Parameters
+    ----------
+    build : callable
+        The model statement, called with no arguments.
+    tracking_weight : float, optional
+        Passed to the registered transformation when given, weighting a
+        declared tracking stage cost against the economic one.
+
+    Returns
+    -------
+    Block
+        The RTO problem. This is the object ``build`` returned, since the
+        function owns the model it just built and transforms it in place.
+        A caller holding a model of its own keeps
+        ``TransformationFactory('drto.steady_state_optimization').create_using``
+        for the form that leaves the source unchanged.
+
+    Examples
+    --------
+    ::
+
+        rto = drto.steady_state_optimization(build)
+    """
+    m = build()
+    opts = {} if tracking_weight is None else {"tracking_weight": tracking_weight}
+    TransformationFactory("drto.steady_state_optimization").apply_to(m, **opts)
+    return m
+
+
 @TransformationFactory.register(
     "drto.steady_state_optimization",
     doc="Reduce to steady state and optimize the economic objective over the "

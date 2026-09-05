@@ -300,3 +300,64 @@ def test_tracking_weight_regularizes_toward_the_known_point():
     assert results[0.0] == pytest.approx(0.5, abs=1e-6)  # pure economics
     assert results[0.0] > results[1.0] > results[20.0]  # pulled toward 0.2
     assert results[20.0] == pytest.approx(0.2, abs=0.02)
+
+
+# ----------------------------------------------------------------------
+# the builder-consuming function form (gh #117)
+# ----------------------------------------------------------------------
+def test_the_function_reduces_and_assembles_the_rto_problem():
+    rto = drto.steady_state_optimization(econ_model)
+    applied = [r["name"] for r in drto.info(rto).transformations]
+    assert "drto.dynamic_to_steady_state" in applied
+    assert SSO in applied
+    assert rto.component("drto_objective") is not None
+    assert not rto.u.fixed
+    # the reduction collapsed time rather than discretizing it
+    assert rto.component("t") is None
+    assert not drto.info(rto).has_declaration("horizon")
+
+
+def test_the_function_passes_the_tracking_weight_through():
+    def build():
+        return econ_model(tracking=True)
+
+    rto = drto.steady_state_optimization(build, tracking_weight=3.0)
+    record = [r for r in drto.info(rto).transformations if r["name"] == SSO][0]
+    assert record["outcome"]["tracking_weight"] == 3.0
+
+
+def test_the_function_takes_the_reductions_skip_on_a_steady_statement():
+    rto = drto.steady_state_optimization(steady_authored_model)
+    applied = [r["name"] for r in drto.info(rto).transformations]
+    assert "drto.dynamic_to_steady_state" not in applied
+    assert SSO in applied
+
+
+def test_the_function_transforms_a_tracking_only_statement():
+    rto = drto.steady_state_optimization(tracking_model)
+    assert rto.component("drto_objective") is not None
+    assert not rto.u.fixed
+
+
+def test_the_function_builds_what_create_using_gives():
+    import hashlib
+
+    def rows(model):
+        r = [
+            f"V|{v.name}|{v.lb}|{v.ub}|{v.fixed}|{v.value}"
+            for v in model.component_data_objects(pyo.Var, active=True)
+        ]
+        r += [
+            f"C|{c.name}|{c.lower}|{c.upper}|{c.body}"
+            for c in model.component_data_objects(pyo.Constraint, active=True)
+        ]
+        r += [
+            f"O|{o.name}|{o.expr}"
+            for o in model.component_data_objects(pyo.Objective, active=True)
+        ]
+        r.sort()
+        return len(r), hashlib.sha256(chr(10).join(r).encode()).hexdigest()
+
+    cloned = pyo.TransformationFactory(SSO).create_using(econ_model())
+    built = drto.steady_state_optimization(econ_model)
+    assert rows(built) == rows(cloned)
