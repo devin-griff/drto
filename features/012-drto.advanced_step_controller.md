@@ -21,35 +21,35 @@ u0 = est[m.u[0]]                           # the move to implement
 dudz = drto.advanced_step_controller(m, gradient=True)  # sensitivities
 ```
 
-`drto.dynamic_optimization` declares the initial-condition Params, the
-initial-condition Params, as pounce sensitivity parameters whenever
-pyomo-pounce is importable. The declaration is inert metadata: every
-other solver ignores it and solves the model unchanged; a pounce solve
-keeps the converged factorization, so the correction afterwards is a
-backsolve, not a solve.
+`drto.dynamic_optimization` declares the initial-condition Params as
+pounce sensitivity parameters whenever pyomo-pounce is importable. The
+declaration is inert metadata. Every other solver ignores it and solves
+the model unchanged, and a pounce solve keeps the converged
+factorization, so the correction afterwards is a backsolve, not a
+solve.
 
 `drto.advanced_step_controller(m)` reads those Params' current values as the
 perturbation, the difference between the measured state the loop wrote
 and the predicted state the model was solved at, and returns
-`pyomo_pounce.sens_solution()`: the corrected solution as a map from each
-variable to its estimated value, clamped to bounds. The model is not
-touched; the solution at the predicted state stays in place as the next
-solve's warm start. With `gradient=True` it returns
+`pyomo_pounce.sens_solution()`, the corrected solution as a map from
+each variable to its estimated value, clamped to bounds. The model is
+not touched, and the solution at the predicted state stays in place as
+the next solve's warm start. With `gradient=True` it returns
 `pyomo_pounce.sens_jacobian()` for the declared controls with respect to the
 Params instead. Keyword arguments it does not recognize pass through to
 the pounce call, so options pounce grows need no change here.
 
-The feature requires pounce: without a pounce solve there is no
-factorization, and the call fails with pounce's own instruction to solve
-with pounce first.
+The feature requires pounce, since without a pounce solve there is no
+factorization, and the call fails with pounce's own instruction to
+solve with pounce first.
 
 ## Benefit hypothesis
 
-Advanced-step NMPC replaces the online solve with a sensitivity update:
-the expensive solve runs between samples at a prediction, and the
-correction at the measurement is instant. One function turns the solved
-model and the updated Params into the corrected controls, and it is the
-piece the asnmpc loop (feature 015) is built from.
+The user gets corrected controls the moment the measurement arrives,
+because the expensive solve ran between samples at a prediction and the
+correction is a backsolve. One function turns the solved model and the
+updated Params into the corrected controls, and it is the piece the
+asnmpc loop (feature 015) is built from.
 
 ## Acceptance criteria
 
