@@ -29,10 +29,10 @@ def advanced_step_controller(m, gradient=False, **kwargs):
     difference between the measured state the loop wrote and the
     predicted state the model was solved at (the solve point is the
     baseline, so writing the measurement first is the expected pattern).
-    Returns ``pyomo_pounce.estimate()``: a map from each variable to its
+    Returns ``pyomo_pounce.sens_solution()``: a map from each variable to its
     corrected value, clamped to bounds. The model itself is not modified.
 
-    With ``gradient=True`` it returns ``pyomo_pounce.gradient()`` of the
+    With ``gradient=True`` it returns ``pyomo_pounce.sens_jacobian()`` of the
     declared controls with respect to those Params instead, as nested
     ComponentMaps: ``result[control][param]``. Unrecognized keyword
     arguments pass through to the pounce call, so options pounce grows
@@ -70,8 +70,8 @@ def advanced_step_controller(m, gradient=False, **kwargs):
         out = ComponentMap()
         for u in reg.components("control"):
             out[u] = ComponentMap(
-                (p, pyomo_pounce.gradient(u, wrt=p, **kwargs)) for p in hooks
+                (p, pyomo_pounce.sens_jacobian(u, wrt=p, **kwargs)) for p in hooks
             )
         return out
     perturb = [(p, pyo.value(p)) for p in hooks]
-    return pyomo_pounce.estimate(m, perturb, **kwargs)
+    return pyomo_pounce.sens_solution(m, perturb, **kwargs)
