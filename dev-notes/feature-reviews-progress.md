@@ -14,7 +14,7 @@ the review worktree, and code findings go into one issue per feature.
 - [x] 007 drto.dynamic_simulation
 - [x] 008 drto.steady_state_simulation
 - [x] 009 drto.steady_state_optimization
-- [ ] 010 drto.initialize_steady_state
+- [x] 010 drto.initialize_steady_state
 - [ ] 011 drto.cold_start_dynamic
 - [ ] 012 drto.advanced_step_controller
 - [ ] 013 drto.warm_start_dynamic

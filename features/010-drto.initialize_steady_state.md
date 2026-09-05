@@ -45,14 +45,13 @@ initialization helpers.
   of the equality system), with the declared controls as the decisions.
   drto contributes what that suite cannot know: which variables are
   decisions, the steady reduction, and the horizon broadcast.
-- An active `scaling_factor` suffix reaches the pipeline: the
-  projection solve receives it under `user-scaling`, and the block
-  solves measure their convergence against each constraint's factor, so
-  a row far above order one converges at its own scale instead of
-  failing an absolute tolerance it can never reach. The suffix stays on
-  the model for the solves that follow.
+- An active `scaling_factor` suffix does not change the pipeline, which
+  runs in the model's own units, the block solves working the square
+  equality system in calculation order (gh #92). The suffix stays on
+  the model, unread, for the solves that follow.
 - `scale` takes a feature 023 source and forwards it to `drto.scale`
-  before the pipeline runs, so the factors are in place for its solves.
+  before the pipeline runs, so the model leaves initialization with its
+  factors in place for the solves that follow.
   The sources that read no values, the bounds and a units mapping, are
   the ones that make sense here. The default, `scale=None`, writes
   nothing and leaves a suffix the caller wrote untouched.
