@@ -24,12 +24,12 @@ drto.initialize_steady_state(ss)  # in place: fill, project, block-solve
 
 ## Benefit hypothesis
 
-A steady-state-based initial guess is often the difference between a solve
-that converges and one that stalls, and deriving it from the model keeps it
-consistent with the dynamics. One function serves both declared shapes,
-since the core calculation is the same, and it
-replaces the hand-written per-model initialization helpers the examples
-carry today.
+The user initializes a model from its steady state in one call, a start
+that is often the difference between a solve that converges and one that
+stalls, and deriving it from the model keeps it consistent with the
+dynamics. One function serves both declared shapes, since the core
+calculation is the same, so the examples need no hand-written per-model
+initialization helpers.
 
 ## Acceptance criteria
 
@@ -56,25 +56,26 @@ carry today.
   The sources that read no values, the bounds and a units mapping, are
   the ones that make sense here. The default, `scale=None`, writes
   nothing and leaves a suffix the caller wrote untouched.
-- The steady path runs the pipeline on the model in place: the solved
+- The steady path runs the pipeline on the model in place, so the solved
   values land in `Var.value`.
 - The dynamic path requires a discretized horizon and no drto
-  transformation applied yet, the same sibling-branch guard as feature 005,
+  transformation applied yet, the same ordering guard as feature 005,
   and errors clearly otherwise. It reduces a throwaway clone with the
   feature 005 reduction, runs the pipeline there, and broadcasts: every
   variable indexed by the time set gets its collapsed counterpart's value
   at every grid point, and the state derivatives get zero. The source
   model's structure is untouched.
-- Initializing before the dynamic transforms is sufficient: the later
-  transforms carry values forward on their own (`drto.parameterize` seeds
-  each move variable from the control member values it replaces, and
-  `drto.infinite_horizon` copies the horizon-end values onto the segment
-  copies), so the flat steady start propagates through the whole pipeline
-  (verified against both transforms, 2026-07-19).
+- Initializing before the dynamic transforms is sufficient. The later
+  transforms seed their new components from the values in place
+  (`drto.parameterize` seeds each move variable from the control member
+  values it replaces, and `drto.infinite_horizon` copies the horizon-end
+  values onto the segment copies), so the flat steady start propagates
+  through the whole pipeline (verified against both transforms,
+  2026-07-19).
 - `controls=` follows the feature 008 convention: a mapping of declared
-  control (the component, or its name) to the value the steady solve holds
-  it at; controls not in the mapping hold the values they already have; an
-  unknown name errors.
+  control (the component, or its name) to the value the steady solve
+  holds it at. Controls not in the mapping hold the values they already
+  have, and an unknown name errors.
 - A non-square system raises in both paths, consistently: the error names
   the unmatched variables and constraints from
   the pipeline's report and says what to fix (declare the missing decision,
@@ -83,19 +84,19 @@ carry today.
 - It populates variable values only: no components are added or removed,
   and variable fixed flags are restored after the pipeline. It is a plain
   function, with no `apply_to` or `create_using` form.
-- The return value tells the user what happened, printable in a notebook:
-  the steady path returns the pipeline's `InitializeReport` as-is (fills,
-  projection outcome, block counts); the dynamic path returns a thin drto
-  wrapper around it that adds the broadcast line, the variables seeded
-  across the grid points and the derivatives zeroed.
+- The return value tells the user what happened, printable in a
+  notebook. The steady path returns the pipeline's `InitializeReport`
+  as-is (fills, projection outcome, block counts), and the dynamic path
+  returns a thin drto wrapper around it that adds the broadcast line,
+  the variables seeded across the grid points and the derivatives
+  zeroed.
 - pyomo-pounce is an optional dependency, not a requirement of drto: it
   lives in the `pounce` extras group (`pip install drto[pounce]`, shared
-  with the future pounce-backed features, e.g. the advanced-step
-  controller and sensitivities), the import happens inside the function so
+  with the other pounce-backed features, the advanced-step controller of
+  feature 012 among them), the import happens inside the function so
   `import drto` never touches it, and a missing install raises the
-  house-style error naming the extra. drto's
-  core stays solver-agnostic.
+  house-style error naming the extra. drto's core stays solver-agnostic.
 - A declared disturbance is process noise, zero in the nominal
-  equilibrium: the pipeline holds it at zero for the solve, the same
-  convention as every control-side mode, and restores the fixed flags
-  it touched; the broadcast lands the zeros across the grid.
+  equilibrium. The pipeline holds it at zero for the solve, the same
+  convention as every control-side mode, and restores the fixed flags it
+  touched, and the broadcast lands the zeros across the grid.
