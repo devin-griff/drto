@@ -21,6 +21,14 @@ rto = pyo.TransformationFactory(
 SolverFactory("ipopt").solve(rto)   # the optimal steady operating point
 ```
 
+From a model statement rather than a model, the function form builds the
+model and assembles the RTO problem:
+
+```python
+rto = drto.steady_state_optimization(build)
+SolverFactory("ipopt").solve(rto)
+```
+
 ## Benefit hypothesis
 
 The user gets the optimal steady operating point from the one declared
@@ -31,6 +39,26 @@ a model reduced from dynamic or one the user wrote directly as
 steady-state, so the same declaration surface serves both.
 
 ## Acceptance criteria
+
+### The function form
+
+- `drto.steady_state_optimization(build, ...)` is the function form under
+  the transformation's own name, the dual form feature 003 sets with
+  `build_objective`. It calls `build()` with no arguments. The builder
+  contract is feature 006's, and the steady modes pass no `N` and no
+  `h`, since the reduction collapses the grid either way, the shape
+  `drto.dynamic_to_steady_state(build)` already sets.
+- It applies the registered `drto.steady_state_optimization`
+  transformation, passing `tracking_weight` when given, and returns the
+  RTO problem ready to solve.
+- Nothing is discretized on this path. The transformation composes the
+  feature 005 reduction for a model declaring a horizon and dynamics,
+  and a statement that constructs its steady form natively takes that
+  reduction's skip.
+- The model it returns is the one the factory's `create_using` gives on
+  the same builder's output.
+
+### The registered transformation
 
 - `TransformationFactory('drto.steady_state_optimization')` requires
   `state`, `control`, and a stage cost of either kind, and errors
