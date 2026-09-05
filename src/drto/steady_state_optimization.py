@@ -9,13 +9,13 @@ composes ``drto.dynamic_to_steady_state`` (feature 005), and a model authored
 directly as steady-state skips the reduction.
 
 The cost equations stay, unlike the simulation modes, since this mode needs
-them. A
-declared tracking stage cost is kept rather than dropped, since it regularizes
-the economic optimum toward a known operating point, the RTO-layer equivalent
-of move suppression. With both cost kinds declared, ``tracking_weight`` scales
-the tracking side, as in ``drto.dynamic_optimization`` (feature 006). With
-only a tracking stage cost declared, the objective is that cost alone, the
-steady point nearest the declared targets.
+them. A declared tracking stage cost is kept rather than dropped, since it
+regularizes the economic optimum toward a known operating point, the RTO-layer
+equivalent of move suppression. With both cost kinds declared,
+``tracking_weight`` scales the tracking side, as in
+``drto.dynamic_optimization`` (feature 006). With only a tracking stage cost
+declared, the objective is that cost alone, the steady point nearest the
+declared targets.
 
 The estimation-category declarations (feature 018) are neutralized before the
 reduction, through the routine shared with the other control-side modes. That
