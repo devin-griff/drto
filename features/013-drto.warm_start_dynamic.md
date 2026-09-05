@@ -28,14 +28,15 @@ the end of the previous solution, which only exists when there is no tail,
 states and controls take their declared steady-state targets, derivatives
 zero, and algebraic variables keep their values. Nothing is solved.
 
-The initial condition is not touched: the loop sets it from the
+The initial condition is not touched, since the loop sets it from the
 measurement.
 
 ## Benefit hypothesis
 
-Under closed-loop control the next problem is the last one moved one step,
-so the last solution moved one step is nearly its answer. Starting there
-is what makes each solve fast, and it costs only copies and interpolation.
+Each closed-loop solve starts nearly at its answer, because the next
+problem is the last one moved one step and so is the last solution.
+Starting there is what makes each solve fast, and it costs only copies
+and interpolation.
 
 ## Acceptance criteria
 
@@ -46,15 +47,15 @@ is what makes each solve fast, and it costs only copies and interpolation.
   tail included.
 - Past the end of the previous solution, states and controls take their
   steady-state targets, derivatives zero, and algebraic variables keep
-  their values; a missing target is an error naming the component.
-- With a tail there is no past the end: the previous solution covers the
-  whole problem and no targets are needed.
+  their values. A missing target is an error naming the component.
+- With a tail, nothing lies past the end. The previous solution covers
+  the whole problem and no targets are needed.
 - A solution resting at the targets shifts to itself.
-- The shift carries the primal solution only and leaves any declared
-  multiplier suffixes exactly as the previous solve left them: the
+- The shift copies the primal solution only and leaves any declared
+  multiplier suffixes exactly as the previous solve left them. The
   solver rebuilds multipliers from a good primal in one linear solve,
-  while a carried certificate must match the next problem, its active
-  set, and the restarted barrier level at once, and one sampling time
-  of staleness already costs more than it saves (gh #36). Solver
+  while a shifted multiplier set must match the next problem, its
+  active set, and the restarted barrier level at once, and one sampling
+  time of staleness already costs more than it saves (gh #36). Solver
   warm-start options belong to the solve call, not to the shift.
 - Returns a readable report of what was copied, interpolated, and filled.
