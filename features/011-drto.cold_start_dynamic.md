@@ -51,12 +51,11 @@ and everything else comes out of the per-point solves. The initialization:
   installed. At each grid point the states and controls hold the values
   above and the model's remaining equations, everything except the
   declared dynamics, solve for the rest: one small square solve per
-  point, the block pipeline feature 010 uses. An active
-  `scaling_factor` suffix reaches those solves: each block's
-  convergence is measured against its constraints' factors, so a row
-  far above order one converges at its own scale instead of failing an
-  absolute tolerance it can never reach, and the suffix stays on the
-  model for the NLP solves that follow. `scale` takes a feature 023
+  point, the block pipeline feature 010 uses. The solves run in the
+  model's own units, and an active `scaling_factor` suffix does not
+  change them, each being a square block solved in calculation order
+  (gh #92). The suffix stays on the model for the NLP solves that
+  follow. `scale` takes a feature 023
   source and forwards it to `drto.scale` before anything runs. The
   default, `scale=None`, writes nothing and leaves a suffix the caller
   wrote untouched. Without pyomo-pounce the per-point solves are
@@ -122,11 +121,11 @@ fixed point, the soft pin already satisfied.
   the states, derivatives, and controls initialize the same way, the
   algebraic variables keep their values, and the report records the
   skipped solves.
-- With an active `scaling_factor` suffix, the per-point solves
-  measure their convergence against it and the suffix survives the
-  call. With `scale` given a feature 023 source, the factors are
-  written through `drto.scale` before the per-point solves run; the
-  default `scale=None` writes none.
+- An active `scaling_factor` suffix does not change the per-point
+  solves, which run in the model's own units, and the suffix survives
+  the call for the solves that follow (gh #92). With `scale` given a
+  feature 023 source, the factors are written through `drto.scale`
+  before anything runs, and the default `scale=None` writes none.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - A cold-started infinite-horizon dynamic optimization solves. A model
@@ -142,9 +141,6 @@ fixed point, the soft pin already satisfied.
   profiles and targets landing without a solve, the report saying
   "skipped (by option)" rather than naming a missing install. Anything
   else is a descriptive error.
-- When the solves ran scaled, the report carries the initialized scaled
-  clone as `scaled_model`, its factor map riding on it, so a consumer
-  that wants a persistent scaled model (the closed loop) adopts it
-  instead of deep-copying again; it is `None` without scaling, without
-  pounce, or with the solves skipped, and it lives as long as the
-  report does.
+- The report holds values and counts, not a second model. There is no
+  scaled clone to adopt, since the solves run on the model itself in
+  its own units (gh #92).
