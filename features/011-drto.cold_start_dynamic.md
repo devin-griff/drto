@@ -36,7 +36,7 @@ and everything else comes out of the per-point solves. The initialization:
   steady-state target, one value per grid point. The default profile is
   the straight line. `profile="exponential"` runs each state on a
   normalized exponential decay that lands exactly on the target at the
-  horizon's end; `time_constant` sets the decay's time constant in the
+  horizon's end. `time_constant` sets the decay's time constant in the
   horizon's own units and defaults to a third of the horizon. A state
   starting on its target gets a flat line either way.
 - **Derivative variables**: a declared state's DerivativeVar members hold
@@ -57,12 +57,11 @@ and everything else comes out of the per-point solves. The initialization:
   far above order one converges at its own scale instead of failing an
   absolute tolerance it can never reach, and the suffix stays on the
   model for the NLP solves that follow. `scale` takes a feature 023
-  source and forwards it to `drto.scale` before anything runs, so the
-  factors are in place for the per-point solves; the default,
-  `scale=None`, writes nothing and leaves a suffix the caller wrote
-  untouched. Without pyomo-pounce the per-point solves are skipped,
-  the algebraic variables keep their values, and the report says so;
-  everything else needs no solver.
+  source and forwards it to `drto.scale` before anything runs. The
+  default, `scale=None`, writes nothing and leaves a suffix the caller
+  wrote untouched. Without pyomo-pounce the per-point solves are
+  skipped, the algebraic variables keep their values, and the report
+  says so, and everything else needs no solver.
 - **The terminal segment**, when one is attached: the tail rests at the
   targets. State copies and segment controls hold the targets, the tau
   derivatives and the pin slacks are zero, and the segment's algebraic
@@ -76,15 +75,15 @@ per-point solves for the decay. The declared dynamics carry the
 mismatch between the profile and the true transient, which is the
 optimizer's job to resolve.
 
-`drto.initialize_steady_state` remains the solve-based seed: it computes
-the equilibrium and broadcasts it flat. `cold_start_dynamic` reads the
-declared targets instead and interpolates; an initial condition already at
-the targets gives the same flat trajectory.
+`drto.initialize_steady_state` remains the solve-based seed, computing
+the equilibrium and broadcasting it flat. `cold_start_dynamic` reads the
+declared targets instead and interpolates, and an initial condition
+already at the targets gives the same flat trajectory.
 
-Forward simulation, this feature's earlier draft, is rejected: simulating
-forward is itself a full dynamic solve needing its own initial guess, and
-under nominal controls the free response of an unstable model runs away
-from the setpoint instead of toward it.
+Forward simulation, this feature's earlier draft, is rejected, because
+simulating forward is itself a full dynamic solve needing its own
+initial guess, and under nominal controls the free response of an
+unstable model runs away from the setpoint instead of toward it.
 
 ## Benefit hypothesis
 
@@ -104,21 +103,22 @@ fixed point, the soft pin already satisfied.
 - A declared state without a `steady_state` pairing, or a declared control
   without a `steady_state_control` pairing, raises a descriptive error
   naming the component. No equilibrium solve is run.
-- States run linearly from the declared initial condition to the declared
-  targets; their DerivativeVar members hold the line's slope; controls,
-  and a parameterized control's moves, hold their declared targets; a
-  fixed control keeps its value.
+- States run linearly from the declared initial condition to the
+  declared targets, and their DerivativeVar members hold the line's
+  slope. Controls, and a parameterized control's moves, hold their
+  declared targets, and a fixed control keeps its value.
 - `profile="exponential"` runs the states on the normalized decay,
   landing exactly on the targets at the horizon's end, with the
   DerivativeVar members at the decay's pointwise slope. `time_constant`
   is read in the horizon's own units and defaults to a third of the
-  horizon; an unknown profile, a non-positive time constant, or a time
+  horizon. An unknown profile, a non-positive time constant, or a time
   constant passed with the linear profile is a descriptive error. The
   report names the profile.
 - With pyomo-pounce installed, every equation except the declared
-  dynamics is satisfied at every grid point to the pipeline's tolerance;
-  on an infinite-horizon model the same holds at the segment's points,
-  with the tail at the targets and the pin slacks at zero. Without it,
+  dynamics is satisfied at every grid point to the pipeline's tolerance,
+  and on an infinite-horizon model the same holds at the segment's
+  points, with the tail at the targets and the pin slacks at zero.
+  Without it,
   the states, derivatives, and controls initialize the same way, the
   algebraic variables keep their values, and the report records the
   skipped solves.
@@ -130,18 +130,18 @@ fixed point, the soft pin already satisfied.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
 - The cart-pole initializes from rest and the first dynamic optimization
-  solves; a model with `Block(time)` structure initializes the same way.
+  solves. A model with `Block(time)` structure initializes the same way.
 - Returns a readable report in the feature 010 shape, adding the
   interpolation and the per-point solves.
 - A member of a declared component that does not exist is skipped,
-  values only as ever: a model cut to a window of the horizon (the
-  closed loop's one-sample plant) initializes over the members it
-  kept, without recreating what was cut.
+  values only as ever, so a model cut to a window of the horizon (the
+  closed loop's one-sample plant) initializes over the members it kept,
+  without recreating what was cut.
 - `point_solves` makes the algebra a choice: `True` (the default) runs
   the per-point solves as ever; `False` skips them deliberately, the
-  profiles and targets landing without a solve and without the scaled
-  clone, the report saying "skipped (by option)" rather than blaming a
-  missing install. Anything else is a descriptive error.
+  profiles and targets landing without a solve, the report saying
+  "skipped (by option)" rather than naming a missing install. Anything
+  else is a descriptive error.
 - When the solves ran scaled, the report carries the initialized scaled
   clone as `scaled_model`, its factor map riding on it, so a consumer
   that wants a persistent scaled model (the closed loop) adopts it
