@@ -4,36 +4,37 @@
 
 One function, both declared shapes. A model without a declared horizon and
 dynamics (authored steady-state, or a feature 005 reduction) is initialized
-in place: ``pyomo_pounce.initialize`` runs its fill, project, block-solve
+in place. ``pyomo_pounce.initialize`` runs its fill, project, block-solve
 pipeline with the declared controls as the decisions, and the solved values
 land in ``Var.value``. A dynamic model (horizon and dynamics declared,
 discretized, before any drto transformation) is initialized from its steady
-state: a throwaway clone is reduced with ``drto.dynamic_to_steady_state``,
+state. A throwaway clone is reduced with ``drto.dynamic_to_steady_state``,
 the same pipeline solves the equilibrium there, and the result broadcasts
 flat across the horizon, every time-indexed variable at every grid point,
-with the state derivatives at zero. The later transforms carry the values
-forward on their own (cvp seeds its move variables from the members it
-replaces; the terminal segment copies the horizon-end values), which is why
-the dynamic path runs first.
+the Vars inside time-indexed Block members included, with the state
+derivatives at zero. The later transforms seed their new components from
+the values in place (cvp seeds its move variables from the members it
+replaces, and the terminal segment copies the horizon-end values), which is
+why the dynamic path runs first.
 
 The pipeline runs in the model's own units, and an active
-``scaling_factor`` suffix does not change it: the block solves work the
+``scaling_factor`` suffix does not change it. The block solves work the
 square equality system in calculation order, and the suffix stays on
 the model for the solves that follow (gh #92). A declared disturbance
 is held at zero for the solve, the control-side convention, with the
 touched fixed flags restored.
 
-pyomo-pounce is optional to drto: it is imported here at call time and a
+pyomo-pounce is optional to drto. It is imported here at call time, and a
 missing install raises with the ``pip install drto[pounce]`` instruction.
-Values only: no components are added or removed, and the pipeline restores
-the variable fixed flags it touches.
+The function writes values only. No components are added or removed, and
+the pipeline restores the variable fixed flags it touches.
 """
 from dataclasses import dataclass
 
-from pyomo.core import Suffix, TransformationFactory, Var
+from pyomo.core import Block, Suffix, TransformationFactory, Var
 from pyomo.dae import DerivativeVar
 
-from drto.infinite_horizon import _split_index, _time_index
+from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 
 
@@ -59,7 +60,7 @@ class SteadyStateInitReport:
 
 
 def initialize_steady_state(m, controls=None, scale=None):
-    """Initialize ``m`` from its steady state; see the module docstring.
+    """Initialize ``m`` from its steady state. See the module docstring.
 
     Parameters
     ----------
@@ -69,14 +70,14 @@ def initialize_steady_state(m, controls=None, scale=None):
         flat).
     controls : mapping, optional
         Declared control (the component, or its name) to the value the
-        steady solve holds it at; controls not in the mapping hold the
+        steady solve holds it at. Controls not in the mapping hold the
         values they already have, ``drto.steady_state_simulation``'s
         convention.
     scale : str or mapping, optional
         A feature 023 source forwarded to ``drto.scale`` before the
-        pipeline runs, so the factors are in place for its solves. The
-        default writes nothing and leaves a Suffix the caller wrote
-        untouched.
+        pipeline runs. The pipeline runs in the model's own units, and the
+        suffix stays on the model for the solves that follow. The default
+        writes nothing and leaves a Suffix the caller wrote untouched.
 
     Returns
     -------
@@ -102,7 +103,8 @@ def initialize_steady_state(m, controls=None, scale=None):
         ) from err
 
     if scale is not None:
-        # the factors first, so the pipeline's solves run against them
+        # the factors first. The pipeline runs in the model's own units,
+        # and the suffix stays on the model for the solves that follow
         from drto.scaling import scale as _scale
 
         _scale(m, source=scale)
@@ -128,22 +130,23 @@ def initialize_steady_state(m, controls=None, scale=None):
         if reg.has_transformation(name):
             raise ValueError(
                 f"drto: initialize_steady_state runs before the dynamic "
-                f"transforms; '{name}' is already applied. Initialize "
-                f"first: the transforms carry the values forward on their "
-                f"own."
+                f"transforms, and '{name}' is already applied. Initialize "
+                f"first. The transforms seed their new components from the "
+                f"values in place."
             )
 
     work = m.clone()
     TransformationFactory("drto.dynamic_to_steady_state").apply_to(work)
-    # the reduction removed components; their suffix entries go with
+    # the reduction removed components, so their suffix entries go with
     # them, or the NL writer warns about keys it cannot export
     for sfx in work.component_objects(Suffix, active=True):
         for key in [k for k in sfx if not _attached(k, work)]:
             del sfx[key]
     report = _run_pipeline(work, info(work), controls, pyomo_pounce)
 
-    # broadcast: every time-indexed Var takes its collapsed counterpart's
-    # value at every grid point; the derivatives are zero at steady state
+    # the broadcast. Every time-indexed Var takes its collapsed
+    # counterpart's value at every grid point, and the derivatives are zero
+    # at steady state
     n_vars = 0
     for comp in m.component_objects(Var, active=True):
         if isinstance(comp, DerivativeVar):
@@ -167,14 +170,46 @@ def initialize_steady_state(m, controls=None, scale=None):
             src = counterpart[o] if o else point
             vd.set_value(src.value)
         n_vars += 1
+    # a Var inside a time-indexed Block member (the IDAES property-block
+    # idiom) is indexed by the time set through its Block, not on its own
+    # index, so the loop above does not reach it. The family's surviving
+    # member on the clone is the one at the first time point, and every
+    # member copies its Vars from it by name relative to the member
+    t0 = time.first()
+    for family in m.component_objects(Block, active=True):
+        pos, subs = _time_index(family, time)
+        if pos is None:
+            continue
+        source = work.find_component(family.name)
+        if source is None:
+            continue
+        copied = set()
+        for idx, member in family.items():
+            other, _ = _split_index(idx, pos, len(subs))
+            steady = source[_join_index(other, t0, pos)]
+            for var in member.component_objects(Var, active=True):
+                if isinstance(var, DerivativeVar) or var.is_reference():
+                    continue
+                relative = var.getname(fully_qualified=True, relative_to=member)
+                counterpart = steady.find_component(relative)
+                if counterpart is None:
+                    continue
+                for vidx, vd in var.items():
+                    src = counterpart[vidx] if counterpart.is_indexed() else counterpart
+                    vd.set_value(src.value)
+                copied.add(relative)
+        n_vars += len(copied)
+    # discretization reclassifies a DerivativeVar's ctype to Var while the
+    # object stays a DerivativeVar, and the guard above admits only
+    # discretized models, so the Var query with the isinstance test is the
+    # one that finds them
     n_deriv = 0
-    for query in (DerivativeVar, Var):
-        for dv in m.component_objects(query):
-            if isinstance(dv, DerivativeVar) and dv.get_continuousset_list() == [time]:
-                for vd in dv.values():
-                    if vd.value != 0:
-                        vd.set_value(0)
-                        n_deriv += 1
+    for dv in m.component_objects(Var):
+        if isinstance(dv, DerivativeVar) and dv.get_continuousset_list() == [time]:
+            for vd in dv.values():
+                if vd.value != 0:
+                    vd.set_value(0)
+                    n_deriv += 1
     return SteadyStateInitReport(
         pipeline=report,
         n_broadcast_vars=n_vars,
@@ -204,8 +239,8 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
         if name not in declared:
             raise ValueError(
                 f"drto: initialize_steady_state got a value for '{name}', "
-                f"which is not a declared control; declared: "
-                f"{', '.join(declared) or '(none)'}."
+                f"which is not a declared control. The declared controls "
+                f"are {', '.join(declared) or '(none)'}."
             )
         requested[name] = val
     for name, comp in declared.items():
@@ -215,13 +250,13 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
             elif vd.value is None:
                 raise ValueError(
                     f"drto: initialize_steady_state holds '{name}' at the "
-                    f"value it already has, but it has none; pass "
+                    f"value it already has, but it has none. Pass "
                     f"controls={{{name}: value}} or initialize it."
                 )
 
     # a declared disturbance is process noise, zero in the nominal
-    # equilibrium: held at zero for the solve, the same convention as
-    # every control-side mode, with the touched fixed flags restored
+    # equilibrium, so it is held at zero for the solve, the same convention
+    # as every control-side mode, with the touched fixed flags restored
     # after (gh #44)
     held_zero = []
     for comp in reg.components("disturbance"):
@@ -231,7 +266,7 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
                 vd.fix()
                 held_zero.append(vd)
     try:
-        # the pipeline runs on the model in place, in its own units; an
+        # the pipeline runs on the model in place, in its own units. An
         # active scaling_factor suffix does not change it (gh #92)
         report = pyomo_pounce.initialize(model, decisions=list(declared.values()))
         block = report.block
@@ -249,8 +284,8 @@ def _run_pipeline(model, reg, controls, pyomo_pounce):
                 )
             raise ValueError(
                 "drto: initialize_steady_state found a non-square steady "
-                "system, so the equilibrium is not fully determined; "
-                + "; ".join(detail)
+                "system, so the equilibrium is not fully determined. "
+                + ". ".join(detail)
                 + ". For deliberately partial initialization call "
                 "pyomo_pounce.initialize directly."
             )

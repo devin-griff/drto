@@ -43,6 +43,13 @@ All notable changes to this project are documented here. The format is based on
   eleven figures. The notebooks on both paths are regenerated against the
   released 0.11.0.
 
+- Four `drto.initialize_steady_state` messages read as sentences (gh
+  #137). The ordering guard, the unknown-control error, and the
+  valueless-control error each joined two clauses with a semicolon, and
+  the non-square error joined its detail clauses the same way. The
+  ordering guard also says that the transforms seed their new components
+  from the values in place.
+
 - One `drto.steady_state_optimization` message and its factory doc string
   read as sentences (gh #131). The error for missing declarations joined
   two clauses with a semicolon and now ends its first sentence with a
@@ -453,6 +460,14 @@ All notable changes to this project are documented here. The format is based on
   with NL-writer warnings; the scaled path removes both.
 
 ### Fixed
+
+- `drto.initialize_steady_state`'s dynamic path broadcasts the Vars inside
+  time-indexed Block members (gh #137). The broadcast read the time
+  position off each Var component's own index, so a Var living in a
+  `Block(time)` member, the IDAES property-block idiom, had none and kept
+  its prior value while the directly time-indexed Vars went flat. Each
+  such family now copies its Vars at every grid point from the surviving
+  member on the reduced clone, and the report counts them.
 
 - The registry renders a component whose name ends in an underscored
   number under its own name (gh #103). Naming the free indexes of a

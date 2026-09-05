@@ -6,7 +6,7 @@ import pytest
 
 import drto
 from test_declarations import declared_model
-from test_infinite_horizon import ref_control_model
+from test_infinite_horizon import block_model, ref_control_model
 
 pyomo_pounce = pytest.importorskip("pyomo_pounce")
 
@@ -92,6 +92,19 @@ def test_dynamic_path_broadcasts_flat():
     # structure untouched: the model is still dynamic and unreduced
     assert m.z.is_indexed() and m.component("dzdt") is not None
     assert not drto.info(m).has_transformation("drto.dynamic_to_steady_state")
+
+
+def test_dynamic_path_broadcasts_block_members():
+    # the IDAES property-block idiom: a Var inside a Block(t) member is
+    # indexed by the time set through its Block, not on its own index
+    m = block_model()
+    for t in m.t:
+        m.props[t].y.set_value(99.0)
+    report = drto.initialize_steady_state(m, controls={m.u: 0.3})
+    # dz/dt = u - y with y = 2z + 0.1q at rest under u = 0.3, q = 3: z = 0, y = 0.3
+    assert all(pyo.value(m.z[t]) == pytest.approx(0.0, abs=1e-8) for t in m.t)
+    assert all(pyo.value(m.props[t].y) == pytest.approx(0.3, abs=1e-8) for t in m.t)
+    assert report.n_broadcast_vars >= 5  # z, u, cost, q, and the family's y
 
 
 def test_dynamic_path_requires_discretization():
@@ -180,7 +193,7 @@ def test_the_pipeline_receives_the_model_itself(monkeypatch):
     assert pyo.value(m.z) == pytest.approx(0.5, abs=1e-8)
 
 
-def test_scaling_suffix_scales_the_dynamic_pipeline():
+def test_a_scaling_suffix_does_not_change_the_dynamic_pipeline():
     def built(suffix):
         m = discretized_model()
         if suffix:

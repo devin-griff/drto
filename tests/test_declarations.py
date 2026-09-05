@@ -920,7 +920,7 @@ def test_stage_cost_with_a_foreign_variable_is_rejected():
             == (mm.z[t] - mm.z_ss) ** 2 + mm.z2[t] ** 2 + mm.u[t] ** 2 + mm.y[t] ** 2
         )
 
-    with pytest.raises(ValueError, match="'y\[0\]', which is not a declared"):
+    with pytest.raises(ValueError, match=r"'y\[0\]', which is not a declared"):
         drto.tracking_stage_cost(m.stage)
 
 
@@ -944,7 +944,7 @@ def test_terminal_cost_with_a_control_is_rejected():
     def term_def(mm):
         return mm.term == (mm.z[10] - mm.z_ss) ** 2 + mm.z2[10] ** 2 + mm.u[10] ** 2
 
-    with pytest.raises(ValueError, match="'u\[10\]', which is not a declared state"):
+    with pytest.raises(ValueError, match=r"'u\[10\]', which is not a declared state"):
         drto.tracking_terminal_cost(m.term_def)
 
 
