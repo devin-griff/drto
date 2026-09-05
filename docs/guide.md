@@ -318,6 +318,8 @@ before any dynamic transform:
   setpoint this way.
 - `drto.steady_state_optimization` is the reduction plus the declared
   economic cost: the RTO problem.
+  `drto.steady_state_optimization(build)` builds the model instead of
+  taking one.
 
 ## How-to: scaling
 
