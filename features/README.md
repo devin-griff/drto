@@ -38,6 +38,7 @@ alongside the CHANGELOG section rename.
 | [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
 | [025 drto.soft_bounds](025-drto.soft_bounds.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 | [026 Approximate NMPC](026-approximate_nmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [027 drto.linearize_steady_state](027-drto.linearize_steady_state.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template
 
