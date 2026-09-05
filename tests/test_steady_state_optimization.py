@@ -156,7 +156,7 @@ def test_requires_the_declarations():
     m.z = pyo.Var()
     drto.state(m.z)
     with pytest.raises(
-        ValueError, match="missing: control, a stage cost of either kind"
+        ValueError, match="Missing: control, a stage cost of either kind"
     ):
         pyo.TransformationFactory(SSO).apply_to(m)
 
@@ -203,7 +203,7 @@ def test_cost_equations_stay():
 
 
 def test_tracking_only_model_transforms():
-    # feature 009 amendment: a tracking cost alone gates the mode too
+    # a tracking cost alone satisfies the requires check (feature 009)
     m = tracking_model()
     pyo.TransformationFactory(SSO).apply_to(m)
     assert m.component("drto_objective") is not None
@@ -278,7 +278,7 @@ def test_steady_authored_reaches_the_same_optimum():
 
 @needs_ipopt
 def test_tracking_only_optimum_is_the_nearest_steady_point():
-    # at rest z = u; targets z_ss = 0.4, u_ss = 0.2 disagree, so the
+    # at rest z = u. The targets z_ss = 0.4, u_ss = 0.2 disagree, so the
     # minimizer of (z - 0.4)^2 + (u - 0.2)^2 on z = u is 0.3
     m = tracking_model()
     pyo.TransformationFactory(SSO).apply_to(m)

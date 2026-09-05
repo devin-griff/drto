@@ -5,20 +5,21 @@
 Economic RTO: reduces the model to steady state with the declared controls
 free and optimizes the economic objective over them, giving the optimal steady
 operating point. A dynamic model (horizon and dynamics declared) first
-composes ``drto.dynamic_to_steady_state`` (feature 005); a model authored
+composes ``drto.dynamic_to_steady_state`` (feature 005), and a model authored
 directly as steady-state skips the reduction.
 
-The cost equations stay, unlike the simulation modes: this mode needs them. A
+The cost equations stay, unlike the simulation modes, since this mode needs
+them. A
 declared tracking stage cost is kept rather than dropped, since it regularizes
 the economic optimum toward a known operating point, the RTO-layer equivalent
 of move suppression. With both cost kinds declared, ``tracking_weight`` scales
 the tracking side, as in ``drto.dynamic_optimization`` (feature 006). With
-only a tracking stage cost declared, the objective is that cost alone: the
+only a tracking stage cost declared, the objective is that cost alone, the
 steady point nearest the declared targets.
 
 The estimation-category declarations (feature 018) are neutralized before the
 reduction, through the routine shared with the other control-side modes. That
-matters more here than in a simulation: a free disturbance would become a
+matters more here than in a simulation. A free disturbance would become a
 decision variable the optimizer exploits to lower the economic cost, so the
 operating point would be optimized against fictitious noise.
 
@@ -35,26 +36,26 @@ from drto.info import info
 from drto.objective import build_objective
 
 #: The declarations the transform requires, alongside a stage cost of either
-#: kind. No horizon or dynamics: the user may author the model as
+#: kind. No horizon or dynamics, since the user may author the model as
 #: steady-state.
 _REQUIRED = ("state", "control")
 
-#: Both stage-cost kinds; the tracking weight applies only with both present.
+#: Both stage-cost kinds. The tracking weight applies only with both present.
 _STAGE_KINDS = ("tracking_stage_cost", "economic_stage_cost")
 
 
 @TransformationFactory.register(
     "drto.steady_state_optimization",
     doc="Reduce to steady state and optimize the economic objective over the "
-    "free controls: the economic RTO point (drto).",
+    "free controls, the economic RTO point (drto).",
 )
 class SteadyStateOptimizationTransformation(Transformation):
-    """The steady-state optimization mode; see the module docstring.
+    """The steady-state optimization mode. See the module docstring.
 
     Options: ``tracking_weight`` weights a declared tracking stage cost, and
     applies only when both a tracking and an economic stage cost are declared.
 
-    ``apply_to`` assembles in place; ``create_using`` assembles a clone and
+    ``apply_to`` assembles in place. ``create_using`` assembles a clone and
     leaves the source model alone.
     """
 
@@ -79,7 +80,7 @@ class SteadyStateOptimizationTransformation(Transformation):
         if missing:
             raise ValueError(
                 f"drto: steady_state_optimization requires state, control, "
-                f"and a stage cost of either kind; missing: "
+                f"and a stage cost of either kind. Missing: "
                 f"{', '.join(missing)}."
             )
 
@@ -90,8 +91,8 @@ class SteadyStateOptimizationTransformation(Transformation):
         if reg.has_declaration("horizon") and reg.has_declaration("dynamics"):
             TransformationFactory("drto.dynamic_to_steady_state").apply_to(model)
 
-        # the process noise is off in the RTO point: a free disturbance would
-        # be a decision the optimizer exploits. Fixed at zero after the
+        # the process noise is off in the RTO point, since a free disturbance
+        # would be a decision the optimizer exploits. Fixed at zero after the
         # reduction collapses it to a single point
         noise = _fix_disturbances(reg, {}, "steady_state_optimization")
 

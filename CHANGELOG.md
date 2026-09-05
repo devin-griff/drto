@@ -43,6 +43,13 @@ All notable changes to this project are documented here. The format is based on
   eleven figures. The notebooks on both paths are regenerated against the
   released 0.11.0.
 
+- One `drto.steady_state_optimization` message and its factory doc string
+  read as sentences (gh #131). The error for missing declarations joined
+  two clauses with a semicolon and now ends its first sentence with a
+  period, so a test matching its tail matches `Missing:` rather than
+  `missing:`, as the dynamic modes' already do. The doc string spliced
+  its second clause on with a colon and takes a comma.
+
 - Two `drto.steady_state_simulation` messages and its factory doc string
   read as sentences (gh #130). The errors for an unknown control name and
   a control holding no value each joined two clauses with a semicolon,
