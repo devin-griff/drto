@@ -129,8 +129,8 @@ fixed point, the soft pin already satisfied.
   default `scale=None` writes none.
 - An initial condition at the targets reproduces the
   `drto.initialize_steady_state` flat trajectory.
-- The cart-pole initializes from rest and the first dynamic optimization
-  solves. A model with `Block(time)` structure initializes the same way.
+- A cold-started infinite-horizon dynamic optimization solves. A model
+  with `Block(time)` structure initializes the same way.
 - Returns a readable report in the feature 010 shape, adding the
   interpolation and the per-point solves.
 - A member of a declared component that does not exist is skipped,
