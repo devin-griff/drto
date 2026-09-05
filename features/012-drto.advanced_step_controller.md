@@ -15,7 +15,7 @@ import drto
 # with pounce ...
 
 m.z_hat.set_value(z_measured)              # the measurement arrives
-est = drto.advanced_step_controller(m)     # pounce estimate(), corrected
+est = drto.advanced_step_controller(m)     # pounce sens_solution(), corrected
 u0 = est[m.u[0]]                           # the move to implement
 
 dudz = drto.advanced_step_controller(m, gradient=True)  # sensitivities
@@ -31,11 +31,11 @@ backsolve, not a solve.
 `drto.advanced_step_controller(m)` reads those Params' current values as the
 perturbation, the difference between the measured state the loop wrote
 and the predicted state the model was solved at, and returns
-`pyomo_pounce.estimate()`: the corrected solution as a map from each
+`pyomo_pounce.sens_solution()`: the corrected solution as a map from each
 variable to its estimated value, clamped to bounds. The model is not
 touched; the solution at the predicted state stays in place as the next
 solve's warm start. With `gradient=True` it returns
-`pyomo_pounce.gradient()` for the declared controls with respect to the
+`pyomo_pounce.sens_jacobian()` for the declared controls with respect to the
 Params instead. Keyword arguments it does not recognize pass through to
 the pounce call, so options pounce grows need no change here.
 
@@ -56,9 +56,9 @@ piece the asnmpc loop (feature 015) is built from.
 - `drto.dynamic_optimization` declares the initial-condition Params as
   pounce sensitivity parameters when pyomo-pounce is importable. A model
   solved with any other solver is unchanged by the declaration.
-- `drto.advanced_step_controller(m)` returns the `estimate()` map at the
+- `drto.advanced_step_controller(m)` returns the `sens_solution()` map at the
   Params' current values, without modifying the model. With
-  `gradient=True` it returns the `gradient()` of the declared controls
+  `gradient=True` it returns the `sens_jacobian()` of the declared controls
   with respect to those Params.
 - Unrecognized keyword arguments pass through to the pounce call.
 - Without a pounce solve, the call raises the no-session error

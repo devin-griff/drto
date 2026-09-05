@@ -341,7 +341,7 @@ def approximate_nmpc_data(
 
             point["du0_dx"] = {
                 u.parent_component().name: {
-                    p.name: pyomo_pounce.gradient(u, wrt=p) for p, _ in pairs
+                    p.name: pyomo_pounce.sens_jacobian(u, wrt=p) for p, _ in pairs
                 }
                 for u in moves
             }
