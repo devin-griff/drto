@@ -26,6 +26,23 @@ All notable changes to this project are documented here. The format is based on
   members present when it is set. The problem handed to the solver is
   unchanged.
 
+- The pyomo-pounce floor moves to 0.11.0, and the three sensitivity calls
+  follow its rename (gh #136). pyomo-pounce 0.11.0 renamed the surface to
+  one rule with no aliases, `estimate()` to `sens_solution()` and
+  `gradient()` to `sens_jacobian()`, so `drto.advanced_step_controller`
+  and `drto.approximate_nmpc_data` call the new names. The old floor
+  already resolved to 0.11.0 in CI, which is why main failed on
+  `AttributeError: module 'pyomo_pounce' has no attribute 'estimate'`.
+  The released 0.10.0 also does not reproduce the committed IDAES CSTR
+  pages: its dynamic solves after `initialize_steady_state` or
+  `cold_start_dynamic` take 144 to 177 iterations where the committed
+  pages took 10 to 19, and one stops at an acceptable level. 0.11.0's
+  initializer, which measures its 1x1 block solves on the row's stated
+  scale and scales its projection through the model's `scaling_factor`
+  Suffix, returns them to the committed counts at objectives agreeing to
+  eleven figures. The notebooks on both paths are regenerated against the
+  released 0.11.0.
+
 - Two `drto.steady_state_simulation` messages and its factory doc string
   read as sentences (gh #130). The errors for an unknown control name and
   a control holding no value each joined two clauses with a semicolon,
