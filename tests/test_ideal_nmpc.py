@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Devin Griffith
 # SPDX-License-Identifier: BSD-3-Clause
 """Feature 014: drto.ideal_nmpc."""
+import contextlib
 import sys
 from pathlib import Path
 
@@ -27,10 +28,10 @@ ipopt_ok = bool(drto.scaling.solver_by_name("ipopt").available())
 needs_ipopt = pytest.mark.skipif(not ipopt_ok, reason="ipopt not available")
 
 
-def loop_model(N=5, discretize=True):
+def loop_model(N=5, h=1):
     """dz = u - z + w, with the state and control targets meeting at 0.5."""
     m = pyo.ConcreteModel()
-    m.t = ContinuousSet(initialize=pyo.RangeSet(0, N, 1))
+    m.t = ContinuousSet(initialize=[i * h for i in range(N + 1)])
     m.z_ss = pyo.Param(initialize=0.5, mutable=True)
     m.u_ss = pyo.Param(initialize=0.5, mutable=True)
     m.z_hat = pyo.Param(initialize=0.2, mutable=True)
@@ -61,65 +62,72 @@ def loop_model(N=5, discretize=True):
     drto.initial_condition(m.z_init)
     drto.steady_state(m.z, m.z_ss)
     drto.steady_state_control(m.u, m.u_ss)
-    if discretize:
-        pyo.TransformationFactory("dae.collocation").apply_to(
-            m, wrt=m.t, nfe=N, ncp=3, scheme="LAGRANGE-RADAU"
-        )
     return m
 
 
+class _Stop(Exception):
+    """Raised by a spy to end the loop once it has seen what it needs."""
+
+
+class _Available:
+    """A solver that resolves and reports itself available, solving nothing."""
+
+    def available(self):
+        return True
+
+
 class _Recorder:
-    """Wraps a real native solver, recording each solve's options."""
+    """Wraps a real native solver, recording each solve's options and model."""
 
     def __init__(self, real):
-        self.real, self.calls = real, []
+        self.real, self.calls, self.models = real, [], []
 
     def available(self):
         return True
 
     def solve(self, model, **kwds):
         self.calls.append(dict(kwds.get("solver_options") or {}))
+        self.models.append(model)
         return self.real.solve(model, **kwds)
 
 
 # ── validation ───────────────────────────────────────────────────────────────
 
 
-def test_requires_the_untransformed_model():
-    m = loop_model()
-    pyo.TransformationFactory("drto.dynamic_optimization").apply_to(m)
-    with pytest.raises(ValueError, match="already applied"):
-        drto.ideal_nmpc(m, steps=2)
+def test_requires_the_model_statement():
+    # the loop builds both sides itself, so it takes the builder
+    with pytest.raises(ValueError, match="model statement"):
+        drto.ideal_nmpc(loop_model(), steps=2)
 
 
-def test_requires_a_discretized_horizon():
-    with pytest.raises(ValueError, match="discretized"):
-        drto.ideal_nmpc(loop_model(discretize=False), steps=2)
+def test_a_mesh_option_belongs_to_the_loop():
+    with pytest.raises(ValueError, match="states the mesh once"):
+        drto.ideal_nmpc(loop_model, steps=2, dynamic_optimization={"ncp": 2})
 
 
 def test_steps_must_be_positive():
     with pytest.raises(ValueError, match="at least 1"):
-        drto.ideal_nmpc(loop_model(), steps=0)
+        drto.ideal_nmpc(loop_model, steps=0)
 
 
 def test_unknown_state_name_errors():
     with pytest.raises(ValueError, match="not a pinned state"):
-        drto.ideal_nmpc(loop_model(), steps=2, initial_condition={"nope": 1.0})
+        drto.ideal_nmpc(loop_model, steps=2, initial_condition={"nope": 1.0})
 
 
 def test_unknown_disturbance_name_errors():
     with pytest.raises(ValueError, match="not a declared disturbance"):
-        drto.ideal_nmpc(loop_model(), steps=2, disturbances={"nope": 0.1})
+        drto.ideal_nmpc(loop_model, steps=2, disturbances={"nope": 0.1})
 
 
 def test_short_disturbance_sequence_errors():
     with pytest.raises(ValueError, match="one per step"):
-        drto.ideal_nmpc(loop_model(), steps=3, disturbances={"w": [0.1]})
+        drto.ideal_nmpc(loop_model, steps=3, disturbances={"w": [0.1]})
 
 
 def test_an_unknown_solver_names_the_registry():
     with pytest.raises(ValueError, match="native factory"):
-        drto.ideal_nmpc(loop_model(), steps=2, solver="no_such_solver")
+        drto.ideal_nmpc(loop_model, steps=2, solver="no_such_solver")
 
 
 # ── the loop ─────────────────────────────────────────────────────────────────
@@ -127,7 +135,7 @@ def test_an_unknown_solver_names_the_registry():
 
 @needs_pounce
 def test_loop_settles_and_records():
-    h = drto.ideal_nmpc(loop_model(), steps=8, seed=0)
+    h = drto.ideal_nmpc(loop_model, steps=8, seed=0)
     assert h.times == list(range(9))
     assert len(h.states["z"]) == 9 and len(h.moves["u"]) == 8
     assert h.states["z"][0] == pytest.approx(0.2)
@@ -142,7 +150,7 @@ def test_loop_settles_and_records():
 
 @needs_pounce
 def test_initial_condition_reaches_the_first_solve():
-    h = drto.ideal_nmpc(loop_model(), steps=2, initial_condition={"z": 0.4})
+    h = drto.ideal_nmpc(loop_model, steps=2, initial_condition={"z": 0.4})
     assert h.states["z"][0] == pytest.approx(0.4)
     # one step from 0.4 lands closer to the target than one from 0.2
     assert abs(h.states["z"][1] - 0.5) < 0.01
@@ -150,7 +158,7 @@ def test_initial_condition_reaches_the_first_solve():
 
 @needs_pounce
 def test_constant_disturbance_offsets_the_plant():
-    h = drto.ideal_nmpc(loop_model(), steps=8, disturbances={"w": [0.2] * 8})
+    h = drto.ideal_nmpc(loop_model, steps=8, disturbances={"w": [0.2] * 8})
     assert h.realizations["w"] == [0.2] * 8
     # the controller plans at zero noise, so the plant holds an offset
     assert h.states["z"][-1] == pytest.approx(0.63624, abs=1e-3)
@@ -159,9 +167,9 @@ def test_constant_disturbance_offsets_the_plant():
 @needs_pounce
 def test_draws_are_reproducible_under_seed():
     kw = dict(steps=3, disturbances={"w": 0.05})
-    a = drto.ideal_nmpc(loop_model(), seed=3, **kw)
-    b = drto.ideal_nmpc(loop_model(), seed=3, **kw)
-    c = drto.ideal_nmpc(loop_model(), seed=4, **kw)
+    a = drto.ideal_nmpc(loop_model, seed=3, **kw)
+    b = drto.ideal_nmpc(loop_model, seed=3, **kw)
+    c = drto.ideal_nmpc(loop_model, seed=4, **kw)
     assert a.realizations["w"] == b.realizations["w"]
     assert a.realizations["w"] != c.realizations["w"]
     assert a.states["z"] == pytest.approx(b.states["z"])
@@ -169,12 +177,9 @@ def test_draws_are_reproducible_under_seed():
 
 @needs_pounce
 def test_hicks_settles_to_the_declared_targets():
-    m = hicks(N=5)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    h = drto.ideal_nmpc(
+        hicks, steps=10, dynamic_optimization={"infinite_horizon": True}
     )
-    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
-    h = drto.ideal_nmpc(m, steps=10)
     for name in ("zc", "zt"):
         errs = [abs(v - h.state_targets[name]) for v in h.states[name]]
         assert errs == sorted(errs, reverse=True), f"{name} does not approach"
@@ -185,9 +190,9 @@ def test_hicks_settles_to_the_declared_targets():
 def test_member_subset_states_label_by_their_reference():
     """A state declared as a slice of an indexed Var (gh #20)."""
 
-    def packed_model(N=5):
+    def packed_model(N=5, h=1):
         m = pyo.ConcreteModel()
-        m.t = ContinuousSet(initialize=pyo.RangeSet(0, N, 1))
+        m.t = ContinuousSet(initialize=[i * h for i in range(N + 1)])
         m.xA_ss = pyo.Param(initialize=0.5, mutable=True)
         m.u_ss = pyo.Param(initialize=0.5, mutable=True)
         m.xA_hat = pyo.Param(initialize=0.2, mutable=True)
@@ -223,12 +228,9 @@ def test_member_subset_states_label_by_their_reference():
         drto.initial_condition(m.x_init)
         drto.steady_state(m.x[:, "A"], m.xA_ss)
         drto.steady_state_control(m.u, m.u_ss)
-        pyo.TransformationFactory("dae.collocation").apply_to(
-            m, wrt=m.t, nfe=N, ncp=3, scheme="LAGRANGE-RADAU"
-        )
         return m
 
-    h = drto.ideal_nmpc(packed_model(), steps=4, initial_condition={"x_A": 0.3})
+    h = drto.ideal_nmpc(packed_model, steps=4, initial_condition={"x_A": 0.3})
     assert list(h.states) == ["x_A"]
     assert h.states["x_A"][0] == pytest.approx(0.3)
     assert h.states["x_A"][-1] == pytest.approx(0.5, abs=1e-3)
@@ -242,8 +244,7 @@ def test_member_subset_states_label_by_their_reference():
 def test_warm_started_solves_get_the_recipe(monkeypatch):
     rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    m = loop_model()
-    drto.ideal_nmpc(m, steps=2, solver="ipopt")
+    drto.ideal_nmpc(loop_model, steps=2, solver="ipopt")
     # call order: controller, process, controller (warm), process
     assert len(rec.calls) == 4
     assert "warm_start_init_point" not in rec.calls[0]
@@ -253,15 +254,16 @@ def test_warm_started_solves_get_the_recipe(monkeypatch):
     assert rec.calls[3] == {}
     # the loop declares no suffixes: the warm start is the shifted
     # values plus the recipe, nothing else
-    assert m.component("dual") is None
-    assert m.component("ipopt_zL_in") is None
+    ctrl = rec.models[0]
+    assert ctrl.component("dual") is None
+    assert ctrl.component("ipopt_zL_in") is None
 
 
 @needs_ipopt
 def test_warm_start_options_lay_over_the_recipe(monkeypatch):
     rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    drto.ideal_nmpc(loop_model(), steps=2, solver="ipopt", warm_start={"mu_init": 1e-4})
+    drto.ideal_nmpc(loop_model, steps=2, solver="ipopt", warm_start={"mu_init": 1e-4})
     assert rec.calls[2]["mu_init"] == pytest.approx(1e-4)  # the override
     assert rec.calls[2]["warm_start_init_point"] == "yes"  # the rest stays
 
@@ -270,14 +272,12 @@ def test_warm_start_options_lay_over_the_recipe(monkeypatch):
 def test_another_solver_warm_starts_on_the_shifted_values_alone(monkeypatch):
     rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    m = loop_model()
-    drto.ideal_nmpc(m, steps=2, solver="other")
+    drto.ideal_nmpc(loop_model, steps=2, solver="other")
     assert all(c == {} for c in rec.calls)
-    assert m.component("dual") is None
     # a given mapping still reaches the warm solves as is
     rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    drto.ideal_nmpc(loop_model(), steps=2, solver="other", warm_start={"max_iter": 400})
+    drto.ideal_nmpc(loop_model, steps=2, solver="other", warm_start={"max_iter": 400})
     assert rec.calls[2] == {"max_iter": 400}
 
 
@@ -289,7 +289,7 @@ def test_pounce_warm_solves_carry_mu_init_alone(monkeypatch):
     # else
     rec = _Recorder(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    drto.ideal_nmpc(loop_model(), steps=2, solver="pounce_v2")
+    drto.ideal_nmpc(loop_model, steps=2, solver="pounce_v2")
     assert rec.calls[2]["mu_init"] == pytest.approx(1e-6)
     assert "warm_start_init_point" not in rec.calls[2]
     assert "warm_start_bound_push" not in rec.calls[2]
@@ -311,7 +311,7 @@ def test_a_failed_solve_names_the_step(monkeypatch):
     rec.fail_after = [None, None]  # the third call, step 1's controller
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
     with pytest.raises(RuntimeError, match="controller solve failed at step 1"):
-        drto.ideal_nmpc(loop_model(), steps=3, solver="ipopt")
+        drto.ideal_nmpc(loop_model, steps=3, solver="ipopt")
 
 
 @needs_ipopt
@@ -321,18 +321,18 @@ def test_initialize_mapping_passes_to_the_cold_start(monkeypatch):
         loop_module, "cold_start_dynamic", lambda m, **kw: seen.append(kw)
     )
     drto.ideal_nmpc(
-        loop_model(), steps=1, solver="ipopt", initialize={"profile": "exponential"}
+        loop_model, steps=1, solver="ipopt", initialize={"profile": "exponential"}
     )
     # the controller and the process cold-start alike
     assert seen == [{"profile": "exponential"}, {"profile": "exponential"}]
     seen.clear()
-    drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt", initialize=False)
+    drto.ideal_nmpc(loop_model, steps=1, solver="ipopt", initialize=False)
     assert seen == []
 
 
 def test_initialize_rejects_unknown_values():
     with pytest.raises(ValueError, match="'cold'"):
-        drto.ideal_nmpc(loop_model(), steps=1, initialize="warm")
+        drto.ideal_nmpc(loop_model, steps=1, initialize="warm")
 
 
 @needs_ipopt
@@ -346,9 +346,9 @@ def test_initialize_steady_runs_on_the_input_before_the_sides(monkeypatch):
         calls.append(mm)
 
     monkeypatch.setattr(loop_module, "initialize_steady_state", spy)
-    m = loop_model()
-    drto.ideal_nmpc(m, steps=1, solver="ipopt", initialize="steady")
-    assert calls == [m]
+    drto.ideal_nmpc(loop_model, steps=1, solver="ipopt", initialize="steady")
+    # once per side, each before that side's transforms
+    assert len(calls) == 2
 
 
 @needs_pounce
@@ -356,25 +356,23 @@ def test_initialize_steady_initializes_the_loop():
     # hicks: no declared disturbance, so its steady reduction is square
     # (initialize_steady_state leaves a declared disturbance free, its
     # own descriptive error; the loop adds nothing to that contract)
-    m = hicks(N=5)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
-    )
-    h = drto.ideal_nmpc(m, steps=2, initialize="steady")
+    h = drto.ideal_nmpc(hicks, steps=2, initialize="steady")
     assert h.states["zc"][0] == pytest.approx(0.625)  # the hooks still rule
     # from the flat steady start the first step still moves to target
     assert abs(h.states["zc"][1] - 0.6416) < abs(0.625 - 0.6416)
 
 
 @needs_pounce
-def test_initialize_steady_with_a_tail_is_that_functions_error():
-    m = hicks(N=5)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+def test_initialize_steady_runs_with_a_terminal_segment():
+    # the loop initializes each side after discretization and before its
+    # transforms, so the segment no longer precedes the broadcast
+    h = drto.ideal_nmpc(
+        hicks,
+        steps=1,
+        initialize="steady",
+        dynamic_optimization={"infinite_horizon": True},
     )
-    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
-    with pytest.raises(ValueError, match="before the dynamic transforms"):
-        drto.ideal_nmpc(m, steps=1, initialize="steady")
+    assert h.states["zc"][0] == pytest.approx(0.625)
 
 
 @needs_ipopt
@@ -388,12 +386,9 @@ def test_the_plant_is_the_one_sample_simulation(monkeypatch):
 
     rec = Rec(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    m = hicks(N=5)
-    pyo.TransformationFactory("dae.collocation").apply_to(
-        m, wrt=m.t, nfe=5, ncp=3, scheme="LAGRANGE-RADAU"
+    drto.ideal_nmpc(
+        hicks, steps=1, solver="ipopt", dynamic_optimization={"infinite_horizon": True}
     )
-    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
-    drto.ideal_nmpc(m, steps=1, solver="ipopt")
     plant = seen[1]
     # the terminal segment serves the horizon problem, not the plant
     assert plant.component("drto_ih") is None
@@ -416,7 +411,7 @@ def test_the_plant_is_the_one_sample_simulation(monkeypatch):
 
 @needs_ipopt
 def test_tee_streams_and_returns_every_solves_output(capsys):
-    h = drto.ideal_nmpc(loop_model(), steps=2, solver="ipopt", tee=True)
+    h = drto.ideal_nmpc(loop_model, steps=2, solver="ipopt", tee=True)
     streamed = capsys.readouterr().out
     assert "Number of Iterations" in streamed
     assert [(s, w) for s, w, _t in h.logs] == [
@@ -426,9 +421,37 @@ def test_tee_streams_and_returns_every_solves_output(capsys):
         (1, "process"),
     ]
     assert all("Number of Iterations" in text for _s, _w, text in h.logs)
-    quiet = drto.ideal_nmpc(loop_model(), steps=1, solver="ipopt")
+    quiet = drto.ideal_nmpc(loop_model, steps=1, solver="ipopt")
     assert quiet.logs == []
     assert "Number of Iterations" not in capsys.readouterr().out
+
+
+def test_both_sides_share_one_mesh(monkeypatch):
+    # stating h, ncp, and scheme once is what makes the two grids agree,
+    # captured where the sides are built since the history carries no model
+    built = []
+    real = loop_module._build_and_discretize
+
+    def spy(*a, **k):
+        m = real(*a, **k)
+        built.append(sorted(drto.info(m).components("horizon")[0]))
+        if len(built) == 2:
+            raise _Stop
+        return m
+
+    monkeypatch.setattr(loop_module, "_build_and_discretize", spy)
+    monkeypatch.setattr(
+        loop_module.drto_scaling, "solver_by_name", lambda name: _Available()
+    )
+    # both grids are settled before any solve, so stopping at the second
+    # build keeps this solver-free
+    with contextlib.suppress(_Stop):
+        drto.ideal_nmpc(loop_model, steps=1, h=2.0, ncp=2, solver="ipopt")
+    assert len(built) == 2
+    ctrl_grid, plant_grid = built
+    # the plant is one sampling interval of the controller's own grid
+    assert plant_grid == ctrl_grid[: len(plant_grid)]
+    assert plant_grid[-1] == pytest.approx(2.0)
 
 
 @needs_ipopt
@@ -444,12 +467,16 @@ def test_a_suffix_loop_solves_the_models_themselves(monkeypatch):
 
     rec = Rec(drto.scaling.solver_by_name("ipopt"))
     monkeypatch.setattr(loop_module.drto_scaling, "solver_by_name", lambda name: rec)
-    m = loop_model()
-    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
-    for vd in m.z.values():
-        m.scaling_factor[vd] = 2.0
-    drto.ideal_nmpc(m, steps=1, solver="ipopt")
-    assert seen[0] is m
+
+    def tagged(N=5, h=1):
+        m = loop_model(N=N, h=h)
+        m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+        for vd in m.z.values():
+            m.scaling_factor[vd] = 2.0
+        return m
+
+    drto.ideal_nmpc(tagged, steps=1, solver="ipopt")
+    assert seen[0].component("scaling_factor") is not None
     # ipopt needs no option: the NL writer consumes the Suffix and
     # scales the problem as it writes
     assert all("nlp_scaling_method" not in opts for opts in rec.calls)
@@ -460,8 +487,8 @@ def test_a_suffix_loop_solves_the_models_themselves(monkeypatch):
 
 @needs_ipopt
 def test_scaled_loop_reproduces_the_unscaled_history():
-    def tagged():
-        m = loop_model()
+    def tagged(N=5, h=1):
+        m = loop_model(N=N, h=h)
         m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
         for vd in m.z.values():
             m.scaling_factor[vd] = 2.0
@@ -469,17 +496,25 @@ def test_scaled_loop_reproduces_the_unscaled_history():
             m.scaling_factor[vd] = 4.0
         return m
 
-    hs = drto.ideal_nmpc(tagged(), steps=5, solver="ipopt")
-    hu = drto.ideal_nmpc(loop_model(), steps=5, solver="ipopt")
+    hs = drto.ideal_nmpc(tagged, steps=5, solver="ipopt")
+    hu = drto.ideal_nmpc(loop_model, steps=5, solver="ipopt")
     assert hs.states["z"] == pytest.approx(hu.states["z"], abs=1e-6)
     assert hs.moves["u"] == pytest.approx(hu.moves["u"], abs=1e-6)
 
 
 @needs_ipopt
-def test_scale_writes_the_factors_and_the_default_does_not():
-    m = loop_model()
-    drto.ideal_nmpc(m, steps=1, solver="ipopt", scale="point")
-    assert m.component("scaling_factor") is not None
-    m2 = loop_model()
-    drto.ideal_nmpc(m2, steps=1, solver="ipopt")
-    assert m2.component("scaling_factor") is None
+def test_scale_writes_the_factors_and_the_default_does_not(monkeypatch):
+    built = []
+    real = loop_module._build_and_discretize
+
+    def spy(*a, **k):
+        m = real(*a, **k)
+        built.append(m)
+        return m
+
+    monkeypatch.setattr(loop_module, "_build_and_discretize", spy)
+    drto.ideal_nmpc(loop_model, steps=1, solver="ipopt", scale="point")
+    assert all(m.component("scaling_factor") is not None for m in built)
+    built.clear()
+    drto.ideal_nmpc(loop_model, steps=1, solver="ipopt")
+    assert all(m.component("scaling_factor") is None for m in built)
