@@ -43,6 +43,11 @@ All notable changes to this project are documented here. The format is based on
   eleven figures. The notebooks on both paths are regenerated against the
   released 0.11.0.
 
+- Five `drto.cold_start_dynamic` messages read as sentences (gh #142).
+  The missing-pairing, unknown-profile, `point_solves`, time-constant,
+  and missing-declarations errors each joined two clauses with a
+  semicolon, and the time-constant error called the option a knob.
+
 - Four `drto.initialize_steady_state` messages read as sentences (gh
   #137). The ordering guard, the unknown-control error, and the
   valueless-control error each joined two clauses with a semicolon, and
@@ -460,6 +465,13 @@ All notable changes to this project are documented here. The format is based on
   with NL-writer warnings; the scaled path removes both.
 
 ### Fixed
+
+- `drto.cold_start_dynamic`'s report names the control members a
+  simulation shape held (gh #142). On a `drto.dynamic_simulation` model
+  the controls are fixed, the cold start leaves them at the values they
+  hold, and the report still read `controls : N at their targets`. It
+  now counts the fixed members it left alone and names that count on the
+  line, which prints as before when none were held.
 
 - `drto.initialize_steady_state`'s dynamic path broadcasts the Vars inside
   time-indexed Block members (gh #137). The broadcast read the time
