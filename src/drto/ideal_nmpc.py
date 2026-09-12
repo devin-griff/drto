@@ -45,7 +45,7 @@ from pyomo.core import Suffix, TransformationFactory
 
 from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
-from drto.dynamic_optimization import _members, _spread
+from drto.dynamic_optimization import _build_and_discretize, _members, _spread
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 from drto.initialize_steady_state import _attached, initialize_steady_state
@@ -201,9 +201,35 @@ def _one_sample(process):
                     del comp[idx]
 
 
+def _owner_and_params(reg, fn):
+    """The pinned members' declared owners and the Params pinning them.
+
+    A declared state may be a Reference over a member subset of an
+    indexed Var (gh #20), so a pinned member matches its declared owner by
+    data identity, the package convention. Returns the owner map, keyed by
+    the member's id, and the Params grouped under the owner's local name.
+    """
+    time = reg.components("horizon")[0]
+    t0 = time.first()
+    owner = {}
+    for z in reg.components("state"):
+        pos, subs = _time_index(z, time)
+        for idx in z:
+            o, t = _split_index(idx, pos, len(subs))
+            if t == t0:
+                owner[id(z[idx])] = (z, o)
+    params_of = {}
+    for vd, param in _pinned(reg, fn):
+        params_of.setdefault(owner[id(vd)][0].local_name, []).append(param)
+    return owner, params_of
+
+
 def ideal_nmpc(
-    m,
+    build,
     steps,
+    h=None,
+    ncp=3,
+    scheme="LAGRANGE-RADAU",
     initial_condition=None,
     dynamic_optimization=None,
     disturbances=None,
@@ -219,19 +245,32 @@ def ideal_nmpc(
 
     Parameters
     ----------
-    m : Block
-        The declared, discretized model, ``drto.infinite_horizon``
-        applied or not, before the mode transforms. It becomes the
-        controller in place, and the process is a clone.
+    build : callable
+        The model statement. The loop builds both sides from it, the
+        controller over the declared horizon and the plant over one
+        sampling interval, so the two grids agree by construction. The
+        builder contract is feature 006's.
     steps : int
         The loop length, in samples.
+    h : float, optional
+        Sampling time, passed to both builder calls. Omitted, the
+        builder's default.
+    ncp : int, optional
+        Collocation points per finite element, for both sides (default 3).
+    scheme : str, optional
+        The collocation scheme, for both sides (default
+        ``"LAGRANGE-RADAU"``).
     initial_condition : mapping, optional
         Declared state (the component, or its name) to the value written
         into its initial-condition Params before the first step: a constant for
         every pinned member, or one value each. Omitted, the Params'
         current values are the first actual state.
     dynamic_optimization : mapping, optional
-        Options through to the ``drto.dynamic_optimization`` transform.
+        The controller-only options: ``N``, the interval count passed to
+        its builder call, ``infinite_horizon``, and ``tracking_weight``.
+        ``h``, ``ncp``, and ``scheme`` belong to the loop, which states
+        the mesh once for both sides, and repeating one here is an
+        error.
     disturbances : mapping, optional
         Declared disturbance (the component, or its name) to its
         realization: a sequence gives the per-step values as given, a
@@ -243,10 +282,9 @@ def ideal_nmpc(
         The first solve's initialization. ``"cold"`` (the default) runs
         ``drto.cold_start_dynamic`` on the controller and the process
         alike, a mapping passing through as its options. ``"steady"``
-        runs ``drto.initialize_steady_state`` on the input before the
-        sides are built, so both inherit the broadcast (that function's
-        own contract applies, the input preceding
-        ``drto.infinite_horizon``). ``False`` skips initialization.
+        runs ``drto.initialize_steady_state`` on each side after it is
+        discretized and before the transforms, the only point that
+        function accepts. ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
         Every solver warm starts between steps on the shifted
@@ -254,9 +292,8 @@ def ideal_nmpc(
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
         mapping of units to magnitudes. Given, the factors are written
-        once at entry, before the sides are built, so both sides carry
-        them and every internal solve receives them. A caller choosing
-        ``"point"`` passes the model at the point to measure. The
+        on each side once it is built, so both hold them and every
+        solver solve receives them. The
         default, ``None``, writes nothing and honors a
         ``scaling_factor`` Suffix the caller wrote.
     warm_start : mapping, optional
@@ -281,14 +318,19 @@ def ideal_nmpc(
     Raises
     ------
     ValueError
-        On a transformed input, an undiscretized horizon, an unknown
-        state or disturbance name, or a disturbance sequence shorter
-        than the loop.
+        On an input that is not callable, a mesh option repeated in
+        ``dynamic_optimization``, an unknown state or disturbance name,
+        or a disturbance sequence shorter than the loop.
     RuntimeError
         If the solver is not available, or a solve fails (the error
         names the step).
     """
     fn = "ideal_nmpc"
+    if not callable(build):
+        raise ValueError(
+            f"drto: {fn} takes the model statement, a function returning a "
+            f"declared, undiscretized model (feature 006). Got {build!r}."
+        )
     if not (
         initialize is False
         or initialize in ("cold", "steady")
@@ -300,52 +342,58 @@ def ideal_nmpc(
         )
     if steps < 1:
         raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
-    reg = info(m)
-    for name in _TRANSFORMED:
-        if reg.has_transformation(name):
-            raise ValueError(
-                f"drto: {fn} builds the controller and the process itself, "
-                f"so it takes the declared, discretized model before the "
-                f"mode transforms. '{name}' is already applied."
-            )
-    if not reg.has_declaration("horizon"):
-        raise ValueError(f"drto: {fn} requires the horizon declaration.")
-    time = reg.components("horizon")[0]
-    if not time.get_discretization_info():
+
+    if solver in _POUNCE_SOLVERS:
+        # importing registers the in-process plugin. Without it the name
+        # falls back to a PATH executable behind pyomo's ASL wrapper,
+        # a different solver than the one the drto stack is built on
+        try:
+            import pyomo_pounce  # noqa: F401
+        except ImportError as err:
+            raise RuntimeError(
+                f"drto: {fn}: solver 'pounce' requires pyomo-pounce "
+                f"(pip install drto[pounce], or pip install pyomo-pounce)."
+            ) from err
+    opt = drto_scaling.solver_by_name(solver)
+    if not opt.available():
+        raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
+
+    do_opts = dict(dynamic_optimization or {})
+    repeated = [k for k in ("h", "ncp", "scheme") if k in do_opts]
+    if repeated:
         raise ValueError(
-            f"drto: {fn} runs on the grid, so the model must be discretized "
-            f"first (apply a dae.* transformation)."
+            f"drto: {fn} states the mesh once for both sides, so "
+            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
+            f"dynamic_optimization."
         )
+    segment = do_opts.pop("infinite_horizon", False)
 
-    # a declared state may be a Reference over a member subset of a
-    # indexed Var (gh #20), so a pinned member matches its declared owner
-    # by data identity, the package convention
-    t0 = time.first()
-    owner = {}
-    for z in reg.components("state"):
-        pos, subs = _time_index(z, time)
-        for idx in z:
-            o, t = _split_index(idx, pos, len(subs))
-            if t == t0:
-                owner[id(z[idx])] = (z, o)
+    # both sides from the one statement, which is what makes them the same
+    # physics: the controller over the declared horizon, the plant over one
+    # sampling interval, both on the mesh stated once
+    ctrl = _build_and_discretize(build, do_opts.pop("N", None), h, ncp, scheme, fn)
+    plant = _build_and_discretize(build, 1, h, ncp, scheme, fn)
+    reg = info(ctrl)
+    time = reg.components("horizon")[0]
 
-    # the initial condition lands in the input's Params, so the
-    # process clone inherits it with everything else
-    pins = _pinned(reg, fn)
-    params_of = {}
-    for vd, param in pins:
-        params_of.setdefault(owner[id(vd)][0].local_name, []).append(param)
+    # the initial condition lands in both sides' Params, the values the
+    # first step reads
+    c_owner, c_params_of = _owner_and_params(reg, fn)
+    _p_owner, p_params_of = _owner_and_params(info(plant), fn)
+    owner = c_owner
     for key, val in (initial_condition or {}).items():
         name = key if isinstance(key, str) else key.local_name
-        params = params_of.get(name)
+        params = c_params_of.get(name)
         if params is None:
             raise ValueError(
                 f"drto: {fn} got an initial condition for '{name}', which "
                 f"is not a pinned state. The pinned states are "
-                f"{', '.join(params_of) or '(none)'}."
+                f"{', '.join(c_params_of) or '(none)'}."
             )
-        for param, v in zip(params, _spread(val, len(params), name, fn)):
-            param.set_value(v)
+        values = _spread(val, len(params), name, fn)
+        for side in (params, p_params_of[name]):
+            for param, v in zip(side, values):
+                param.set_value(v)
 
     # the per-step disturbance plan, validated before anything is built
     declared_dist = [w.local_name for w in reg.components("disturbance")]
@@ -365,78 +413,63 @@ def ideal_nmpc(
             )
         plan[name] = val
 
-    if solver in _POUNCE_SOLVERS:
-        # importing registers the in-process plugin. Without it the name
-        # falls back to a PATH executable behind pyomo's ASL wrapper,
-        # a different solver than the one the drto stack is built on
-        try:
-            import pyomo_pounce  # noqa: F401
-        except ImportError as err:
-            raise RuntimeError(
-                f"drto: {fn}: solver 'pounce' requires pyomo-pounce "
-                f"(pip install drto[pounce], or pip install pyomo-pounce)."
-            ) from err
-    opt = drto_scaling.solver_by_name(solver)
-    if not opt.available():
-        raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
-
-    # a scale source writes the factors first, at entry, so both sides
-    # hold them and every solver solve receives them. The cold starts'
+    # a scale source writes the factors on each side once it is built, so
+    # both hold them and every solver solve receives them. The cold starts'
     # block solves run in the model's own units either way (gh #92)
     if scale is not None:
-        drto_scaling.scale(m, source=scale)
+        drto_scaling.scale(ctrl, source=scale)
+        drto_scaling.scale(plant, source=scale)
 
-    # the steady initialization runs on the input before the sides are
-    # built, so the process clone and the controller both inherit it
+    # the steady initialization runs on each side after it is discretized
+    # and before the transforms, the only point that function accepts
     if initialize == "steady":
-        initialize_steady_state(m)
+        initialize_steady_state(ctrl)
+        initialize_steady_state(plant)
 
-    # the process: a clone in simulation mode, its controls first fixed
-    # at the declared control targets
+    # the plant runs in simulation mode, its controls fixed at the declared
+    # control targets. It is built over one sampling interval, so nothing
+    # is cut away and it never carries a terminal segment
     uss = list(reg.declarations("steady_state_control"))
     at_targets = {
         u.name: pyo.value(_target(uss, u, "steady_state_control", fn))
         for u in reg.components("control")
     }
-    process = TransformationFactory("drto.dynamic_simulation").create_using(
-        m, controls=at_targets
+    TransformationFactory("drto.dynamic_simulation").apply_to(
+        plant, controls=at_targets
     )
-    # the plant is the one-sample simulation from here on: everything
-    # downstream (cold start, every solve) sees only the first element
-    _one_sample(process)
-    _prune_suffixes(process)
+    _prune_suffixes(plant)
 
-    # the input becomes the controller
-    TransformationFactory("drto.dynamic_optimization").apply_to(
-        m, **(dynamic_optimization or {})
-    )
-    _prune_suffixes(m)
+    # the controller takes the terminal segment when asked, then assembles
+    if segment:
+        seg_opts = segment if segment is not True else {}
+        TransformationFactory("drto.infinite_horizon").apply_to(ctrl, **seg_opts)
+    TransformationFactory("drto.dynamic_optimization").apply_to(ctrl, **do_opts)
+    _prune_suffixes(ctrl)
 
     # the warm-started solves' options: the recipe under the solvers
     # that read it, the warm_start mapping laid over
     warm_opts = _warm_options(solver)
     warm_opts.update(warm_start or {})
 
-    # the controller and the process cold-start alike, so the plant's
-    # first simulation starts initialized too. The plant is already cut,
-    # so its cold start is one element's worth
+    # the controller and the plant cold-start alike, so the plant's first
+    # simulation starts initialized too. The plant spans one sampling
+    # interval, so its cold start is one element's worth
     if initialize == "cold" or isinstance(initialize, Mapping):
         opts = {} if initialize == "cold" else dict(initialize)
-        cold_start_dynamic(m, **opts)
-        cold_start_dynamic(process, **opts)
+        cold_start_dynamic(ctrl, **opts)
+        cold_start_dynamic(plant, **opts)
 
     # an active scaling_factor suffix: every solve on that side
     # receives the factors, through the solver option for the solvers
     # that take one, and the history reads back in the model's own
     # units. A solver that does not receive them warns here, once.
-    ctrl, plant = m, process
     suffix_opts = (
         drto_scaling._scaling_options(solver, fn)
-        if drto_scaling._suffix_active(m)
+        if drto_scaling._suffix_active(ctrl)
         else {}
     )
 
-    reg_m, reg_p = info(m), info(process)
+    reg_m, reg_p = info(ctrl), info(plant)
     samples = reg_m.declarations("horizon")[0]["samples"]
     t0, t1 = samples[0], samples[1]
     dt = t1 - t0

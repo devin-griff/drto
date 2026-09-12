@@ -155,6 +155,11 @@ def _build_and_discretize(build, N, h, ncp, scheme, fn):
     m = build(**kwargs)
 
     reg = info(m)
+    if not reg.has_declaration("horizon"):
+        raise ValueError(
+            f"drto: {fn} discretizes the declared sample grid, and the model "
+            f"the builder returned declares no horizon (drto.horizon first)."
+        )
     time = reg.components("horizon")[0]
     if time.get_discretization_info():
         raise ValueError(
