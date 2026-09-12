@@ -113,15 +113,14 @@ it. The history's `logs` holds one entry per solve in loop order, the
 step, the side (controller or process), and the solver's text. The
 default is quiet, nothing streamed, nothing kept.
 
-An active `scaling_factor` suffix is honored the way the initializers
-honor it: every solve on that side receives the factors, and the
-history reads back in the model's own units. The initial-condition
-Params stay physical. `scale` takes a feature 023 source, `"point"`,
-`"bounds"`, or a mapping of units to magnitudes, and forwards it to
-`drto.scale` at entry, before the sides are built, so the process clone
-carries the factors and every internal solve, the cold starts' block
-solves included, runs against them. They are written once and held for
-the whole loop. A caller choosing `"point"` passes the model at the
+An active `scaling_factor` suffix reaches every solver solve on that
+side, and the history reads back in the model's own units. The
+initial-condition Params stay physical, and the cold starts' block
+solves run in the model's own units either way (gh #92). `scale` takes
+a feature 023 source, `"point"`, `"bounds"`, or a mapping of units to
+magnitudes, and forwards it to `drto.scale` at entry, before the sides
+are built, so both sides hold the factors and every solver solve
+receives them. They are written once and held for the whole loop. A caller choosing `"point"` passes the model at the
 point to measure. The default, `scale=None`, writes nothing and honors
 what the caller wrote.
 
@@ -194,9 +193,10 @@ and returns a history that plots in one line.
   receives the factors, the history lands in the model's own units, and
   a hicks loop with factors written reproduces the unscaled loop's
   history.
-- With `scale` given a feature 023 source, the loop writes the
-  factors through `drto.scale` at entry, before the sides are built,
-  so both sides carry them and every internal solve receives them; the
+- With `scale` given a feature 023 source, the loop writes the factors
+  through `drto.scale` at entry, before the sides are built, so both
+  sides hold them and every solver solve receives them, with the cold
+  starts' block solves running in the model's own units (gh #92). The
   default `scale=None` writes no factors.
 - The history holds times, actual states, implemented moves, and
   realizations under their declared names. `drto.plot_states` and
