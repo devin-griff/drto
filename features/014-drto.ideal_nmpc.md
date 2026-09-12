@@ -13,11 +13,12 @@ closed loop the declarations describe.
 ```python
 import drto
 
-# m: the declared, discretized model, untransformed
+# build: the model statement, a function (feature 006)
 
 history = drto.ideal_nmpc(
-    m,
+    build,
     steps=50,                          # loop length, in samples
+    h=1.0,                             # sampling time, for both sides
     initial_condition={"z": 0.2},      # written into the initial-condition
                                        # Params; omitted, their current values
     dynamic_optimization={},           # options through to the transform
@@ -46,17 +47,22 @@ drto.plot_states(history)
 drto.plot_controls(history)
 ```
 
-The input is the declared, discretized model, with
-`drto.infinite_horizon` applied or not, before `drto.dynamic_optimization`.
-The loop builds both sides from it: a clone becomes the process,
-transformed by `drto.dynamic_simulation` with its controls first fixed at
-the declared control targets, and the input becomes the controller
-through `drto.dynamic_optimization`, its options passed through as given.
-The process is built as the one-sample simulation the loop actually
-solves: straight after the simulation transform, everything past the
-first sampling time leaves the clone, the terminal segment whole, so
-its cold start and every plant solve are one element's worth
-regardless of the declared horizon.
+The input is the model statement, and the builder contract is feature
+006's. The loop calls it twice, which is what makes the two sides the
+same physics: the controller over the declared horizon and the plant
+over one sampling interval, at `N=1`. `h`, `ncp`, and `scheme` belong to
+the loop and reach both calls, so the two grids agree by construction,
+and repeating one of them in `dynamic_optimization` is an error. That
+mapping carries the controller-only options, `N`, `infinite_horizon`,
+and `tracking_weight`.
+
+Each side is discretized, initialized when asked, and then transformed,
+the plant by `drto.dynamic_simulation` with its controls first fixed at
+the declared control targets and the controller by
+`drto.infinite_horizon` when asked and then
+`drto.dynamic_optimization`. The plant is built over one sampling
+interval rather than cut back to one, so nothing is deleted and it never
+carries a terminal segment.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
@@ -148,17 +154,25 @@ and returns a history that plots in one line.
 
 ## Acceptance criteria
 
-- `drto.ideal_nmpc(m, steps, ...)` requires a declared, discretized
-  model before `drto.dynamic_optimization`, with `drto.infinite_horizon`
-  applied or not, and errors descriptively otherwise. It clones the
-  process, puts the clone in simulation mode with the controls first
-  fixed at the declared control targets, and transforms the input into
-  the controller with `drto.dynamic_optimization`, its options passed
-  through as given. The process is cut to the first sample straight
-  after the simulation transform, before its cold start: no active
-  plant member or constraint lies past one sampling time, the terminal
-  segment is gone, and the cold start and each plant solve are one
-  element's worth.
+- `drto.ideal_nmpc(build, steps, ...)` takes the model statement and
+  errors descriptively on anything not callable. The builder contract is
+  feature 006's.
+- It builds both sides from that one statement, the controller over the
+  declared horizon and the plant at `N=1`, passing `h`, `ncp`, and
+  `scheme` to both calls, so the two grids agree by construction. A
+  `dynamic_optimization` mapping repeating one of those three is a
+  descriptive error, and the mapping otherwise carries `N`,
+  `infinite_horizon`, and `tracking_weight` for the controller alone.
+- Each side is discretized, then initialized when asked, then
+  transformed: the plant by `drto.dynamic_simulation` with its controls
+  fixed at the declared control targets, and the controller by
+  `drto.infinite_horizon` when asked and then
+  `drto.dynamic_optimization`. No active plant member or constraint lies
+  past one sampling time, the plant carries no terminal segment, and its
+  cold start and each plant solve are one element's worth.
+- `initialize="steady"` runs `drto.initialize_steady_state` on each side
+  after it is discretized and before its transforms, the only point that
+  function accepts, so it runs with a terminal segment asked for.
 - `initial_condition` writes the given state values into the
   initial-condition Params before the first step. Omitted, the Params'
   current values are the first actual state.
