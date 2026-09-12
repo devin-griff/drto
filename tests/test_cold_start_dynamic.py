@@ -96,11 +96,36 @@ def test_algebra_holds_everywhere_but_the_dynamics():
 
 
 def test_transformed_shapes_initialize():
-    for transform in ("drto.dynamic_optimization", "drto.infinite_horizon"):
+    for transform in (
+        "drto.dynamic_optimization",
+        "drto.infinite_horizon",
+        "drto.dynamic_simulation",
+    ):
         m = seeded()
         pyo.TransformationFactory(transform).apply_to(m)
         report = drto.cold_start_dynamic(m)
         assert report.n_states == 1 and report.n_controls == 1
+        if transform == "drto.dynamic_simulation":
+            # the simulation fixed the control, so the cold start leaves its
+            # members at the values they hold and the report says so.
+            # parameterize replaced m.u, so the live control comes from the
+            # registry
+            u = drto.info(m).components("control")[0]
+            members = list(u.values()) if u.is_indexed() else [u]
+            assert all(
+                vd.fixed and pyo.value(vd) == pytest.approx(0.9) for vd in members
+            )
+            t0, tN = sorted(m.t)[0], sorted(m.t)[-1]
+            slope = (0.5 - 0.1) / (tN - t0)
+            assert all(
+                pyo.value(m.z[t]) == pytest.approx(0.1 + slope * (t - t0))
+                for t in sorted(m.t)
+            )
+            assert report.n_held == len(members)
+            assert f"{len(members)} fixed members keeping their values" in str(report)
+            assert "at their targets" not in str(report)
+        else:
+            assert report.n_held == 0 and "at their targets" in str(report)
         if transform == "drto.infinite_horizon":
             assert "targets" in report.segment
             b = m.drto_ih

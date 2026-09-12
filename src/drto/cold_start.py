@@ -21,7 +21,7 @@ at the targets, tau derivatives and pin slacks at zero.
 Values only, at any stage: the declared discretized model, or after
 ``drto.infinite_horizon``, ``drto.dynamic_optimization``, or
 ``drto.dynamic_simulation``. The steady-state values come from the
-declared pairings; a missing pairing is an error naming the component,
+declared pairings, and a missing pairing is an error naming the component,
 and no equilibrium solve is run. Without pyomo-pounce the per-point
 solves are skipped, the algebraic variables keep their values, and the
 report says so.
@@ -52,6 +52,7 @@ class ColdStartReport:
     n_grid_points: int = 0
     n_derivatives: int = 0
     n_controls: int = 0
+    n_held: int = 0
     shape: str = "a line"
     segment: str = "(none attached)"
     point_solves: str = "skipped (pyomo-pounce not installed)"
@@ -64,7 +65,12 @@ class ColdStartReport:
             f"  states        : {self.n_states} on {self.shape} across "
             f"{self.n_grid_points} grid points",
             f"  derivatives   : {self.n_derivatives} at the profile's slope",
-            f"  controls      : {self.n_controls} at their targets",
+            (
+                f"  controls      : {self.n_controls} at their targets"
+                if not self.n_held
+                else f"  controls      : {self.n_controls}, {self.n_held} fixed "
+                f"members keeping their values"
+            ),
             f"  segment       : {self.segment}",
             f"  point solves  : {self.point_solves}",
         ]
@@ -80,7 +86,7 @@ def _target(pairings, comp, kind, fn):
         if rec["of"] is comp:
             return rec["component"]
     raise ValueError(
-        f"drto: {fn}: '{comp.name}' has no declared {kind} pairing; the "
+        f"drto: {fn}: '{comp.name}' has no declared {kind} pairing. The "
         f"targets are the interpolation's endpoint, so every declared "
         f"component needs one (drto.{kind} first)."
     )
@@ -90,47 +96,48 @@ def cold_start_dynamic(
     m, profile="linear", time_constant=None, point_solves=True, scale=None
 ):
     """Initialize ``m`` from its declared initial condition to its declared
-    steady-state targets; see the module docstring.
+    steady-state targets. See the module docstring.
 
     ``profile`` is ``"linear"`` (the default, a straight line) or
     ``"exponential"`` (a normalized decay landing exactly on the target
     at the horizon's end). ``time_constant`` is the decay's time
     constant in the horizon's own units, a third of the horizon when not
-    given; it belongs to the exponential profile only. ``point_solves``
+    given. It belongs to the exponential profile only. ``point_solves``
     is the algebra choice: ``True`` (the default) runs the per-point
     solves, ``False`` skips them deliberately, the profiles and targets
     landing without a solve and the report saying so. ``scale`` takes a
     feature 023 source and forwards it to ``drto.scale`` before anything
-    runs, so the factors are in place for the per-point solves; the
-    default writes nothing and leaves a Suffix the caller wrote
-    untouched.
+    runs. The solves run in the model's own units, and the suffix stays
+    on the model for the solves that follow. The default writes nothing
+    and leaves a Suffix the caller wrote untouched.
 
-    Returns a :class:`ColdStartReport`; values only, nothing added or
+    Returns a :class:`ColdStartReport`. Values only, nothing added or
     removed, and the fixed flags are untouched.
     """
     fn = "cold_start_dynamic"
     if profile not in ("linear", "exponential"):
         raise ValueError(
-            f"drto: {fn}: unknown profile '{profile}'; the profiles are "
+            f"drto: {fn}: unknown profile '{profile}'. The profiles are "
             f"'linear' and 'exponential'."
         )
     if point_solves not in (True, False):
         raise ValueError(
             f"drto: {fn}: point_solves is True (run the per-point algebra "
-            f"solves) or False (skip them); got {point_solves!r}."
+            f"solves) or False (skip them). Got {point_solves!r}."
         )
     if time_constant is not None:
         if profile != "exponential":
             raise ValueError(
                 f"drto: {fn}: time_constant is the exponential profile's "
-                f"knob; pass profile='exponential' with it."
+                f"option. Pass profile='exponential' with it."
             )
         if time_constant <= 0:
             raise ValueError(
                 f"drto: {fn}: time_constant must be positive, got " f"{time_constant}."
             )
     if scale is not None:
-        # the factors first, so the per-point solves run against them
+        # the factors first. The solves run in the model's own units, and
+        # the suffix stays on the model for the solves that follow
         from drto.scaling import scale as _scale
 
         _scale(m, source=scale)
@@ -140,7 +147,7 @@ def cold_start_dynamic(
     if missing:
         raise ValueError(
             f"drto: {fn} requires the declarations "
-            f"{', '.join(_REQUIRED)}; missing: {', '.join(missing)}."
+            f"{', '.join(_REQUIRED)}. Missing: {', '.join(missing)}."
         )
     time = reg.components("horizon")[0]
     if not time.get_discretization_info():
@@ -160,7 +167,7 @@ def cold_start_dynamic(
     horizon = tN - t0
 
     # the declared initial condition: each constraint pins a state member at t0
-    # to a mutable Param the loop overwrites; the values are the line's
+    # to a mutable Param the loop overwrites. The values are the line's
     # start, keyed by the pinned member's data id
     z0 = {}
     for con in reg.components("initial_condition"):
@@ -227,19 +234,21 @@ def cold_start_dynamic(
                 dvd.set_value(slope)
                 report.n_derivatives += 1
 
-    # controls, and a parameterized control's moves, at their targets; a
-    # fixed control (a simulation's) keeps the value it holds
+    # controls, and a parameterized control's moves, at their targets. A
+    # fixed control (a simulation's) keeps the value it holds, and the
+    # report counts those members rather than claiming the targets
     for u in controls:
         tgt_param = u_target[id(u)]
         pos, subs = _time_index(u, time)
         for idx, vd in u.items():
             if vd.fixed:
+                report.n_held += 1
                 continue
             o, _t = _split_index(idx, pos, len(subs)) if pos is not None else ((), None)
             vd.set_value(pyo.value(tgt_param[o] if o else tgt_param))
         report.n_controls += 1
 
-    # a terminal segment rests at the targets; the transform recorded
+    # a terminal segment rests at the targets. The transform recorded
     # which tail component belongs to which declaration (gh #27)
     if reg._segment_records("state") or reg._segment_records("control"):
         n_seg = 0
@@ -280,10 +289,10 @@ def cold_start_dynamic(
     # the initial condition determines the rest, each grid point its own
     # block once the states and controls are held. An undeclared member
     # of an indexed Var comes from its closures, and its derivative from
-    # the discretization equations; a variable only a set-aside balance would
-    # close keeps its value and is reported underconstrained. The solves
-    # run in the model's own units; an active scaling_factor suffix does
-    # not change them (gh #92).
+    # the discretization equations, and a variable only a set-aside balance
+    # would close keeps its value and is reported underconstrained. The
+    # solves run in the model's own units, and an active scaling_factor
+    # suffix does not change them (gh #92).
     if not point_solves:
         # the deliberate skip: the profiles and targets are the whole
         # initialization, no solve
