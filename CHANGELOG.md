@@ -53,6 +53,13 @@ All notable changes to this project are documented here. The format is based on
   horizon's end. The record carries the coordinate now, and the shift
   walks one time axis per coordinate.
 
+- Five `drto.ideal_nmpc` messages and its history's printed line read as
+  sentences (gh #147). The initialize guard, the transformed-input guard,
+  the unknown-state error, the unknown-disturbance error, and the
+  short-sequence error each joined two clauses with a semicolon, and
+  `NmpcHistory.__str__` joined the states and the moves with one.
+  `examples/cstr_ideal_nmpc.ipynb` renders that line and is regenerated.
+
 - `drto.warm_start_dynamic`'s discretize error reads as two sentences
   (gh #144).
 
