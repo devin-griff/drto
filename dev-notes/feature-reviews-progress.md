@@ -17,7 +17,7 @@ the review worktree, and code findings go into one issue per feature.
 - [x] 010 drto.initialize_steady_state
 - [x] 011 drto.cold_start_dynamic
 - [x] 012 drto.advanced_step_controller
-- [ ] 013 drto.warm_start_dynamic
+- [x] 013 drto.warm_start_dynamic
 - [ ] 014 drto.ideal_nmpc
 - [ ] 017 drto.parameterize
 - [ ] 018 estimation declarations
