@@ -60,32 +60,32 @@ regardless of the declared horizon.
 
 The first actual state is the initial condition: `initial_condition`, a
 mapping of declared state names to values, is written into the
-initial-condition Params before the first step; omitted, the Params'
+initial-condition Params before the first step. Omitted, the Params'
 current values are used.
 
 Ideal means the solve is treated as instantaneous: the measurement
 arrives, the problem is solved, and the move is implemented at the same
 instant. The loop, each step:
 
-1. Initialize, per the `initialize` option: the cold start by default,
-   the controller and the process alike so the plant's first simulation
-   starts initialized too (a mapping passing through as
-   `drto.cold_start_dynamic`'s options); the steady broadcast with
-   `"steady"`, `drto.initialize_steady_state` running on the input
-   before the sides are built so both inherit it; nothing with
-   `False`. `drto.warm_start_dynamic` on every later step.
+1. Initialize, per the `initialize` option. The cold start is the
+   default, the controller and the process alike so the plant's first
+   simulation starts initialized too, a mapping passing through as
+   `drto.cold_start_dynamic`'s options. `"steady"` is the steady
+   broadcast, `drto.initialize_steady_state` running on the input
+   before the sides are built so both inherit it, and `False` is
+   nothing. `drto.warm_start_dynamic` runs on every later step.
 2. Solve the dynamic optimization at the current initial condition.
 3. Implement: read each control's first move and write it into the
    process clone's fixed controls.
 4. Realize: fix the process clone's disturbances at this step's values.
-5. Simulate the one-sample process from the current actual state; its
+5. Simulate the one-sample process from the current actual state. Its
    end state is the new actual state, written into both models' initial
    conditions.
 6. Record the time, the actual state, the implemented moves, and the
    realization.
 
-The disturbance enters the process only: the controller solves at zero
-disturbance, the optimization mode's convention.
+The disturbance enters the process only, the controller solving at
+zero disturbance, the optimization mode's convention.
 
 Each declared disturbance's entry is either a sequence, the realization
 per step as given, or a number, the standard deviation of independent
@@ -96,10 +96,10 @@ with no entry is zero.
 Under `"ipopt"` every warm-started solve runs with the warm start
 recipe, and `warm_start` lays user options over it: the default is
 `warm_start_init_point=yes`, `mu_init=1e-6`, and the `1e-9` bound and
-multiplier pushes, so `warm_start={"mu_init": 1e-4}` retunes one knob
+multiplier pushes, so `warm_start={"mu_init": 1e-4}` retunes one option
 without restating the rest. Under the pounce names the default is
 `mu_init=1e-6` alone, the shifted start with the barrier already
-small, the one recipe option measured to help pounce: on the CSTR warm
+small, the one recipe option measured to help pounce. On the CSTR warm
 start it takes the shifted solve from ten iterations to seven, while
 the full recipe takes it to 867, a regression that requires its three
 ingredients together, the warm-start switch, the small barrier, and
@@ -109,7 +109,7 @@ solves as is. A solve that fails stops the loop with an error naming
 the step.
 
 `tee=True` streams every solve's output as the loop runs and returns
-it: the history's `logs` holds one entry per solve in loop order, the
+it. The history's `logs` holds one entry per solve in loop order, the
 step, the side (controller or process), and the solver's text. The
 default is quiet, nothing streamed, nothing kept.
 
@@ -135,17 +135,17 @@ the staircase they physically are.
 
 ## Benefit hypothesis
 
-A hand-written closed loop is a page of code whose every line touches an
+A closed-loop study is a single call on the declared model, where a
+hand-written loop is a page of code whose every line touches an
 internal detail: which container holds a control's first move after
 parameterization, which Params take each measurement, how to shift the
-previous solution, how to keep the process model consistent
-with the controller's, how to seed reproducible noise, how to collect the
+previous solution, how to keep the process model consistent with the
+controller's, how to seed reproducible noise, how to collect the
 results in a plottable form. Each user re-derives those details, and a
 loop that gets one wrong runs and quietly studies the wrong thing. The
-packaged loop reads all of them from the registry, is tested against the
-acceptance criteria below, stays correct as the surface evolves, and
-returns a history that plots in one line, so a closed-loop study is a
-single call on the declared model.
+packaged loop reads all of them from the registry, is tested against
+the acceptance criteria below, stays correct as the surface evolves,
+and returns a history that plots in one line.
 
 ## Acceptance criteria
 
@@ -161,23 +161,24 @@ single call on the declared model.
   segment is gone, and the cold start and each plant solve are one
   element's worth.
 - `initial_condition` writes the given state values into the
-  initial-condition Params before the first step; omitted, the Params'
+  initial-condition Params before the first step. Omitted, the Params'
   current values are the first actual state.
 - Each step solves the controller at the current initial condition,
   implements the first moves on the process clone, fixes its
   disturbances at the step's realization, simulates, and feeds the state
   one sample in back as both models' initial condition.
-- `initialize` picks the first solve's initialization: `"cold"` (the
+- `initialize` picks the first solve's initialization. `"cold"` (the
   default) runs `drto.cold_start_dynamic` on the controller and the
-  process alike, a mapping passing through as its options; `"steady"`
+  process alike, a mapping passing through as its options. `"steady"`
   runs `drto.initialize_steady_state` on the input before the sides are
   built, so both inherit the broadcast, under that function's own
   contract (the input precedes `drto.infinite_horizon`, whose violation
-  raises its descriptive error); `False` skips initialization; anything
-  else is a descriptive error. Every later solve is warm-started.
-- A disturbance entry that is a sequence is used as given; a number draws
-  independent zero-mean normal realizations with that standard deviation,
-  reproducibly under `seed`; a missing entry is zero.
+  raises its descriptive error). `False` skips initialization, and
+  anything else is a descriptive error. Every later solve is
+  warm-started.
+- A disturbance entry that is a sequence is used as given, a number
+  draws independent zero-mean normal realizations with that standard
+  deviation, reproducibly under `seed`, and a missing entry is zero.
 - `solver` names the solver for every controller and process solve.
   Under `"ipopt"` every warm-started solve runs with the warm start
   recipe (`warm_start_init_point=yes`, `mu_init=1e-6`, the `1e-9`
@@ -186,12 +187,13 @@ single call on the declared model.
   it. Under any other solver the loop warm starts on the shifted
   values alone, a given mapping passing through as is. A failed solve
   raises an error naming the step.
-- `tee=True` streams each solve's output and returns it: the history's
+- `tee=True` streams each solve's output and returns it. The history's
   `logs` holds (step, side, text) for every controller and process
-  solve in loop order; the default keeps and prints nothing.
+  solve in loop order, and the default keeps and prints nothing.
 - With an active `scaling_factor` suffix every solve on that side
-  receives the factors; the history lands in the model's own units, and
-  a hicks loop carrying factors reproduces the unscaled loop's history.
+  receives the factors, the history lands in the model's own units, and
+  a hicks loop with factors written reproduces the unscaled loop's
+  history.
 - With `scale` given a feature 023 source, the loop writes the
   factors through `drto.scale` at entry, before the sides are built,
   so both sides carry them and every internal solve receives them; the
