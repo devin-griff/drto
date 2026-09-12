@@ -518,3 +518,46 @@ def test_scale_writes_the_factors_and_the_default_does_not(monkeypatch):
     built.clear()
     drto.ideal_nmpc(loop_model, steps=1, solver="ipopt")
     assert all(m.component("scaling_factor") is None for m in built)
+
+
+def test_pruning_drops_detached_and_deactivated_keys():
+    # the transforms delete some tagged components and deactivate
+    # others, and the NL writer warns about an entry keyed on either
+    m = pyo.ConcreteModel()
+    m.x = pyo.Var(initialize=1.0)
+    m.y = pyo.Var(initialize=1.0)
+    m.kept = pyo.Constraint(expr=m.x >= 0)
+    m.gone = pyo.Constraint(expr=m.y >= 0)
+    m.off = pyo.Constraint(expr=m.x + m.y >= 0)
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for con in (m.kept, m.gone, m.off):
+        m.scaling_factor[con] = 2.0
+    m.scaling_factor[m.x] = 3.0
+
+    detached = m.gone
+    m.del_component(m.gone)
+    m.off.deactivate()
+    loop_module._prune_suffixes(m)
+
+    assert m.kept in m.scaling_factor
+    assert m.x in m.scaling_factor
+    assert detached not in m.scaling_factor
+    assert m.off not in m.scaling_factor
+
+
+def test_pruning_keeps_a_members_siblings():
+    # deactivating one member leaves the rest of the container active,
+    # so the read is on the data object rather than on its parent
+    m = pyo.ConcreteModel()
+    m.i = pyo.Set(initialize=[1, 2])
+    m.x = pyo.Var(m.i, initialize=1.0)
+    m.c = pyo.Constraint(m.i, rule=lambda b, i: b.x[i] >= 0)
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for i in m.i:
+        m.scaling_factor[m.c[i]] = 2.0
+
+    m.c[1].deactivate()
+    loop_module._prune_suffixes(m)
+
+    assert m.c[1] not in m.scaling_factor
+    assert m.c[2] in m.scaling_factor
