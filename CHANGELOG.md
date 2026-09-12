@@ -43,6 +43,12 @@ All notable changes to this project are documented here. The format is based on
   eleven figures. The notebooks on both paths are regenerated against the
   released 0.11.0.
 
+- `drto.advanced_step_controller`'s missing-declaration error names the
+  initial-condition Params once (gh #143). The sensitivity rename left
+  the phrase in twice, joined by a semicolon, and the message is two
+  sentences now. The Param gathering calls the routine
+  `drto.dynamic_optimization` already shares rather than restating it.
+
 - Five `drto.cold_start_dynamic` messages read as sentences (gh #142).
   The missing-pairing, unknown-profile, `point_solves`, time-constant,
   and missing-declarations errors each joined two clauses with a
