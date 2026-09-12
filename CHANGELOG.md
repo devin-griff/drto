@@ -492,6 +492,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `drto.ideal_nmpc` and `drto.approximate_nmpc` drop the scaling factors
+  of a component the transforms deactivated (gh #151). The routine that
+  prunes them tested attachment alone, so an entry keyed on a constraint
+  the terminal segment supersedes, or on an objective the plant no
+  longer uses, stayed on the model and the NL writer warned about it at
+  every solve. It now drops a deactivated component's entry as well as a
+  detached one's. The problem handed to the solver is unchanged, since
+  the writer skipped that entry either way.
+
 - `drto.cold_start_dynamic`'s report names the control members a
   simulation shape held (gh #142). On a `drto.dynamic_simulation` model
   the controls are fixed, the cold start leaves them at the values they

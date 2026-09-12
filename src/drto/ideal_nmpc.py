@@ -149,14 +149,17 @@ def _first_move(u):
 
 
 def _prune_suffixes(model):
-    """Drop suffix entries whose components the transforms removed.
+    """Drop suffix entries whose components the transforms took out of use.
 
     The mode transforms delete components (shed costs, replaced
-    controls), and a stale entry breaks any later clone and makes the NL
-    writer warn.
+    controls) and deactivate others (a terminal cost the terminal
+    segment supersedes, every objective on the plant). An entry keyed on
+    either breaks a later clone and makes the NL writer warn, so both go.
     """
     for sfx in model.component_objects(Suffix, active=True):
-        for key in [k for k in sfx if not _attached(k, model)]:
+        for key in [
+            k for k in sfx if not _attached(k, model) or not getattr(k, "active", True)
+        ]:
             del sfx[key]
 
 
