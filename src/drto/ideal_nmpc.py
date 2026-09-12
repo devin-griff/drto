@@ -16,18 +16,19 @@ The loop builds both sides from it: a clone becomes the process through
 declared control targets, and the input becomes the controller through
 ``drto.dynamic_optimization``. The first solve is initialized per the
 ``initialize`` option, the cold start by default on the controller and
-the process alike; every later one warm-starts from the
+the process alike, and every later one warm-starts from the
 shifted previous solution, ipopt adding the warm start recipe and
 pounce ``mu_init=1e-6`` alone, the ``warm_start`` mapping laid over
 the documented default.
 
-An active ``scaling_factor`` suffix is honored: every solve on that
-side receives the factors, and the history reads back in the model's
-own units. ``scale`` given a source writes the factors itself,
-forwarding it to ``drto.scale`` once at entry, before the sides are
-built, so the process clone carries them and every internal solve runs
-against them for the whole loop. The initial-condition Params stay
-physical.
+An active ``scaling_factor`` suffix reaches every solver solve on that
+side, and the history reads back in the model's own units. The
+initial-condition Params stay physical, and the cold starts' block solves
+run in the model's own units either way (gh #92). ``scale`` given a
+source writes the factors itself, forwarding it to ``drto.scale`` once at
+entry, before the sides are built, so both sides hold the factors and
+every solver solve receives them. They are written once and held for the
+whole loop.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
 declared names, and ``drto.plot_states`` / ``drto.plot_controls`` draw
@@ -53,7 +54,7 @@ from drto.scaling import _POUNCE_SOLVERS
 from drto.warm_start import warm_start_dynamic
 
 #: The default recipe for the warm-started solves under ipopt, the one
-#: solver measured to gain from all of it; the ``warm_start`` option
+#: solver measured to gain from all of it. The ``warm_start`` option
 #: lays over this.
 _WARM_START_OPTIONS = {
     "warm_start_init_point": "yes",
@@ -82,7 +83,7 @@ def _warm_options(solver):
     return {}
 
 
-#: The mode transforms; the loop applies its own, so the input comes first.
+#: The mode transforms. The loop applies its own, so the input comes first.
 _TRANSFORMED = (
     "drto.parameterize",
     "drto.dynamic_optimization",
@@ -95,9 +96,9 @@ _TRANSFORMED = (
 class NmpcHistory:
     """The closed loop's actual trajectory, under the declared names.
 
-    ``times`` holds the sample instants, the initial one included;
+    ``times`` holds the sample instants, the initial one included.
     ``states`` maps each pinned state member's label to its actual values
-    at those instants; ``moves`` and ``realizations`` map each control
+    at those instants, and ``moves`` and ``realizations`` map each control
     and disturbance to its per-step values, one shorter than ``times``.
     The targets are the declared steady-state pairings' values, the
     plots' setpoint lines. ``state_bounds`` and ``control_bounds`` map
@@ -119,7 +120,7 @@ class NmpcHistory:
     def __str__(self):
         return (
             f"drto nmpc history: {max(0, len(self.times) - 1)} steps, "
-            f"states {', '.join(self.states) or '(none)'}; "
+            f"states {', '.join(self.states) or '(none)'}, "
             f"moves {', '.join(self.moves) or '(none)'}"
         )
 
@@ -151,7 +152,7 @@ def _prune_suffixes(model):
     """Drop suffix entries whose components the transforms removed.
 
     The mode transforms delete components (shed costs, replaced
-    controls); a stale entry breaks any later clone and makes the NL
+    controls), and a stale entry breaks any later clone and makes the NL
     writer warn.
     """
     for sfx in model.component_objects(Suffix, active=True):
@@ -170,7 +171,7 @@ def _one_sample(process):
     IDAES model's property and reaction blocks) included. Radau
     collocation is sequential by element, so the first element stands
     alone, square, given the initial condition and the fixed inputs.
-    The parameterized inputs keep their later members; they are fixed,
+    The parameterized inputs keep their later members. They are fixed,
     in no remaining equation, and never reach the solver.
     """
     from pyomo.core import Block, Constraint, Expression, Var
@@ -213,7 +214,7 @@ def ideal_nmpc(
     warm_start=None,
     tee=False,
 ):
-    """Run the ideal NMPC loop for ``steps`` samples; see the module
+    """Run the ideal NMPC loop for ``steps`` samples. See the module
     docstring.
 
     Parameters
@@ -221,7 +222,7 @@ def ideal_nmpc(
     m : Block
         The declared, discretized model, ``drto.infinite_horizon``
         applied or not, before the mode transforms. It becomes the
-        controller in place; the process is a clone.
+        controller in place, and the process is a clone.
     steps : int
         The loop length, in samples.
     initial_condition : mapping, optional
@@ -241,15 +242,15 @@ def ideal_nmpc(
     initialize : str, mapping, or False
         The first solve's initialization. ``"cold"`` (the default) runs
         ``drto.cold_start_dynamic`` on the controller and the process
-        alike, a mapping passing through as its options; ``"steady"``
+        alike, a mapping passing through as its options. ``"steady"``
         runs ``drto.initialize_steady_state`` on the input before the
         sides are built, so both inherit the broadcast (that function's
-        own contract applies: the input precedes
-        ``drto.infinite_horizon``); ``False`` skips initialization.
+        own contract applies, the input preceding
+        ``drto.infinite_horizon``). ``False`` skips initialization.
     solver : str
         The solver, by name, for every controller and process solve.
         Every solver warm starts between steps on the shifted
-        values; ipopt also receives the warm start recipe.
+        values, and ipopt also receives the warm start recipe.
     scale : str or mapping, optional
         A ``drto.scale`` source, ``"point"``, ``"bounds"``, or a
         mapping of units to magnitudes. Given, the factors are written
@@ -262,8 +263,8 @@ def ideal_nmpc(
         Solver options for the warm-started solves. Under ``"ipopt"``
         they lay over the default recipe (``warm_start_init_point=yes``,
         ``mu_init=1e-6``, ``warm_start_bound_push`` and
-        ``warm_start_mult_bound_push`` at ``1e-9``); under the pounce
-        names they lay over ``mu_init=1e-6`` alone; under any other
+        ``warm_start_mult_bound_push`` at ``1e-9``). Under the pounce
+        names they lay over ``mu_init=1e-6`` alone, and under any other
         solver the mapping is used as given and the default is the
         shifted values alone.
     tee : bool
@@ -274,7 +275,7 @@ def ideal_nmpc(
     Returns
     -------
     NmpcHistory
-        The actual closed-loop trajectory; ``drto.plot_states`` and
+        The actual closed-loop trajectory. ``drto.plot_states`` and
         ``drto.plot_controls`` draw it.
 
     Raises
@@ -295,7 +296,7 @@ def ideal_nmpc(
     ):
         raise ValueError(
             f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
-            f"start's options), 'steady', or False; got {initialize!r}."
+            f"start's options), 'steady', or False. Got {initialize!r}."
         )
     if steps < 1:
         raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
@@ -305,7 +306,7 @@ def ideal_nmpc(
             raise ValueError(
                 f"drto: {fn} builds the controller and the process itself, "
                 f"so it takes the declared, discretized model before the "
-                f"mode transforms; '{name}' is already applied."
+                f"mode transforms. '{name}' is already applied."
             )
     if not reg.has_declaration("horizon"):
         raise ValueError(f"drto: {fn} requires the horizon declaration.")
@@ -331,20 +332,20 @@ def ideal_nmpc(
     # the initial condition lands in the input's Params, so the
     # process clone inherits it with everything else
     pins = _pinned(reg, fn)
-    hooks_of = {}
-    for vd, hook in pins:
-        hooks_of.setdefault(owner[id(vd)][0].local_name, []).append(hook)
+    params_of = {}
+    for vd, param in pins:
+        params_of.setdefault(owner[id(vd)][0].local_name, []).append(param)
     for key, val in (initial_condition or {}).items():
         name = key if isinstance(key, str) else key.local_name
-        hooks = hooks_of.get(name)
-        if hooks is None:
+        params = params_of.get(name)
+        if params is None:
             raise ValueError(
                 f"drto: {fn} got an initial condition for '{name}', which "
-                f"is not a pinned state; pinned: "
-                f"{', '.join(hooks_of) or '(none)'}."
+                f"is not a pinned state. The pinned states are "
+                f"{', '.join(params_of) or '(none)'}."
             )
-        for hook, v in zip(hooks, _spread(val, len(hooks), name, fn)):
-            hook.set_value(v)
+        for param, v in zip(params, _spread(val, len(params), name, fn)):
+            param.set_value(v)
 
     # the per-step disturbance plan, validated before anything is built
     declared_dist = [w.local_name for w in reg.components("disturbance")]
@@ -354,18 +355,18 @@ def ideal_nmpc(
         if name not in declared_dist:
             raise ValueError(
                 f"drto: {fn} got a realization for '{name}', which is not "
-                f"a declared disturbance; declared: "
+                f"a declared disturbance. The declared disturbances are "
                 f"{', '.join(declared_dist) or '(none)'}."
             )
         if isinstance(val, (list, tuple)) and len(val) < steps:
             raise ValueError(
                 f"drto: {fn} runs {steps} steps but the sequence for "
-                f"'{name}' has {len(val)} values; give one per step."
+                f"'{name}' has {len(val)} values. Give one per step."
             )
         plan[name] = val
 
     if solver in _POUNCE_SOLVERS:
-        # importing registers the in-process plugin; without it the name
+        # importing registers the in-process plugin. Without it the name
         # falls back to a PATH executable behind pyomo's ASL wrapper,
         # a different solver than the one the drto stack is built on
         try:
@@ -379,9 +380,9 @@ def ideal_nmpc(
     if not opt.available():
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
-    # a scale source: the factors first, at entry, so the sides carry
-    # them and every internal solve, the cold starts' included, runs
-    # against them
+    # a scale source writes the factors first, at entry, so both sides
+    # hold them and every solver solve receives them. The cold starts'
+    # block solves run in the model's own units either way (gh #92)
     if scale is not None:
         drto_scaling.scale(m, source=scale)
 
@@ -417,7 +418,7 @@ def ideal_nmpc(
     warm_opts.update(warm_start or {})
 
     # the controller and the process cold-start alike, so the plant's
-    # first simulation starts initialized too; the plant is already cut,
+    # first simulation starts initialized too. The plant is already cut,
     # so its cold start is one element's worth
     if initialize == "cold" or isinstance(initialize, Mapping):
         opts = {} if initialize == "cold" else dict(initialize)
@@ -444,7 +445,7 @@ def ideal_nmpc(
     time_p = reg_p.components("horizon")[0]
 
     # the pinned members' labels and targets come from the declared
-    # owner (the member-id map above); the read points, one sample in,
+    # owner (the member-id map above), and the read points, one sample in,
     # from the process's own underlying containers
     ss = list(reg_m.declarations("steady_state"))
     labels, targets, read_phys = [], [], []
@@ -460,14 +461,13 @@ def ideal_nmpc(
         po, _t = _split_index(p_vd.index(), pos, len(subs))
         read_phys.append(zp[_join_index(po, t1, pos)])
 
-    c_hooks = [h for _vd, h in c_pins]
-    p_hooks = [h for _vd, h in p_pins]
-    p_read = read_phys
+    c_params = [p for _vd, p in c_pins]
+    p_params = [p for _vd, p in p_pins]
 
     history = NmpcHistory()
     history.times.append(t0)
-    for label, hook, tgt, (vd, _h) in zip(labels, c_hooks, targets, c_pins):
-        history.states[label] = [pyo.value(hook)]
+    for label, param, tgt, (vd, _h) in zip(labels, c_params, targets, c_pins):
+        history.states[label] = [pyo.value(param)]
         history.state_targets[label] = tgt
         history.state_bounds[label] = (vd.lb, vd.ub)
 
@@ -539,10 +539,10 @@ def ideal_nmpc(
 
         # simulate one sample and write the state into both models' Params
         _solve(plant, "process", k)
-        for c_hook, p_hook, src, label in zip(c_hooks, p_hooks, p_read, labels):
+        for c_param, p_param, src, label in zip(c_params, p_params, read_phys, labels):
             val = pyo.value(src)
-            c_hook.set_value(val)
-            p_hook.set_value(val)
+            c_param.set_value(val)
+            p_param.set_value(val)
             history.states[label].append(val)
         history.times.append(t0 + (k + 1) * dt)
 
