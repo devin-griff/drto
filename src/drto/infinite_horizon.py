@@ -1244,8 +1244,8 @@ class InfiniteHorizonTransformation(Transformation):
         for comp in list(algebraic) + list(disturbed):
             reg._record_segment("algebraic", comp, copy=seg[comp])
         reg._record_segment("algebraic", cost_var, copy=seg_cost)
-        for (B, _bo, lname), v in bseg.items():
-            reg._record_segment("block_member", B, member=lname, copy=v)
+        for (B, bo, lname), v in bseg.items():
+            reg._record_segment("block_member", B, member=lname, copy=v, at=bo)
         for pcomp, v in pseg.items():
             reg._record_segment("member_subset", pcomp, copy=v)
         for con, row in alg_rows.items():

@@ -43,6 +43,19 @@ All notable changes to this project are documented here. The format is based on
   eleven figures. The notebooks on both paths are regenerated against the
   released 0.11.0.
 
+- `drto.warm_start_dynamic` shifts the members of a two-index
+  time-indexed Block family (gh #144). The shift accepted a family
+  indexed by time alone, so a `Block(time, s)`, the spatial shape the
+  feature 005 reduction handles per member and feature 010's broadcast
+  handles since #141, was skipped and its members kept their values. The
+  terminal segment's record for such a family also dropped the non-time
+  coordinate, so every member reached the last coordinate's copy past the
+  horizon's end. The record carries the coordinate now, and the shift
+  walks one time axis per coordinate.
+
+- `drto.warm_start_dynamic`'s discretize error reads as two sentences
+  (gh #144).
+
 - `drto.advanced_step_controller`'s missing-declaration error names the
   initial-condition Params once (gh #143). The sensitivity rename left
   the phrase in twice, joined by a semicolon, and the message is two

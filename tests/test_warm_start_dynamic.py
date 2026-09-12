@@ -11,7 +11,7 @@ import pyomo.environ as pyo
 import pytest
 
 import drto
-from test_infinite_horizon import block_model, ready_model
+from test_infinite_horizon import block_model, ready_model, spatial_block_model
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
 from models.hicks import hicks  # noqa: E402
@@ -227,6 +227,32 @@ def test_algebra_shifts_through_the_recorded_tail():
     drto.warm_start_dynamic(m)
     worst = max(
         abs(pyo.value(m.props[t].y) - (2 * f(t + 1.0) + 0.3)) for t in sorted(m.t)
+    )
+    assert worst < 5e-3
+
+
+def test_a_two_index_block_family_shifts_per_coordinate():
+    # a Block(t, s) family is one time axis per non-time coordinate, and
+    # each coordinate's members read their own segment copy past the end
+    m = spatial_block_model()
+    pyo.TransformationFactory("drto.infinite_horizon").apply_to(m)
+    b = m.drto_ih
+    gamma = pyo.value(b.gamma)
+    tN = sorted(m.t)[-1]
+    f = lambda t: 0.2 + 0.3 * math.exp(-0.5 * t)
+    for t in m.t:
+        m.z[t].set_value(f(t))
+        m.u[t].set_value(0.3)
+    for t, s in m.props:
+        m.props[t, s].y.set_value((1.0 + s) * f(t))
+    for s in (1, 2):
+        seg = b.component(f"props_{s}_y")
+        for p in seg:
+            tp = p if not isinstance(p, tuple) else p[-1]
+            seg[p].set_value((1.0 + s) * f(tN + math.atanh(min(tp, 1 - 1e-12)) / gamma))
+    drto.warm_start_dynamic(m)
+    worst = max(
+        abs(pyo.value(m.props[t, s].y) - (1.0 + s) * f(t + 1.0)) for t, s in m.props
     )
     assert worst < 5e-3
 
