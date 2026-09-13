@@ -492,14 +492,21 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- `drto.ideal_nmpc` and `drto.approximate_nmpc` drop the scaling factors
-  of a component the transforms deactivated (gh #151). The routine that
-  prunes them tested attachment alone, so an entry keyed on a constraint
-  the terminal segment supersedes, or on an objective the plant no
-  longer uses, stayed on the model and the NL writer warned about it at
-  every solve. It now drops a deactivated component's entry as well as a
-  detached one's. The problem handed to the solver is unchanged, since
-  the writer skipped that entry either way.
+- `drto.scale` drops the factors of a component the NL writer will not
+  write (gh #151). It kept an entry keyed on a deactivated constraint,
+  such as a terminal cost the terminal segment supersedes, and one keyed
+  on an unfixed Var in no active constraint and no objective, which
+  `drto.infinite_horizon` leaves at the terminal segment's element
+  boundaries. The writer warned about both at every solve. The routine
+  that prunes them moves from `drto.ideal_nmpc` to `drto.scaling`, tests
+  all three cases, and runs inside `drto.scale` before it measures the
+  constraint factors, since PyomoNLP writes an NL file to take that
+  measurement. Every path to the writer is covered rather than only the
+  loop's. `drto.ideal_nmpc`
+  and `drto.approximate_nmpc` keep their own calls, since they write the
+  factors before the transforms deactivate anything. The problem handed
+  to the solver is unchanged, since the writer skipped those entries
+  either way.
 
 - `drto.cold_start_dynamic`'s report names the control members a
   simulation shape held (gh #142). On a `drto.dynamic_simulation` model

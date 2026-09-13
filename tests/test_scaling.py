@@ -4,10 +4,11 @@
 import pytest
 
 import pyomo.environ as pyo
+from pyomo.core.expr import identify_variables
 from pyomo.dae import ContinuousSet, DerivativeVar
 
 import drto
-from drto.scaling import _CLAMP
+from drto.scaling import _CLAMP, _prune_suffixes
 from test_infinite_horizon import ready_model
 
 IH = "drto.infinite_horizon"
@@ -272,14 +273,31 @@ def test_a_segment_derivative_takes_its_state_factor():
         for v in comp.values() if comp.is_indexed() else (comp,):
             v.set_value(1e-16)
 
+    # the members a discretization equation reaches. Gauss-Legendre puts
+    # its points inside each element, so the derivative at an element
+    # boundary sits in no equation and the NL file has no column for it
+    live = set()
+    for con in m.component_data_objects(pyo.Constraint, active=True):
+        for v in identify_variables(con.expr, include_fixed=False):
+            live.add(id(v))
+    for obj in m.component_data_objects(pyo.Objective, active=True):
+        for v in identify_variables(obj.expr, include_fixed=False):
+            live.add(id(v))
+
     drto.scale(m)
+    boundary = 0
     for comp in derivatives:
         state = comp.get_state_var()
         for v in comp.values() if comp.is_indexed() else (comp,):
+            if id(v) not in live:
+                assert v not in m.scaling_factor
+                boundary += 1
+                continue
             partner = state[v.index()]
             assert m.scaling_factor[v] == m.scaling_factor[partner]
             # measured from its own value it would have taken the clamp
             assert m.scaling_factor[v] != 10.0**_CLAMP
+    assert boundary, "the segment left no boundary derivative to check"
 
 
 # ----------------------------------------------------------------------
@@ -380,3 +398,81 @@ def test_both_pounce_names_resolve_natively():
     for name in ("pounce", "pounce_v2"):
         solver = drto.scaling.solver_by_name(name)
         assert type(solver) is type(SolverFactory("pounce"))
+
+
+# ── the entries the NL writer has no place for ───────────────────────────────
+
+
+def test_pruning_drops_detached_and_deactivated_keys():
+    # the transforms delete some tagged components and deactivate
+    # others, and the NL writer warns about an entry keyed on either
+    m = pyo.ConcreteModel()
+    m.x = pyo.Var(initialize=1.0)
+    m.y = pyo.Var(initialize=1.0)
+    m.kept = pyo.Constraint(expr=m.x >= 0)
+    m.gone = pyo.Constraint(expr=m.y >= 0)
+    m.off = pyo.Constraint(expr=m.x + m.y >= 0)
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for con in (m.kept, m.gone, m.off):
+        m.scaling_factor[con] = 2.0
+    m.scaling_factor[m.x] = 3.0
+
+    detached = m.gone
+    m.del_component(m.gone)
+    m.off.deactivate()
+    _prune_suffixes(m)
+
+    assert m.kept in m.scaling_factor
+    assert m.x in m.scaling_factor
+    assert detached not in m.scaling_factor
+    assert m.off not in m.scaling_factor
+
+
+def test_pruning_keeps_a_members_siblings():
+    # deactivating one member leaves the rest of the container active,
+    # so the read is on the data object rather than on its parent
+    m = pyo.ConcreteModel()
+    m.i = pyo.Set(initialize=[1, 2])
+    m.x = pyo.Var(m.i, initialize=1.0)
+    m.c = pyo.Constraint(m.i, rule=lambda b, i: b.x[i] >= 0)
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    for i in m.i:
+        m.scaling_factor[m.c[i]] = 2.0
+
+    m.c[1].deactivate()
+    _prune_suffixes(m)
+
+    assert m.c[1] not in m.scaling_factor
+    assert m.c[2] in m.scaling_factor
+
+
+def test_scale_drops_a_var_the_writer_will_not_write():
+    # drto.infinite_horizon leaves the segment's boundary derivative Vars
+    # in no equation, and scale measures every unfixed Var, so the writer
+    # warned about a factor keyed on a column it never wrote
+    m = pyo.ConcreteModel()
+    m.x = pyo.Var(initialize=1e6)
+    m.orphan = pyo.Var(initialize=1e6)
+    m.c = pyo.Constraint(expr=m.x == 1e6)
+    drto.scale(m, source="point")
+
+    assert m.x in m.scaling_factor
+    assert m.orphan not in m.scaling_factor
+
+
+def test_pruning_keeps_a_var_the_objective_alone_reaches():
+    # a variable the objective reaches and no constraint does is written,
+    # so its factor stays
+    m = pyo.ConcreteModel()
+    m.x = pyo.Var(initialize=1.0)
+    m.y = pyo.Var(initialize=1.0)
+    m.c = pyo.Constraint(expr=m.x >= 0)
+    m.obj = pyo.Objective(expr=m.y)
+    m.scaling_factor = pyo.Suffix(direction=pyo.Suffix.EXPORT)
+    m.scaling_factor[m.x] = 2.0
+    m.scaling_factor[m.y] = 3.0
+
+    _prune_suffixes(m)
+
+    assert m.x in m.scaling_factor
+    assert m.y in m.scaling_factor
