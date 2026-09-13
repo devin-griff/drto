@@ -41,16 +41,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import pyomo.environ as pyo
-from pyomo.core import Suffix, TransformationFactory
+from pyomo.core import TransformationFactory
 
 from drto.cold_start import _target, cold_start_dynamic
 from drto.declarations import _is_var_member, _side_matching
 from drto.dynamic_optimization import _build_and_discretize, _members, _spread
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
-from drto.initialize_steady_state import _attached, initialize_steady_state
+from drto.initialize_steady_state import initialize_steady_state
 from drto import scaling as drto_scaling
-from drto.scaling import _POUNCE_SOLVERS
+from drto.scaling import _POUNCE_SOLVERS, _prune_suffixes
 from drto.warm_start import warm_start_dynamic
 
 #: The default recipe for the warm-started solves under ipopt, the one
@@ -146,18 +146,6 @@ def _first_move(u):
     if not u.is_indexed():
         return u
     return u[sorted(u.keys())[0]]
-
-
-def _prune_suffixes(model):
-    """Drop suffix entries whose components the transforms removed.
-
-    The mode transforms delete components (shed costs, replaced
-    controls), and a stale entry breaks any later clone and makes the NL
-    writer warn.
-    """
-    for sfx in model.component_objects(Suffix, active=True):
-        for key in [k for k in sfx if not _attached(k, model)]:
-            del sfx[key]
 
 
 def _one_sample(process):

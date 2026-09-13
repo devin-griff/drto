@@ -29,9 +29,11 @@ import warnings
 from collections.abc import Mapping
 
 from pyomo.core import Constraint, Objective, Suffix, Var
+from pyomo.core.expr import identify_variables
 from pyomo.dae import DerivativeVar
 
 from drto.info import info
+from drto.initialize_steady_state import _attached
 
 #: Magnitudes inside this band are already order one.
 _BAND = (1e-2, 1e2)
@@ -295,6 +297,9 @@ def scale(m, source="point"):
         for v in members:
             m.scaling_factor[v] = factor
 
+    # PyomoNLP writes an NL file to measure the constraint factors, so a
+    # variable factor the writer cannot place has to go before it does
+    _prune_suffixes(m)
     _constraint_factors(m, skip)
 
 
@@ -344,6 +349,51 @@ def _constraint_factors(m, skip):
         if largest <= _BAND[1]:
             continue
         m.scaling_factor[con] = 10.0 ** -round(math.log10(largest))
+
+
+def _writer_columns(m):
+    """The unfixed Var members the NL file gives a column.
+
+    A variable reaches the file through an active constraint or the
+    objective. One that reaches neither is not written, so a factor
+    keyed on it has nothing to scale.
+    """
+    live = set()
+    for con in m.component_data_objects(Constraint, active=True, descend_into=True):
+        for v in identify_variables(con.expr, include_fixed=False):
+            live.add(id(v))
+    for obj in m.component_data_objects(Objective, active=True, descend_into=True):
+        for v in identify_variables(obj.expr, include_fixed=False):
+            live.add(id(v))
+    return live
+
+
+def _exported(key, m, live):
+    """Whether the NL writer has a place in the file for this key."""
+    if not _attached(key, m) or not getattr(key, "active", True):
+        return False
+    if key.ctype is not Var:
+        return True
+    members = key.values() if key.is_indexed() else (key,)
+    return any(not v.fixed and id(v) in live for v in members)
+
+
+def _prune_suffixes(m):
+    """Drop suffix entries the NL writer has no place in the file for.
+
+    Three kinds reach a Suffix and none of them is written. The mode
+    transforms delete components, shed costs and replaced controls, so
+    the key is detached. They deactivate others, a terminal cost the
+    terminal segment supersedes and every objective on the plant. And
+    ``scale`` measures every unfixed Var, including one in no active
+    constraint and no objective, which ``drto.infinite_horizon`` leaves
+    at the terminal segment's element boundaries. An entry of any of the
+    three breaks a later clone and makes the writer warn.
+    """
+    live = _writer_columns(m)
+    for sfx in m.component_objects(Suffix, active=True):
+        for key in [k for k in sfx if not _exported(k, m, live)]:
+            del sfx[key]
 
 
 def scaled_solve(m, source="point", solver="pounce", tee=False, options=None):

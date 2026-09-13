@@ -41,12 +41,11 @@ from drto.ideal_nmpc import (
     _first_move,
     _one_sample,
     _pinned,
-    _prune_suffixes,
 )
 from drto.infinite_horizon import _join_index, _split_index, _time_index
 from drto.info import info
 from drto import scaling as drto_scaling
-from drto.scaling import _POUNCE_SOLVERS
+from drto.scaling import _POUNCE_SOLVERS, _prune_suffixes
 from drto.warm_start import warm_start_dynamic
 
 #: The designs approximate_nmpc_data draws by.
