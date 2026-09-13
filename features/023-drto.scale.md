@@ -96,6 +96,20 @@ further done. drto imports neither: when the library is absent, `scale`
 raises an error naming both ways to install it, rather than letting
 PyNumero fail on a null handle.
 
+A factor is kept only for a component the NL writer writes. Three
+kinds reach the Suffix and none of them appears in the file. A
+component the transforms deleted is detached, a shed cost or a replaced
+control. A component the transforms deactivated is still attached, such
+as a terminal cost the terminal segment supersedes. And an unfixed Var
+in no active constraint and no objective has no column, which is what
+`drto.infinite_horizon` leaves at the terminal segment's element
+boundaries, where Gauss-Legendre collocation writes no discretization
+equation for the derivative. `scale` drops all three after it writes
+the variable factors and before it measures the constraint factors,
+since PyomoNLP writes an NL file to take that measurement. The writer
+warns about each entry it cannot place, and a stale entry breaks a
+later clone of the model.
+
 The infinite horizon endpoint pins are skipped completely: the pin
 slacks get no variable factors and the pin constraints get no
 constraint factors. The pin's penalty weight is defined in each state's
@@ -186,10 +200,16 @@ component-walking code reduced to a source stated at the call.
 - A model without values raises a descriptive error saying to
   initialize first.
 - On a model carrying a terminal segment, each of the segment's
-  derivative members carries the factor of the state member it
-  differentiates, rather than one measured from its own value, so a
-  segment sitting at its equilibrium does not drive those groups to the
-  clamp.
+  derivative members that a discretization equation reaches carries the
+  factor of the state member it differentiates, rather than one measured
+  from its own value, so a segment sitting at its equilibrium does not
+  drive those groups to the clamp. The members at an element boundary,
+  which no discretization equation reaches, carry no entry.
+
+- A Suffix entry the NL writer will not write is dropped: one keyed on a
+  detached component, on a deactivated component, or on an unfixed Var
+  in no active constraint and no objective. The problem handed to the
+  solver is unchanged, since the writer skipped the entry either way.
 - On a model carrying a terminal segment, the endpoint pin slacks and
   the pin constraints have no entries in the Suffix, so the pin's
   effective weight against the objective is the declared one, unchanged
