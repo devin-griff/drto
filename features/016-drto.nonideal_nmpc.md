@@ -13,11 +13,14 @@ controller is.
 ```python
 import drto
 
-# m: the declared, discretized model, before drto.dynamic_optimization
+# build: the model statement (feature 006)
 
 history = drto.nonideal_nmpc(
-    m,
+    build,
     steps=50,                          # loop length, in intervals
+    h=1.0,                             # sampling time, to both builder
+                                       # calls. Omitted, the builder's
+                                       # default
     initial_condition={"z": 0.2},      # written into the initial-condition
                                        # Params. Omitted, they keep their
                                        # current values
@@ -46,7 +49,14 @@ drto.plot_controls(history)
 ```
 
 The setup, the options, the disturbance handling, and the plotting are
-those of `drto.ideal_nmpc` (feature 014), with `delay` added.
+those of `drto.ideal_nmpc` (feature 014), with `delay` added. The input
+is the model statement, under feature 006's builder contract, and the
+loop builds both sides from it the way `drto.ideal_nmpc` does, the
+controller over the declared horizon and the plant over one sampling
+interval, on the mesh stated once. The loop takes `h` by name, since
+the two pieces of every interval are the delay and `h - delay`, and
+sweeping `h` against the solve time is the experiment this loop exists
+for.
 
 The loop differs from the ideal one in when a move takes effect. Each
 step's delay is the solve time the solver reports, in seconds, converted
@@ -57,8 +67,12 @@ descriptive error saying to prescribe a delay instead. The new move takes
 effect one delay into the sampling interval. Two moves therefore apply
 in each interval, which runs as two simulations of the one-element
 plant. The process advances for the delay under the previous move, then
-for the rest of the interval under the new one. The simulation's duration
-is a parameter, so both lengths are exact and the plant is discretized
+for the rest of the interval under the new one. The simulation's
+duration is a parameter. When the plant is built, each declared ODE is
+multiplied once by `hP/h`, with `hP` a mutable Param meaning the step
+size and `h` the declared spacing entering as a constant, and the loop
+runs each interval as two solves, `hP` set to the delay and then to the
+remainder, so both lengths are exact and the plant is discretized
 once. A piece of zero length is not simulated. A zero delay runs the
 interval in one piece under the new move, and a delay at the interval
 length runs it in one piece under the previous move. On the first step,
@@ -92,16 +106,17 @@ measurable against a loop that has it.
 
 ## Acceptance criteria
 
-- `drto.nonideal_nmpc(m, steps, ...)` takes what `drto.ideal_nmpc` takes
-  plus `delay`, and builds the controller and the process the same way.
+- `drto.nonideal_nmpc(build, steps, ...)` takes what `drto.ideal_nmpc`
+  takes plus `delay`, and builds the controller and the process the
+  same way from the statement.
 - Each step solves at the measurement. The delay is the solver-reported
   solve time converted into the declared time set's units when `delay` is
   `"solver"`, and a number or per-step sequence in those units otherwise.
   On a model whose time set has no units, `delay="solver"` is a
   descriptive error. The interval runs as two simulations of exact
   lengths, the delay under the previous move and the rest of the interval
-  under the new one, the duration a parameter of the process simulation
-  and a zero-length piece not simulated.
+  under the new one, the duration the mutable Param the plant's declared
+  dynamics are multiplied by, and a zero-length piece not simulated.
 - The first step's previous move is the declared control targets. A delay
   at or past the interval end keeps the previous move for the whole
   interval and the move takes effect at the next boundary, recorded as
