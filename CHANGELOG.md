@@ -504,6 +504,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- The IDAES CSTR example model fixes the water accumulation at the first
+  time point at zero. The water holdup is constant, since the volume is
+  fixed and the property package fixes water's concentration, and
+  collocation states that zero accumulation at every later point but not
+  at the first. There the water balance left the outlet flow
+  undetermined, and the solver settled it near 1e5 m3/s with the
+  accumulation near -5.5e9 mol/s to match. Every CSTR page reaches the
+  same solution. The process simulations take 1 to 4 iterations instead
+  of 7, some controller solves take fewer and some more, and the
+  advanced-step correction no longer flags that flow.
+
 - `drto.ideal_nmpc` frees the controller's pounce factorization before it
   returns, and so does the new `drto.asnmpc`. A pounce solve keeps that
   factorization on the controller whenever its initial-condition Params
