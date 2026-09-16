@@ -138,6 +138,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.asnmpc`, the advanced-step NMPC loop (feature 015). It takes the
+  model statement and `drto.ideal_nmpc`'s options, plus `advanced_step`
+  options for `drto.advanced_step_controller`, and returns the same
+  history. Between samples it simulates a predictor, the controller's
+  own model with its disturbances at zero, and solves the horizon at the
+  predicted state with pounce. When the process reaches the end of the
+  sample it corrects that solution to the measured state with a
+  backsolve, and the corrected first moves are the next ones
+  implemented. The first moves come from a full solve at the initial
+  state. The setup the two loops share now lives in one place in
+  `drto.ideal_nmpc`, whose behavior is unchanged.
+
 - `drto.steady_state_optimization` is also a function taking the model
   statement (gh #117, feature 009). `drto.steady_state_optimization(build,
   ...)` calls `build()` with no arguments, applies the registered
@@ -491,6 +503,13 @@ All notable changes to this project are documented here. The format is based on
   with NL-writer warnings; the scaled path removes both.
 
 ### Fixed
+
+- `drto.ideal_nmpc` frees the controller's pounce factorization before it
+  returns, and so does the new `drto.asnmpc`. A pounce solve keeps that
+  factorization on the controller whenever its initial-condition Params
+  are declared, and the loop discards the controller on return. Garbage
+  collection could then free pounce's solver object on another solve's
+  output thread, where pounce raises `PySolver is unsendable`.
 
 - `drto.scale` drops the factors of a component the NL writer will not
   write (gh #151). It kept an entry keyed on a deactivated constraint,

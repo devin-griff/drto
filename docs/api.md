@@ -107,6 +107,7 @@ builds one, so a script with a builder reaches its result in one call.
 
 ```{eval-rst}
 .. autofunction:: drto.ideal_nmpc
+.. autofunction:: drto.asnmpc
 .. autoclass:: drto.NmpcHistory
    :members:
 ```

@@ -50,6 +50,7 @@ from drto.check_index import CheckIndexReport, check_index
 from drto.scaling import scale, scaled_solve
 from drto.warm_start import WarmStartReport, warm_start_dynamic
 from drto.ideal_nmpc import NmpcHistory, ideal_nmpc
+from drto.asnmpc import asnmpc
 from drto.objective import build_objective
 from drto.plotting import (
     plot_controls,
@@ -86,6 +87,7 @@ __all__ = [
     "warm_start_dynamic",
     "WarmStartReport",
     "ideal_nmpc",
+    "asnmpc",
     "NmpcHistory",
     "ColdStartReport",
     "plot_states",
