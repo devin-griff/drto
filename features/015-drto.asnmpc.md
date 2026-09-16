@@ -85,6 +85,13 @@ step then:
 5. Record the time, the actual state, the implemented moves, and the
    realization.
 
+The last step records and stops, with no prediction, background solve,
+or correction, since no step implements the moves they would produce.
+The loop then makes `steps` controller solves, as `drto.ideal_nmpc`
+does. Under `tee=True`, the history's logs hold the predictor's solves
+beside the controller's and the process's, under the side
+`"predictor"`.
+
 The correction's perturbation is the gap between the prediction and the
 measurement, one sample of disturbance and model error, not the state's
 motion over the sample. With no disturbance and a perfect model it is
@@ -118,7 +125,10 @@ and plots as the ideal loop it is compared against.
 - Each background solve warm starts at the predicted state, and the
   correction runs before the next solve replaces the stored
   factorization.
-- The history and the plotting are those of `drto.ideal_nmpc`.
+- The last step implements its moves, simulates the process, and
+  records, with no prediction, background solve, or correction.
+- The history and the plotting are those of `drto.ideal_nmpc`, and
+  under `tee=True` the logs name the predictor's solves `"predictor"`.
 - On hicks with zero disturbances, the prediction equals the simulated
   state, the correction is by zero, the implemented controls match the
   ideal loop's, and the actual states settle to the declared targets.
