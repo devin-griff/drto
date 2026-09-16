@@ -518,3 +518,22 @@ def test_scale_writes_the_factors_and_the_default_does_not(monkeypatch):
     built.clear()
     drto.ideal_nmpc(loop_model, steps=1, solver="ipopt")
     assert all(m.component("scaling_factor") is None for m in built)
+
+
+@needs_pounce
+def test_the_loop_releases_the_controller_factorization(monkeypatch):
+    # pounce raises when its solver object is freed on another thread, so
+    # the loop frees the factorization before it discards the controller
+    import pyomo_pounce
+
+    built = []
+    real = loop_module._build_and_discretize
+
+    def keep(*a, **k):
+        m = real(*a, **k)
+        built.append(m)
+        return m
+
+    monkeypatch.setattr(loop_module, "_build_and_discretize", keep)
+    drto.ideal_nmpc(loop_model, steps=2)
+    assert pyomo_pounce.sens_release_kkt(built[0]) is False

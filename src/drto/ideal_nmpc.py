@@ -9,17 +9,20 @@ forward under that move and a disturbance realization. Ideal means the
 solve is treated as instantaneous: measurement, solve, and move all land
 at the same instant.
 
-The input is the declared, discretized model, with
-``drto.infinite_horizon`` applied or not, before the mode transforms.
-The loop builds both sides from it: a clone becomes the process through
-``drto.dynamic_simulation`` with the controls first fixed at the
-declared control targets, and the input becomes the controller through
-``drto.dynamic_optimization``. The first solve is initialized per the
-``initialize`` option, the cold start by default on the controller and
-the process alike, and every later one warm-starts from the
-shifted previous solution, ipopt adding the warm start recipe and
-pounce ``mu_init=1e-6`` alone, the ``warm_start`` mapping laid over
-the documented default.
+The input is the model statement (feature 006), and the loop builds its
+sides from it: the controller over the declared horizon through
+``drto.dynamic_optimization``, and the process over one sampling
+interval through ``drto.dynamic_simulation`` with the controls first
+fixed at the declared control targets. The first solve is initialized
+per the ``initialize`` option, the cold start by default on the
+controller and the process alike, and every later one warm-starts from
+the shifted previous solution, ipopt adding the warm start recipe and
+pounce ``mu_init=1e-6`` alone, the ``warm_start`` mapping laid over the
+documented default.
+
+``_loop_setup`` holds everything before the first solve, and
+``drto.asnmpc`` (feature 015) calls it too, with a second one-sample
+side for its predictor.
 
 An active ``scaling_factor`` suffix reaches every solver solve on that
 side, and the history reads back in the model's own units. The
@@ -212,6 +215,375 @@ def _owner_and_params(reg, fn):
     return owner, params_of
 
 
+@dataclass
+class _Plant:
+    """A one-sample simulation side and what each step reads and writes."""
+
+    model: object
+    params: list
+    reads: list
+    controls: list
+    disturbances: list
+
+
+@dataclass
+class _Loop:
+    """A loop's sides, its history, and the writes and solves each step makes.
+
+    ``controls`` and ``params`` are the controller's live controls and
+    initial-condition Params, and every plant's lists line up with them
+    positionally.
+    """
+
+    fn: str
+    opt: object
+    tee: bool
+    ctrl: object
+    plants: list
+    controls: list
+    params: list
+    labels: list
+    plan: dict
+    rng: object
+    warm_opts: dict
+    suffix_opts: dict
+    history: NmpcHistory
+    t0: float
+    dt: float
+
+    def solve(self, model, what, step, options=None):
+        """Solve one side and load the result, naming the step on failure."""
+        opts = {**self.suffix_opts, **(options or {})}
+        kwargs = dict(
+            solver_options=opts,
+            load_solutions=False,
+            raise_exception_on_nonoptimal_result=False,
+        )
+        if self.tee:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                res = self.opt.solve(model, tee=True, **kwargs)
+            text = buf.getvalue()
+            print(text, end="")
+            self.history.logs.append((step, what, text))
+        else:
+            res = self.opt.solve(model, **kwargs)
+        if not drto_scaling.solved_to_optimality(res):
+            raise RuntimeError(
+                f"drto: {self.fn}: the {what} solve failed at step {step} "
+                f"({res.termination_condition.name})."
+            )
+        res.solution_loader.load_vars()
+
+    def implement(self, moves, *plants):
+        """Record one move per control and write it into each plant."""
+        for u, move in zip(self.controls, moves):
+            self.history.moves[u.local_name].append(move)
+        for plant in plants:
+            for pu, move in zip(plant.controls, moves):
+                for vd in _members(pu):
+                    vd.set_value(move)
+
+    def realize(self, k, plant):
+        """Write step ``k``'s disturbance values into the plant and record them."""
+        for w in plant.disturbances:
+            entry = self.plan.get(w.local_name)
+            if entry is None:
+                val = 0.0
+            elif isinstance(entry, (list, tuple)):
+                val = entry[k]
+            else:
+                val = self.rng.gauss(0.0, entry)
+            self.history.realizations[w.local_name].append(val)
+            for vd in _members(w):
+                vd.set_value(val)
+
+    def measure(self, plant, k):
+        """Read the plant's state one sample in and record it at step ``k``.
+
+        The values are written into every plant's initial-condition
+        Params, the state the next step starts from, and returned for the
+        caller to write into the controller's.
+        """
+        values = [pyo.value(src) for src in plant.reads]
+        for side in self.plants:
+            for param, val in zip(side.params, values):
+                param.set_value(val)
+        for label, val in zip(self.labels, values):
+            self.history.states[label].append(val)
+        self.history.times.append(self.t0 + (k + 1) * self.dt)
+        return values
+
+    def write_state(self, values):
+        """Write a state into the controller's initial-condition Params."""
+        for param, val in zip(self.params, values):
+            param.set_value(val)
+
+    def release(self):
+        """Drop the controller's pounce factorization before the loop returns.
+
+        A pounce solve keeps the factorization on the controller whenever
+        its initial-condition Params are declared, and the loop discards the
+        controller on return. pounce raises when its solver object is freed
+        on a thread other than the one that made it, which a later garbage
+        collection on another solve's output thread does, so the loop frees
+        it here instead.
+        """
+        try:
+            import pyomo_pounce
+        except ImportError:
+            return
+        pyomo_pounce.sens_release_kkt(self.ctrl)
+
+
+def _loop_setup(
+    fn,
+    build,
+    steps,
+    *,
+    h,
+    ncp,
+    scheme,
+    initial_condition,
+    dynamic_optimization,
+    disturbances,
+    seed,
+    initialize,
+    solver,
+    scale,
+    warm_start,
+    tee,
+    plants,
+):
+    """Check a loop's arguments and build its sides from the statement.
+
+    The controller is built over the declared horizon and ``plants``
+    one-sample simulations beside it, all on the mesh stated once. The
+    initial condition lands in every side, ``scale`` and ``initialize``
+    apply to every side, and each side gets its mode transform. Returns
+    the ``_Loop`` the steps run on.
+    """
+    if not callable(build):
+        raise ValueError(
+            f"drto: {fn} takes the model statement, a function returning a "
+            f"declared, undiscretized model (feature 006). Got {build!r}."
+        )
+    if not (
+        initialize is False
+        or initialize in ("cold", "steady")
+        or isinstance(initialize, Mapping)
+    ):
+        raise ValueError(
+            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
+            f"start's options), 'steady', or False. Got {initialize!r}."
+        )
+    if steps < 1:
+        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
+
+    if solver in _POUNCE_SOLVERS:
+        # importing registers the in-process plugin. Without it the name
+        # falls back to a PATH executable behind pyomo's ASL wrapper,
+        # a different solver than the one the drto stack is built on
+        try:
+            import pyomo_pounce  # noqa: F401
+        except ImportError as err:
+            raise RuntimeError(
+                f"drto: {fn}: solver 'pounce' requires pyomo-pounce "
+                f"(pip install drto[pounce], or pip install pyomo-pounce)."
+            ) from err
+    opt = drto_scaling.solver_by_name(solver)
+    if not opt.available():
+        raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
+
+    do_opts = dict(dynamic_optimization or {})
+    repeated = [k for k in ("h", "ncp", "scheme") if k in do_opts]
+    if repeated:
+        raise ValueError(
+            f"drto: {fn} states the mesh once for every side, so "
+            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
+            f"dynamic_optimization."
+        )
+    segment = do_opts.pop("infinite_horizon", False)
+
+    # every side comes from the one statement, which makes them the same
+    # physics. The controller spans the declared horizon and each simulation
+    # one sampling interval, all on the mesh stated once
+    ctrl = _build_and_discretize(build, do_opts.pop("N", None), h, ncp, scheme, fn)
+    sims = [_build_and_discretize(build, 1, h, ncp, scheme, fn) for _ in range(plants)]
+    sides = [ctrl, *sims]
+    reg = info(ctrl)
+
+    # the initial condition lands in every side's Params, the values the
+    # first step reads
+    owner, c_params_of = _owner_and_params(reg, fn)
+    sim_params_of = [_owner_and_params(info(sim), fn)[1] for sim in sims]
+    for key, val in (initial_condition or {}).items():
+        name = key if isinstance(key, str) else key.local_name
+        params = c_params_of.get(name)
+        if params is None:
+            raise ValueError(
+                f"drto: {fn} got an initial condition for '{name}', which "
+                f"is not a pinned state. The pinned states are "
+                f"{', '.join(c_params_of) or '(none)'}."
+            )
+        values = _spread(val, len(params), name, fn)
+        for side in [params] + [of[name] for of in sim_params_of]:
+            for param, v in zip(side, values):
+                param.set_value(v)
+
+    # the per-step disturbance plan, validated before anything is solved
+    declared_dist = [w.local_name for w in reg.components("disturbance")]
+    plan = {}
+    for key, val in (disturbances or {}).items():
+        name = key if isinstance(key, str) else key.local_name
+        if name not in declared_dist:
+            raise ValueError(
+                f"drto: {fn} got a realization for '{name}', which is not "
+                f"a declared disturbance. The declared disturbances are "
+                f"{', '.join(declared_dist) or '(none)'}."
+            )
+        if isinstance(val, (list, tuple)) and len(val) < steps:
+            raise ValueError(
+                f"drto: {fn} runs {steps} steps but the sequence for "
+                f"'{name}' has {len(val)} values. Give one per step."
+            )
+        plan[name] = val
+
+    # a scale source writes the factors on each side once it is built, so
+    # every side holds them and every solver solve receives them. The cold
+    # starts' block solves run in the model's own units either way (gh #92)
+    if scale is not None:
+        for side in sides:
+            drto_scaling.scale(side, source=scale)
+
+    # the steady initialization runs on each side after it is discretized
+    # and before the transforms, the only point that function accepts
+    if initialize == "steady":
+        for side in sides:
+            initialize_steady_state(side)
+
+    # the simulations run with their controls fixed at the declared control
+    # targets. Each is built over one sampling interval, so nothing is cut
+    # away and none carries a terminal segment
+    uss = list(reg.declarations("steady_state_control"))
+    at_targets = {
+        u.name: pyo.value(_target(uss, u, "steady_state_control", fn))
+        for u in reg.components("control")
+    }
+    for sim in sims:
+        TransformationFactory("drto.dynamic_simulation").apply_to(
+            sim, controls=at_targets
+        )
+        _prune_suffixes(sim)
+
+    # the controller takes the terminal segment when asked, then assembles
+    if segment:
+        seg_opts = segment if segment is not True else {}
+        TransformationFactory("drto.infinite_horizon").apply_to(ctrl, **seg_opts)
+    TransformationFactory("drto.dynamic_optimization").apply_to(ctrl, **do_opts)
+    _prune_suffixes(ctrl)
+
+    # the warm-started solves take the recipe under the solvers that read
+    # it, with the warm_start mapping laid over
+    warm_opts = _warm_options(solver)
+    warm_opts.update(warm_start or {})
+
+    # every side cold-starts alike, so the simulations' first solves start
+    # initialized too. Each simulation spans one sampling interval, so its
+    # cold start covers one element
+    if initialize == "cold" or isinstance(initialize, Mapping):
+        opts = {} if initialize == "cold" else dict(initialize)
+        for side in sides:
+            cold_start_dynamic(side, **opts)
+
+    # with an active scaling_factor suffix, every solve on that side
+    # receives the factors, through the solver option for the solvers
+    # that take one, and the history reads back in the model's own
+    # units. A solver that does not receive them warns here, once.
+    suffix_opts = (
+        drto_scaling._scaling_options(solver, fn)
+        if drto_scaling._suffix_active(ctrl)
+        else {}
+    )
+
+    samples = reg.declarations("horizon")[0]["samples"]
+    t0, t1 = samples[0], samples[1]
+    c_pins = _pinned(reg, fn)
+    c_params = [p for _vd, p in c_pins]
+
+    # the pinned members' labels and targets come from the declared
+    # owner (the member-id map above)
+    ss = list(reg.declarations("steady_state"))
+    labels, targets = [], []
+    for c_vd, _p in c_pins:
+        z, o = owner[id(c_vd)]
+        labels.append(
+            z.local_name if not o else f"{z.local_name}[{','.join(map(str, o))}]"
+        )
+        tgt = _target(ss, z, "steady_state", fn)
+        targets.append(pyo.value(tgt[o] if o else tgt))
+
+    # each simulation's read points, one sample in, come from its own
+    # underlying containers
+    plant_sides = []
+    for sim in sims:
+        reg_s = info(sim)
+        time_s = reg_s.components("horizon")[0]
+        pins = _pinned(reg_s, fn)
+        reads = []
+        for vd, _p in pins:
+            zp = vd.parent_component()
+            pos, subs = _time_index(zp, time_s)
+            po, _t = _split_index(vd.index(), pos, len(subs))
+            reads.append(zp[_join_index(po, t1, pos)])
+        plant_sides.append(
+            _Plant(
+                model=sim,
+                params=[p for _vd, p in pins],
+                reads=reads,
+                controls=list(reg_s.components("control")),
+                disturbances=list(reg_s.components("disturbance")),
+            )
+        )
+
+    history = NmpcHistory()
+    history.times.append(t0)
+    for label, param, tgt, (vd, _p) in zip(labels, c_params, targets, c_pins):
+        history.states[label] = [pyo.value(param)]
+        history.state_targets[label] = tgt
+        history.state_bounds[label] = (vd.lb, vd.ub)
+
+    c_controls = list(reg.components("control"))
+    ucss = list(reg.declarations("steady_state_control"))
+    for u in c_controls:
+        history.moves[u.local_name] = []
+        history.control_targets[u.local_name] = pyo.value(
+            _target(ucss, u, "steady_state_control", fn)
+        )
+        first = _first_move(u)
+        history.control_bounds[u.local_name] = (first.lb, first.ub)
+    for w in plant_sides[0].disturbances:
+        history.realizations[w.local_name] = []
+
+    return _Loop(
+        fn=fn,
+        opt=opt,
+        tee=tee,
+        ctrl=ctrl,
+        plants=plant_sides,
+        controls=c_controls,
+        params=c_params,
+        labels=labels,
+        plan=plan,
+        rng=random.Random(seed),
+        warm_opts=warm_opts,
+        suffix_opts=suffix_opts,
+        history=history,
+        t0=t0,
+        dt=t1 - t0,
+    )
+
+
 def ideal_nmpc(
     build,
     steps,
@@ -313,258 +685,44 @@ def ideal_nmpc(
         If the solver is not available, or a solve fails (the error
         names the step).
     """
-    fn = "ideal_nmpc"
-    if not callable(build):
-        raise ValueError(
-            f"drto: {fn} takes the model statement, a function returning a "
-            f"declared, undiscretized model (feature 006). Got {build!r}."
-        )
-    if not (
-        initialize is False
-        or initialize in ("cold", "steady")
-        or isinstance(initialize, Mapping)
-    ):
-        raise ValueError(
-            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
-            f"start's options), 'steady', or False. Got {initialize!r}."
-        )
-    if steps < 1:
-        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
-
-    if solver in _POUNCE_SOLVERS:
-        # importing registers the in-process plugin. Without it the name
-        # falls back to a PATH executable behind pyomo's ASL wrapper,
-        # a different solver than the one the drto stack is built on
-        try:
-            import pyomo_pounce  # noqa: F401
-        except ImportError as err:
-            raise RuntimeError(
-                f"drto: {fn}: solver 'pounce' requires pyomo-pounce "
-                f"(pip install drto[pounce], or pip install pyomo-pounce)."
-            ) from err
-    opt = drto_scaling.solver_by_name(solver)
-    if not opt.available():
-        raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
-
-    do_opts = dict(dynamic_optimization or {})
-    repeated = [k for k in ("h", "ncp", "scheme") if k in do_opts]
-    if repeated:
-        raise ValueError(
-            f"drto: {fn} states the mesh once for both sides, so "
-            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
-            f"dynamic_optimization."
-        )
-    segment = do_opts.pop("infinite_horizon", False)
-
-    # both sides from the one statement, which is what makes them the same
-    # physics: the controller over the declared horizon, the plant over one
-    # sampling interval, both on the mesh stated once
-    ctrl = _build_and_discretize(build, do_opts.pop("N", None), h, ncp, scheme, fn)
-    plant = _build_and_discretize(build, 1, h, ncp, scheme, fn)
-    reg = info(ctrl)
-    time = reg.components("horizon")[0]
-
-    # the initial condition lands in both sides' Params, the values the
-    # first step reads
-    c_owner, c_params_of = _owner_and_params(reg, fn)
-    _p_owner, p_params_of = _owner_and_params(info(plant), fn)
-    owner = c_owner
-    for key, val in (initial_condition or {}).items():
-        name = key if isinstance(key, str) else key.local_name
-        params = c_params_of.get(name)
-        if params is None:
-            raise ValueError(
-                f"drto: {fn} got an initial condition for '{name}', which "
-                f"is not a pinned state. The pinned states are "
-                f"{', '.join(c_params_of) or '(none)'}."
-            )
-        values = _spread(val, len(params), name, fn)
-        for side in (params, p_params_of[name]):
-            for param, v in zip(side, values):
-                param.set_value(v)
-
-    # the per-step disturbance plan, validated before anything is built
-    declared_dist = [w.local_name for w in reg.components("disturbance")]
-    plan = {}
-    for key, val in (disturbances or {}).items():
-        name = key if isinstance(key, str) else key.local_name
-        if name not in declared_dist:
-            raise ValueError(
-                f"drto: {fn} got a realization for '{name}', which is not "
-                f"a declared disturbance. The declared disturbances are "
-                f"{', '.join(declared_dist) or '(none)'}."
-            )
-        if isinstance(val, (list, tuple)) and len(val) < steps:
-            raise ValueError(
-                f"drto: {fn} runs {steps} steps but the sequence for "
-                f"'{name}' has {len(val)} values. Give one per step."
-            )
-        plan[name] = val
-
-    # a scale source writes the factors on each side once it is built, so
-    # both hold them and every solver solve receives them. The cold starts'
-    # block solves run in the model's own units either way (gh #92)
-    if scale is not None:
-        drto_scaling.scale(ctrl, source=scale)
-        drto_scaling.scale(plant, source=scale)
-
-    # the steady initialization runs on each side after it is discretized
-    # and before the transforms, the only point that function accepts
-    if initialize == "steady":
-        initialize_steady_state(ctrl)
-        initialize_steady_state(plant)
-
-    # the plant runs in simulation mode, its controls fixed at the declared
-    # control targets. It is built over one sampling interval, so nothing
-    # is cut away and it never carries a terminal segment
-    uss = list(reg.declarations("steady_state_control"))
-    at_targets = {
-        u.name: pyo.value(_target(uss, u, "steady_state_control", fn))
-        for u in reg.components("control")
-    }
-    TransformationFactory("drto.dynamic_simulation").apply_to(
-        plant, controls=at_targets
+    loop = _loop_setup(
+        "ideal_nmpc",
+        build,
+        steps,
+        h=h,
+        ncp=ncp,
+        scheme=scheme,
+        initial_condition=initial_condition,
+        dynamic_optimization=dynamic_optimization,
+        disturbances=disturbances,
+        seed=seed,
+        initialize=initialize,
+        solver=solver,
+        scale=scale,
+        warm_start=warm_start,
+        tee=tee,
+        plants=1,
     )
-    _prune_suffixes(plant)
+    (plant,) = loop.plants
 
-    # the controller takes the terminal segment when asked, then assembles
-    if segment:
-        seg_opts = segment if segment is not True else {}
-        TransformationFactory("drto.infinite_horizon").apply_to(ctrl, **seg_opts)
-    TransformationFactory("drto.dynamic_optimization").apply_to(ctrl, **do_opts)
-    _prune_suffixes(ctrl)
-
-    # the warm-started solves' options: the recipe under the solvers
-    # that read it, the warm_start mapping laid over
-    warm_opts = _warm_options(solver)
-    warm_opts.update(warm_start or {})
-
-    # the controller and the plant cold-start alike, so the plant's first
-    # simulation starts initialized too. The plant spans one sampling
-    # interval, so its cold start is one element's worth
-    if initialize == "cold" or isinstance(initialize, Mapping):
-        opts = {} if initialize == "cold" else dict(initialize)
-        cold_start_dynamic(ctrl, **opts)
-        cold_start_dynamic(plant, **opts)
-
-    # an active scaling_factor suffix: every solve on that side
-    # receives the factors, through the solver option for the solvers
-    # that take one, and the history reads back in the model's own
-    # units. A solver that does not receive them warns here, once.
-    suffix_opts = (
-        drto_scaling._scaling_options(solver, fn)
-        if drto_scaling._suffix_active(ctrl)
-        else {}
-    )
-
-    reg_m, reg_p = info(ctrl), info(plant)
-    samples = reg_m.declarations("horizon")[0]["samples"]
-    t0, t1 = samples[0], samples[1]
-    dt = t1 - t0
-    c_pins, p_pins = _pinned(reg_m, fn), _pinned(reg_p, fn)
-    time_m = reg_m.components("horizon")[0]
-    time_p = reg_p.components("horizon")[0]
-
-    # the pinned members' labels and targets come from the declared
-    # owner (the member-id map above), and the read points, one sample in,
-    # from the process's own underlying containers
-    ss = list(reg_m.declarations("steady_state"))
-    labels, targets, read_phys = [], [], []
-    for (c_vd, _h), (p_vd, _hp) in zip(c_pins, p_pins):
-        z, o = owner[id(c_vd)]
-        labels.append(
-            z.local_name if not o else f"{z.local_name}[{','.join(map(str, o))}]"
-        )
-        tgt = _target(ss, z, "steady_state", fn)
-        targets.append(pyo.value(tgt[o] if o else tgt))
-        zp = p_vd.parent_component()
-        pos, subs = _time_index(zp, time_p)
-        po, _t = _split_index(p_vd.index(), pos, len(subs))
-        read_phys.append(zp[_join_index(po, t1, pos)])
-
-    c_params = [p for _vd, p in c_pins]
-    p_params = [p for _vd, p in p_pins]
-
-    history = NmpcHistory()
-    history.times.append(t0)
-    for label, param, tgt, (vd, _h) in zip(labels, c_params, targets, c_pins):
-        history.states[label] = [pyo.value(param)]
-        history.state_targets[label] = tgt
-        history.state_bounds[label] = (vd.lb, vd.ub)
-
-    c_controls = list(info(ctrl).components("control"))
-    p_controls = list(info(plant).components("control"))
-    ucss = list(info(ctrl).declarations("steady_state_control"))
-    for u, mu in zip(c_controls, reg_m.components("control")):
-        history.moves[u.local_name] = []
-        history.control_targets[u.local_name] = pyo.value(
-            _target(ucss, u, "steady_state_control", fn)
-        )
-        first = _first_move(mu)
-        history.control_bounds[u.local_name] = (first.lb, first.ub)
-    p_dist = list(info(plant).components("disturbance"))
-    for w in p_dist:
-        history.realizations[w.local_name] = []
-
-    rng = random.Random(seed)
-
-    def _solve(model, what, step, options=None):
-        opts = {**suffix_opts, **(options or {})}
-        kwargs = dict(
-            solver_options=opts,
-            load_solutions=False,
-            raise_exception_on_nonoptimal_result=False,
-        )
-        if tee:
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                res = opt.solve(model, tee=True, **kwargs)
-            text = buf.getvalue()
-            print(text, end="")
-            history.logs.append((step, what, text))
-        else:
-            res = opt.solve(model, **kwargs)
-        if not drto_scaling.solved_to_optimality(res):
-            raise RuntimeError(
-                f"drto: {fn}: the {what} solve failed at step {step} "
-                f"({res.termination_condition.name})."
+    try:
+        for k in range(steps):
+            # solve the controller at the current state, warm-started after
+            # the first step
+            if k > 0:
+                warm_start_dynamic(loop.ctrl)
+            loop.solve(
+                loop.ctrl, "controller", k, options=loop.warm_opts if k > 0 else None
             )
-        res.solution_loader.load_vars()
 
-    for k in range(steps):
-        # solve the controller at the current state, warm-started after
-        # the first step
-        if k > 0:
-            warm_start_dynamic(ctrl)
-        _solve(ctrl, "controller", k, options=warm_opts if k > 0 else None)
+            # implement each control's first move and this step's
+            # disturbances on the process, simulate one sample, and start the
+            # next solve from the state it reaches
+            loop.implement([pyo.value(_first_move(u)) for u in loop.controls], plant)
+            loop.realize(k, plant)
+            loop.solve(plant.model, "process", k)
+            loop.write_state(loop.measure(plant, k))
+    finally:
+        loop.release()
 
-        # implement each control's first move on the process
-        for u, pu in zip(c_controls, p_controls):
-            move = pyo.value(_first_move(u))
-            history.moves[u.local_name].append(move)
-            for vd in _members(pu):
-                vd.set_value(move)
-
-        # realize this step's disturbances on the process
-        for w in p_dist:
-            entry = plan.get(w.local_name)
-            if entry is None:
-                val = 0.0
-            elif isinstance(entry, (list, tuple)):
-                val = entry[k]
-            else:
-                val = rng.gauss(0.0, entry)
-            history.realizations[w.local_name].append(val)
-            for vd in _members(w):
-                vd.set_value(val)
-
-        # simulate one sample and write the state into both models' Params
-        _solve(plant, "process", k)
-        for c_param, p_param, src, label in zip(c_params, p_params, read_phys, labels):
-            val = pyo.value(src)
-            c_param.set_value(val)
-            p_param.set_value(val)
-            history.states[label].append(val)
-        history.times.append(t0 + (k + 1) * dt)
-
-    return history
+    return loop.history

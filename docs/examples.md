@@ -64,6 +64,11 @@ unmodified IDAES models.
   the closed loop in one call: measure, solve, implement, simulate,
   the cold start then warm-started re-solves under measured factors,
   the hot start driven onto the setpoint in three samples.
+- [Advanced-step NMPC on the IDAES CSTR](notebooks/cstr_asnmpc.ipynb):
+  the same loop with the horizon solve moved between samples and
+  corrected to each measurement by a backsolve. Without noise it
+  implements the ideal loop's moves, and under the ideal page's noise it
+  stays within 600 W of the ideal loop's duty on a 4 MW range.
 - [The Klatt-Engell CSTR](notebooks/klatt_engell.ipynb) — the van de
   Vusse reactor of Lueken, Brandner & Lucia (2023) posed on drto's
   terminal segment: the setpoints the reactor cannot hold, the
@@ -99,6 +104,7 @@ notebooks/cstr_cold_start
 notebooks/cstr_warm_start
 notebooks/cstr_advanced_step
 notebooks/cstr_ideal_nmpc
+notebooks/cstr_asnmpc
 notebooks/check_index
 notebooks/klatt_engell
 notebooks/klatt_engell_approximate_nmpc

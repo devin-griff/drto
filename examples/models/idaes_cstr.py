@@ -211,6 +211,12 @@ def build(N=10, h=1, disturbance=False):
     def ic_eng(mm, p):
         return cv.energy_holdup[t0, p] == mm.eng0[p]
 
+    # the water holdup is constant, the volume fixed and water's
+    # concentration fixed by the property package, so its accumulation is
+    # zero. Collocation states that at every later point and nothing states
+    # it at t0, which would leave the outlet flow there undetermined
+    cv.material_accumulation[t0, "Liq", "H2O"].fix(0.0)
+
     # unit-carrying scales make the cost dimensionless, so it renders with
     # clean units instead of (inc): each term is (quantity/scale)**2. The
     # material scale is loose: the species terms keep the cost covering

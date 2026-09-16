@@ -27,6 +27,7 @@ _NOTEBOOKS = [
     "cstr_warm_start",
     "cstr_advanced_step",
     "cstr_ideal_nmpc",
+    "cstr_asnmpc",
     "check_index",
     "sx_infinite_horizon",
     "klatt_engell",
