@@ -49,7 +49,9 @@ The loop is the asNMPC controller of Huang, Zavala, and Biegler,
 J. Process Control 19 (2009) 678-685. The setup, the options, the
 disturbance handling, the history, and the plotting are those of
 `drto.ideal_nmpc` (feature 014), with the `advanced_step` options
-passing through to `drto.advanced_step_controller` as given. `solver`
+passing through to `drto.advanced_step_controller` as given, except
+`gradient`, which makes that call return the sensitivities of each
+control rather than the corrected solution the loop reads. `solver`
 takes `"pounce"` or `"pounce_v2"`, since the correction is the feature
 012 backsolve, which needs the factorization a pounce solve keeps.
 
@@ -122,9 +124,9 @@ sample.
   `drto.advanced_step_controller` as given, and builds the controller
   and the process the same way from the statement, plus the predictor,
   a third side built the same way with its disturbances held at zero.
-- A solver other than `"pounce"` or `"pounce_v2"`, and an
-  `advanced_step` that is not a mapping, are descriptive errors raised
-  before anything is built.
+- A solver other than `"pounce"` or `"pounce_v2"`, an `advanced_step`
+  that is not a mapping, and an `advanced_step` that sets `gradient` are
+  descriptive errors raised before anything is built.
 - The first step implements the solution's own first moves. Every later
   step implements the first moves of the advanced-step correction of the
   background solution at the newly simulated actual state, the
