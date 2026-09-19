@@ -251,7 +251,11 @@ class _Loop:
     dt: float
 
     def solve(self, model, what, step, options=None):
-        """Solve one side and load the result, naming the step on failure."""
+        """Solve one side and load the result, naming the step on failure.
+
+        Returns the solver's results, which ``drto.nonideal_nmpc`` reads
+        the solve time from.
+        """
         opts = {**self.suffix_opts, **(options or {})}
         kwargs = dict(
             solver_options=opts,
@@ -273,11 +277,16 @@ class _Loop:
                 f"({res.termination_condition.name})."
             )
         res.solution_loader.load_vars()
+        return res
 
     def implement(self, moves, *plants):
         """Record one move per control and write it into each plant."""
         for u, move in zip(self.controls, moves):
             self.history.moves[u.local_name].append(move)
+        self.write_moves(moves, *plants)
+
+    def write_moves(self, moves, *plants):
+        """Write one move per control into each plant, recording nothing."""
         for plant in plants:
             for pu, move in zip(plant.controls, moves):
                 for vd in _members(pu):
@@ -313,6 +322,17 @@ class _Loop:
         self.history.times.append(self.t0 + (k + 1) * self.dt)
         return values
 
+    def carry(self, plant):
+        """Write the plant's state one sample in into its own Params.
+
+        The next piece of the same interval starts where this one ended,
+        and nothing is recorded, since the interval is not over.
+        """
+        values = [pyo.value(src) for src in plant.reads]
+        for param, val in zip(plant.params, values):
+            param.set_value(val)
+        return values
+
     def write_state(self, values):
         """Write a state into the controller's initial-condition Params."""
         for param, val in zip(self.params, values):
@@ -335,6 +355,39 @@ class _Loop:
         pyomo_pounce.sens_release_kkt(self.ctrl)
 
 
+def _check_arguments(fn, build, steps, initialize, dynamic_optimization):
+    """The argument checks that read no model.
+
+    A loop that reads the model before it builds, as
+    ``drto.nonideal_nmpc`` reads its declared time units, runs these
+    first, so a mistake in the call raises before a builder is called.
+    Running them twice costs nothing.
+    """
+    if not callable(build):
+        raise ValueError(
+            f"drto: {fn} takes the model statement, a function returning a "
+            f"declared, undiscretized model (feature 006). Got {build!r}."
+        )
+    if not (
+        initialize is False
+        or initialize in ("cold", "steady")
+        or isinstance(initialize, Mapping)
+    ):
+        raise ValueError(
+            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
+            f"start's options), 'steady', or False. Got {initialize!r}."
+        )
+    if steps < 1:
+        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
+    repeated = [k for k in ("h", "ncp", "scheme") if k in (dynamic_optimization or {})]
+    if repeated:
+        raise ValueError(
+            f"drto: {fn} states the mesh once for every side, so "
+            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
+            f"dynamic_optimization."
+        )
+
+
 def _loop_setup(
     fn,
     build,
@@ -353,31 +406,18 @@ def _loop_setup(
     warm_start,
     tee,
     plants,
+    history_type=NmpcHistory,
 ):
     """Check a loop's arguments and build its sides from the statement.
 
     The controller is built over the declared horizon and ``plants``
     one-sample simulations beside it, all on the mesh stated once. The
     initial condition lands in every side, ``scale`` and ``initialize``
-    apply to every side, and each side gets its mode transform. Returns
-    the ``_Loop`` the steps run on.
+    apply to every side, and each side gets its mode transform.
+    ``history_type`` is the history the loop fills, ``NmpcHistory``
+    unless a loop records more. Returns the ``_Loop`` the steps run on.
     """
-    if not callable(build):
-        raise ValueError(
-            f"drto: {fn} takes the model statement, a function returning a "
-            f"declared, undiscretized model (feature 006). Got {build!r}."
-        )
-    if not (
-        initialize is False
-        or initialize in ("cold", "steady")
-        or isinstance(initialize, Mapping)
-    ):
-        raise ValueError(
-            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
-            f"start's options), 'steady', or False. Got {initialize!r}."
-        )
-    if steps < 1:
-        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
+    _check_arguments(fn, build, steps, initialize, dynamic_optimization)
 
     if solver in _POUNCE_SOLVERS:
         # importing registers the in-process plugin. Without it the name
@@ -395,13 +435,6 @@ def _loop_setup(
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
     do_opts = dict(dynamic_optimization or {})
-    repeated = [k for k in ("h", "ncp", "scheme") if k in do_opts]
-    if repeated:
-        raise ValueError(
-            f"drto: {fn} states the mesh once for every side, so "
-            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
-            f"dynamic_optimization."
-        )
     segment = do_opts.pop("infinite_horizon", False)
 
     # every side comes from the one statement, which makes them the same
@@ -545,7 +578,7 @@ def _loop_setup(
             )
         )
 
-    history = NmpcHistory()
+    history = history_type()
     history.times.append(t0)
     for label, param, tgt, (vd, _p) in zip(labels, c_params, targets, c_pins):
         history.states[label] = [pyo.value(param)]

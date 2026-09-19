@@ -249,9 +249,19 @@ def _draw_history(
         ax.axis("off")
     drew_target = drew_second = drew_bound = drew_failure = False
     times = history.times
+    # a loop whose moves take effect inside the interval records when each
+    # one did, and the staircase steps there instead of at the samples
+    effects = getattr(history, "effect_times", None) if staircase else None
     for ax, key in zip(flat, keys):
         vals = series[key]
-        if staircase:
+        if effects:
+            # before the first move takes effect the process holds the
+            # declared target, the inputs it started from
+            steps_at = [times[0]] + list(effects) + [times[-1]]
+            held = [targets.get(key, vals[0])] + vals + [vals[-1]]
+            pts = [(t, v) for t, v in zip(steps_at, held) if t <= t_max]
+            ax.step(*zip(*pts), where="post", color="C0")
+        elif staircase:
             # a move holds over its sample: the last one extends to the
             # final recorded instant
             pts = [(t, v) for t, v in zip(times, vals + [vals[-1]]) if t <= t_max]
