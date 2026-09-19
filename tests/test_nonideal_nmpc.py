@@ -133,6 +133,16 @@ def test_a_short_delay_sequence_errors():
         drto.nonideal_nmpc(loop_model, steps=3, delay=[0.1, 0.1])
 
 
+def test_a_negative_delay_errors():
+    with pytest.raises(ValueError, match="not negative"):
+        drto.nonideal_nmpc(loop_model, steps=2, delay=-0.1)
+
+
+def test_a_negative_delay_in_a_sequence_errors():
+    with pytest.raises(ValueError, match="not negative"):
+        drto.nonideal_nmpc(loop_model, steps=2, delay=[0.1, -0.2])
+
+
 @pytest.mark.parametrize("build", [hicks, moles_model])
 def test_solver_delay_needs_convertible_time_units(build):
     # hicks carries no units at all, and moles_model carries them on the
@@ -234,7 +244,8 @@ def test_the_duration_param_scales_the_piece():
 
 def test_the_solver_seconds_convert_into_the_declared_units(monkeypatch):
     # the declared units are seconds here, so the reported wall time is
-    # the delay as it stands. No solve runs: the stub returns the time
+    # the delay as it stands. No solve runs, since the stub returns the
+    # time itself
     units_model = partial(moles_model, rate_units=True)
 
     pieces = _piece_lengths(monkeypatch, seconds=0.25)

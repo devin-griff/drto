@@ -355,6 +355,39 @@ class _Loop:
         pyomo_pounce.sens_release_kkt(self.ctrl)
 
 
+def _check_arguments(fn, build, steps, initialize, dynamic_optimization):
+    """The argument checks that read no model.
+
+    A loop that reads the model before it builds, as
+    ``drto.nonideal_nmpc`` reads its declared time units, runs these
+    first, so a mistake in the call raises before a builder is called.
+    Running them twice costs nothing.
+    """
+    if not callable(build):
+        raise ValueError(
+            f"drto: {fn} takes the model statement, a function returning a "
+            f"declared, undiscretized model (feature 006). Got {build!r}."
+        )
+    if not (
+        initialize is False
+        or initialize in ("cold", "steady")
+        or isinstance(initialize, Mapping)
+    ):
+        raise ValueError(
+            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
+            f"start's options), 'steady', or False. Got {initialize!r}."
+        )
+    if steps < 1:
+        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
+    repeated = [k for k in ("h", "ncp", "scheme") if k in (dynamic_optimization or {})]
+    if repeated:
+        raise ValueError(
+            f"drto: {fn} states the mesh once for every side, so "
+            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
+            f"dynamic_optimization."
+        )
+
+
 def _loop_setup(
     fn,
     build,
@@ -384,22 +417,7 @@ def _loop_setup(
     ``history_type`` is the history the loop fills, ``NmpcHistory``
     unless a loop records more. Returns the ``_Loop`` the steps run on.
     """
-    if not callable(build):
-        raise ValueError(
-            f"drto: {fn} takes the model statement, a function returning a "
-            f"declared, undiscretized model (feature 006). Got {build!r}."
-        )
-    if not (
-        initialize is False
-        or initialize in ("cold", "steady")
-        or isinstance(initialize, Mapping)
-    ):
-        raise ValueError(
-            f"drto: {fn}: initialize is 'cold' (a mapping passes the cold "
-            f"start's options), 'steady', or False. Got {initialize!r}."
-        )
-    if steps < 1:
-        raise ValueError(f"drto: {fn}: steps must be at least 1, got {steps}.")
+    _check_arguments(fn, build, steps, initialize, dynamic_optimization)
 
     if solver in _POUNCE_SOLVERS:
         # importing registers the in-process plugin. Without it the name
@@ -417,13 +435,6 @@ def _loop_setup(
         raise RuntimeError(f"drto: {fn}: solver '{solver}' is not available.")
 
     do_opts = dict(dynamic_optimization or {})
-    repeated = [k for k in ("h", "ncp", "scheme") if k in do_opts]
-    if repeated:
-        raise ValueError(
-            f"drto: {fn} states the mesh once for every side, so "
-            f"{', '.join(repeated)} belongs to {fn} itself rather than to "
-            f"dynamic_optimization."
-        )
     segment = do_opts.pop("infinite_horizon", False)
 
     # every side comes from the one statement, which makes them the same

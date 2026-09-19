@@ -72,8 +72,8 @@ unmodified IDAES models.
 - [NMPC with the solve time on the IDAES CSTR](notebooks/cstr_nonideal_nmpc.ipynb):
   the same loop with each move taking effect one delay after its
   measurement. At the solve times the solver reports, about a third of
-  the interval here, the holdups run 2.4 mol wide of the ideal loop's on
-  a 20 mol range.
+  the interval here, the holdups differ from the ideal loop's by up to
+  2.4 mol on a 20 mol range.
 - [The Klatt-Engell CSTR](notebooks/klatt_engell.ipynb) — the van de
   Vusse reactor of Lueken, Brandner & Lucia (2023) posed on drto's
   terminal segment: the setpoints the reactor cannot hold, the

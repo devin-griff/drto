@@ -9,7 +9,7 @@ then. Each interval therefore runs as two simulations of the one-sample
 plant, the delay under the previous move and the rest under the new one.
 
 The plant is discretized once and simulates a piece of any length
-through a duration Param: each declared dynamics member is rewritten as
+through a duration Param. Each declared dynamics member is rewritten as
 ``coefficient * dz/dt == hP / h * other``, with ``hP`` the piece length
 and ``h`` the declared spacing, so over an element of the declared
 length the state advances as it would over ``hP``.
@@ -29,7 +29,7 @@ from pyomo.environ import units as pyo_units
 
 from drto.declarations import _dynamics_sides
 from drto.dynamic_optimization import _members
-from drto.ideal_nmpc import NmpcHistory, _first_move, _loop_setup
+from drto.ideal_nmpc import NmpcHistory, _check_arguments, _first_move, _loop_setup
 from drto.info import info
 from drto.warm_start import warm_start_dynamic
 
@@ -89,33 +89,49 @@ def _duration_param(plant, dt, units, fn):
     return duration
 
 
-def _delay_of(delay, steps, units, fn):
-    """Check ``delay`` and return the step's delay as a function of the solve."""
+def _check_delay(delay, steps, fn):
+    """Check ``delay``'s form, before anything is built."""
     if isinstance(delay, str):
         if delay != "solver":
             raise ValueError(
                 f"drto: {fn}: delay is 'solver', a number, or one number per "
                 f"step. Got {delay!r}."
             )
-        try:
-            pyo_units.convert_value(1.0, from_units=pyo_units.s, to_units=units)
-        except UnitsError as err:
-            raise ValueError(
-                f"drto: {fn}: delay='solver' converts the solver's seconds "
-                f"into the declared time units, read from a declared state "
-                f"and its DerivativeVar as {units}. Seconds do not convert "
-                f"to that. Prescribe the delay in the declared units "
-                f"instead."
-            ) from err
+        return
+    values = delay if isinstance(delay, (list, tuple)) else (delay,)
+    if isinstance(delay, (list, tuple)) and len(delay) < steps:
+        raise ValueError(
+            f"drto: {fn} runs {steps} steps but the delay sequence has "
+            f"{len(delay)} values. Give one per step."
+        )
+    negative = [v for v in values if v < 0]
+    if negative:
+        raise ValueError(
+            f"drto: {fn}: a delay is the time the move waits inside its "
+            f"interval, so it is not negative. Got {negative[0]}."
+        )
+
+
+def _check_seconds(units, fn):
+    """Check that the solver's seconds convert into the declared time units."""
+    try:
+        pyo_units.convert_value(1.0, from_units=pyo_units.s, to_units=units)
+    except UnitsError as err:
+        raise ValueError(
+            f"drto: {fn}: delay='solver' converts the solver's seconds into "
+            f"the declared time units, read from a declared state and its "
+            f"DerivativeVar as {units}. Seconds do not convert to that. "
+            f"Prescribe the delay in the declared units instead."
+        ) from err
+
+
+def _delay_of(delay, units):
+    """The step's delay, as a function of the step and its solve."""
+    if delay == "solver":
         return lambda k, res: pyo_units.convert_value(
             float(res.timing_info.wall_time), from_units=pyo_units.s, to_units=units
         )
     if isinstance(delay, (list, tuple)):
-        if len(delay) < steps:
-            raise ValueError(
-                f"drto: {fn} runs {steps} steps but the delay sequence has "
-                f"{len(delay)} values. Give one per step."
-            )
         return lambda k, res: float(delay[k])
     return lambda k, res: float(delay)
 
@@ -176,14 +192,25 @@ def nonideal_nmpc(
     ------
     ValueError
         On a delay that is neither ``"solver"``, a number, nor one number
-        per step, on ``delay="solver"`` where the solver's seconds do not
-        convert into the declared time units, or on any input
-        ``drto.ideal_nmpc`` rejects.
+        per step, on a negative delay, on ``delay="solver"`` where the
+        solver's seconds do not convert into the declared time units, or
+        on any input ``drto.ideal_nmpc`` rejects. Every one of these
+        raises before the sides are built.
     RuntimeError
         If the solver is not available, or a solve fails (the error names
         the step).
     """
     fn = "nonideal_nmpc"
+    _check_arguments(fn, build, steps, initialize, dynamic_optimization)
+    _check_delay(delay, steps, fn)
+    # the units the solver's seconds convert into are read from a bare
+    # build, so a model they do not convert to raises before the sides are
+    # built and cold-started
+    units = None
+    if delay == "solver":
+        units = _time_units(build(), fn)
+        _check_seconds(units, fn)
+
     loop = _loop_setup(
         fn,
         build,
@@ -204,8 +231,9 @@ def nonideal_nmpc(
         history_type=NonidealNmpcHistory,
     )
     (plant,) = loop.plants
-    units = _time_units(plant.model, fn)
-    delay_of = _delay_of(delay, steps, units, fn)
+    if units is None:
+        units = _time_units(plant.model, fn)
+    delay_of = _delay_of(delay, units)
     duration = _duration_param(plant.model, loop.dt, units, fn)
     history = loop.history
 
@@ -230,7 +258,7 @@ def nonideal_nmpc(
             # leaves the new move for the next boundary, which is where the
             # next step's hold implements it
             d = delay_of(k, res)
-            held = min(max(d, 0.0), loop.dt)
+            held = min(d, loop.dt)
             history.delays.append(d)
             history.effect_times.append(loop.history.times[k] + held)
             if d >= loop.dt:
