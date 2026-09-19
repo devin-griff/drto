@@ -504,6 +504,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `drto.asnmpc` rejects an `advanced_step` mapping that sets `gradient`
+  (gh #154). The correction then returns the sensitivities of each
+  control rather than the corrected solution, and the loop, which reads
+  that solution for the moves it implements, raised `KeyError` after its
+  first background solve. The error now names the cause before anything
+  is built, and points at calling
+  `drto.advanced_step_controller(m, gradient=True)` directly for
+  sensitivities.
+
 - The IDAES CSTR example model fixes the water accumulation at the first
   time point at zero. The water holdup is constant, since the volume is
   fixed and the property package fixes water's concentration, and

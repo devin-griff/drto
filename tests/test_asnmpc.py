@@ -86,6 +86,13 @@ def test_advanced_step_is_a_mapping():
         drto.asnmpc(loop_model, steps=2, advanced_step=["clamp"])
 
 
+def test_advanced_step_cannot_ask_for_sensitivities():
+    # gradient=True makes the correction return a Jacobian per control,
+    # which carries no move for the loop to implement
+    with pytest.raises(ValueError, match="cannot return sensitivities"):
+        drto.asnmpc(loop_model, steps=2, advanced_step={"gradient": True})
+
+
 def test_requires_the_model_statement():
     with pytest.raises(ValueError, match="model statement"):
         drto.asnmpc(loop_model(), steps=2)
@@ -185,6 +192,9 @@ def test_the_predictor_holds_its_disturbances_at_zero(monkeypatch):
         assert abs(measured[0] - predicted[0]) > 1e-2
     for corrected, background in zip(spies.corrected, spies.background):
         assert corrected != pytest.approx(background, abs=1e-6)
+    # each correction's first move is the next move implemented
+    for k, corrected in enumerate(spies.corrected):
+        assert h.moves["u"][k + 1] == pytest.approx(corrected[0])
 
 
 @needs_pounce
@@ -227,6 +237,35 @@ def test_scaled_loop_reproduces_the_unscaled_history():
     hu = drto.asnmpc(loop_model, steps=5, disturbances=noise)
     assert hs.states["z"] == pytest.approx(hu.states["z"], abs=1e-6)
     assert hs.moves["u"] == pytest.approx(hu.moves["u"], abs=1e-6)
+
+
+@needs_pounce
+def test_a_failed_solve_releases_the_factorization_too(monkeypatch):
+    # the release runs in a finally, so a raising loop leaves no
+    # factorization behind either
+    import pyomo_pounce
+
+    built = []
+    real_build = loop_module._build_and_discretize
+    real_solve = loop_module._Loop.solve
+
+    def keep(*a, **k):
+        m = real_build(*a, **k)
+        built.append(m)
+        return m
+
+    def solve(loop, model, what, step, options=None):
+        # the process solve of step 1, after the controller has a
+        # factorization and before the loop would release it
+        if what == "process" and step == 1:
+            raise RuntimeError("drto: asnmpc: the process solve failed at step 1.")
+        return real_solve(loop, model, what, step, options=options)
+
+    monkeypatch.setattr(loop_module, "_build_and_discretize", keep)
+    monkeypatch.setattr(loop_module._Loop, "solve", solve)
+    with pytest.raises(RuntimeError, match="process solve failed at step 1"):
+        drto.asnmpc(loop_model, steps=3)
+    assert pyomo_pounce.sens_release_kkt(built[0]) is False
 
 
 @needs_pounce

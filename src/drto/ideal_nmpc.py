@@ -85,15 +85,6 @@ def _warm_options(solver):
     return {}
 
 
-#: The mode transforms. The loop applies its own, so the input comes first.
-_TRANSFORMED = (
-    "drto.parameterize",
-    "drto.dynamic_optimization",
-    "drto.dynamic_simulation",
-    "drto.dynamic_to_steady_state",
-)
-
-
 @dataclass
 class NmpcHistory:
     """The closed loop's actual trajectory, under the declared names.
