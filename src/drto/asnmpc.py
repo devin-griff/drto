@@ -75,6 +75,8 @@ def asnmpc(
     advanced_step : mapping, optional
         Keyword arguments passed to ``drto.advanced_step_controller`` as
         given, and through it to ``pyomo_pounce.sens_solution``.
+        ``gradient`` is an error, since the loop reads the corrected
+        solution for the moves it implements.
     disturbances, seed, initialize, scale, warm_start
         As in ``drto.ideal_nmpc``. The realizations reach the process
         alone, and ``initialize`` and ``scale`` apply to every side.
@@ -98,7 +100,8 @@ def asnmpc(
     ------
     ValueError
         On a solver other than pounce, an ``advanced_step`` that is not a
-        mapping, or any input ``drto.ideal_nmpc`` rejects.
+        mapping or that sets ``gradient``, or any input
+        ``drto.ideal_nmpc`` rejects.
     RuntimeError
         If pyomo-pounce is missing, or a solve fails (the error names the
         step).
@@ -114,6 +117,14 @@ def asnmpc(
         raise ValueError(
             f"drto: {fn}: advanced_step is a mapping of keyword arguments "
             f"for drto.advanced_step_controller. Got {advanced_step!r}."
+        )
+    if advanced_step and advanced_step.get("gradient"):
+        raise ValueError(
+            f"drto: {fn} reads each corrected solution for the moves to "
+            f"implement, so the correction cannot return sensitivities. "
+            f"Drop gradient from advanced_step, and call "
+            f"drto.advanced_step_controller(m, gradient=True) yourself for "
+            f"those."
         )
 
     loop = _loop_setup(
