@@ -128,7 +128,7 @@ def test_three_sides_share_one_mesh(monkeypatch):
 @needs_pounce
 def test_with_no_disturbance_the_loop_is_the_ideal_one(monkeypatch):
     # the feature's hicks criterion. With no disturbance the prediction is
-    # the measurement, the correction is by zero, the moves are the ideal
+    # the measurement, the correction is zero, the moves are the ideal
     # loop's, and the states settle to the declared targets
     opts = dict(steps=10, dynamic_optimization={"infinite_horizon": True})
     ideal = drto.ideal_nmpc(hicks, **opts)
@@ -179,8 +179,8 @@ def test_the_predictor_holds_its_disturbances_at_zero(monkeypatch):
     assert h.realizations["w"] == [0.1, 0.1, 0.1]
     assert all(pyo.value(vd) == 0.0 for vd in predictor.w.values())
     assert all(pyo.value(vd) == 0.1 for vd in process.w.values())
-    # the realization moves the measurement off the prediction, and the
-    # correction moves the moves off the background solution
+    # the realization puts the measurement away from the prediction, and
+    # the corrected moves differ from the background solution's
     for predicted, measured in zip(spies.predictions, spies.measurements):
         assert abs(measured[0] - predicted[0]) > 1e-2
     for corrected, background in zip(spies.corrected, spies.background):

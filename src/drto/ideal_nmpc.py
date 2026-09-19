@@ -28,10 +28,9 @@ An active ``scaling_factor`` suffix reaches every solver solve on that
 side, and the history reads back in the model's own units. The
 initial-condition Params stay physical, and the cold starts' block solves
 run in the model's own units either way (gh #92). ``scale`` given a
-source writes the factors itself, forwarding it to ``drto.scale`` once at
-entry, before the sides are built, so both sides hold the factors and
-every solver solve receives them. They are written once and held for the
-whole loop.
+source is forwarded to ``drto.scale`` on each side once that side is
+built, so every side holds the factors and every solver solve receives
+them. They are written once and held for the whole loop.
 
 The returned :class:`NmpcHistory` holds the actual trajectory under the
 declared names, and ``drto.plot_states`` / ``drto.plot_controls`` draw
