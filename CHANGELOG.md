@@ -138,6 +138,20 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `drto.nonideal_nmpc`, the NMPC loop with the solve time in it (feature
+  016). It takes the model statement and `drto.ideal_nmpc`'s options plus
+  `delay`, and each move takes effect one delay after the measurement it
+  was solved at, the previous move holding until then. The interval runs
+  as two simulations of the one-sample process, so the process is
+  discretized once and a duration Param scales its declared dynamics to
+  the length of each piece. `delay="solver"` converts each solve's
+  reported wall time into the declared time units, read from a declared
+  state and its DerivativeVar, and a model whose seconds do not convert
+  takes a prescribed delay instead. The returned `NonidealNmpcHistory`
+  adds each step's delay, the instant each move took effect, and the
+  steps whose delay reached the interval, and `drto.plot_controls` steps
+  its staircase at those instants.
+
 - `drto.asnmpc`, the advanced-step NMPC loop (feature 015). It takes the
   model statement and `drto.ideal_nmpc`'s options, plus `advanced_step`
   options for `drto.advanced_step_controller`, and returns the same
