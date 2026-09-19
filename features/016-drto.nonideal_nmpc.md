@@ -59,11 +59,15 @@ sweeping `h` against the solve time is the experiment this loop exists
 for.
 
 The loop differs from the ideal one in when a move takes effect. Each
-step's delay is the solve time the solver reports, in seconds, converted
-into the declared time set's units, or the value `delay` prescribes,
-already in those units. With no units on the declared time set the
-reported seconds cannot be converted, so `delay="solver"` is a
-descriptive error saying to prescribe a delay instead. The new move takes
+step's delay is `timing_info.wall_time`, the seconds the solver
+interface reports for the solve call, converted into the declared time
+units, or the value `delay` prescribes, already in those units. A
+ContinuousSet carries no units, so the declared time units are read from
+a declared state and its DerivativeVar, as `units(z) / units(dz/dt)`.
+Seconds do not convert to every ratio that reads, a model with no units
+anywhere giving dimensionless and one with units on the state alone
+giving the state's own, and `delay="solver"` is then a descriptive error
+saying to prescribe a delay instead. The new move takes
 effect one delay into the sampling interval. Two moves therefore apply
 in each interval, which runs as two simulations of the one-element
 plant. The process advances for the delay under the previous move, then
@@ -84,8 +88,9 @@ interval length, the previous move holds for the whole interval and the
 new move takes effect at the next interval boundary, recorded as
 clamped.
 
-The history is `drto.ideal_nmpc`'s, adding each step's delay and the time
-each move took effect. The moves plot as a staircase stepping at those
+The history is `NonidealNmpcHistory`, `drto.ideal_nmpc`'s with each
+step's delay, the time each move took effect, and the steps whose delay
+reached the interval. The moves plot as a staircase stepping at those
 times.
 
 ## Benefit hypothesis
@@ -110,9 +115,10 @@ measurable against a loop that has it.
   takes plus `delay`, and builds the controller and the process the
   same way from the statement.
 - Each step solves at the measurement. The delay is the solver-reported
-  solve time converted into the declared time set's units when `delay` is
+  wall time converted into the declared time units when `delay` is
   `"solver"`, and a number or per-step sequence in those units otherwise.
-  On a model whose time set has no units, `delay="solver"` is a
+  The units are read from a declared state and its DerivativeVar, and a
+  model whose ratio seconds do not convert to makes `delay="solver"` a
   descriptive error. The interval runs as two simulations of exact
   lengths, the delay under the previous move and the rest of the interval
   under the new one, the duration the mutable Param the plant's declared
@@ -124,7 +130,8 @@ measurable against a loop that has it.
 - `delay=0` reproduces `drto.ideal_nmpc` exactly. A delay at the
   interval length holds every move for a full interval before it takes
   effect.
-- The history adds each step's delay and each move's effect time, and the
-  moves plot as a staircase stepping at those times.
+- The history adds each step's delay, each move's effect time, and the
+  clamped steps, and the moves plot as a staircase stepping at those
+  times.
 - On hicks with zero disturbances and a delay shorter than the interval
   length, the actual states settle to the declared targets.

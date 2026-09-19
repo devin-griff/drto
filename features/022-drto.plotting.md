@@ -68,6 +68,9 @@ infrastructure.
 - With no selection every declared component draws, a multi-index
   component expanding to one panel per member; past the panel cap the
   error names the multi-index components and the member-string syntax.
+- A history that records when each move took effect steps its staircase
+  there rather than at the samples, the declared control target holding
+  until the first move takes effect.
 - Controls draw as a staircase on the finite horizon, the last move held
   to the end of the horizon; states and the stage cost draw as points.
 - With a terminal segment present, the tail points draw at
