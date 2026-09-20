@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The pyomo-pounce floor moves to 0.12.0, in the `pounce` and `dev`
+  extras. CI already resolved the old floor to 0.12.0 and the suite
+  passes on it, and `examples/hicks_asnmpc_comparison.ipynb` was
+  executed on it. No drto call changes.
+
 - `drto.cold_start_dynamic` sets the terminal segment's controls to
   their declared targets when it runs after `drto.parameterize`
   (gh #125). It found them by looking up the declared control's
