@@ -29,8 +29,10 @@ unmodified IDAES models.
   — `drto.initialize_steady_state`, solve-based and broadcast flat.
 - [Three NMPC loops compared](notebooks/hicks_asnmpc_comparison.ipynb):
   `drto.ideal_nmpc`, `drto.asnmpc`, and `drto.nonideal_nmpc` on the same
-  reactor, the delay set at 25% of the sampling interval, without
-  disturbances and under process noise.
+  reactor, without disturbances and under process noise. With the delay
+  at 90% of the sampling interval and under noise, the nonideal loop's
+  squared distance to the targets is 4.8% larger than the ideal loop's
+  and the advanced-step loop's is 0.2% larger.
 
 **More systems**
 
