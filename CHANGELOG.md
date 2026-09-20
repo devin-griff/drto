@@ -138,6 +138,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- The example page `examples/hicks_asnmpc_comparison.ipynb`, which runs
+  `drto.ideal_nmpc`, `drto.asnmpc`, and `drto.nonideal_nmpc` on the
+  Hicks-Ray CSTR from one model statement, without disturbances and
+  under process noise, with the delay at 90% of the sampling interval.
+  `hicks()` in `examples/models/hicks.py` takes `disturbance=False`, and
+  with it on the model gains `w_c` and `w_t`, one added to each balance
+  and declared through `drto.disturbance`.
+
 - `drto.nonideal_nmpc`, the NMPC loop with the solve time in it (feature
   016). It takes the model statement and `drto.ideal_nmpc`'s options plus
   `delay`, and each move takes effect one delay after the measurement it

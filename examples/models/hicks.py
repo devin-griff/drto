@@ -9,6 +9,10 @@ Dinh et al. (2025), doi:10.1016/j.jprocont.2025.103565. Two states
 residence time v2), tracking stage and terminal costs toward the model's
 steady state, and initial conditions (zc_hat, zt_hat).
 
+``hicks(disturbance=True)`` adds a disturbance to each balance (``w_c``,
+``w_t``), declared through ``drto.disturbance``. The optimizations fix them
+at zero and a closed loop draws the process's values.
+
 Usage from a notebook in ``examples/``::
 
     from models.hicks import hicks
@@ -20,13 +24,17 @@ from pyomo.dae import ContinuousSet, DerivativeVar
 import drto
 
 
-def hicks(N=5, h=1):
+def hicks(N=5, h=1, disturbance=False):
     """Return the declared Hicks-Ray CSTR with an ``N``-step horizon.
 
     The time set is initialized with the sample grid (``N`` steps of the
     sampling time ``h``), the convention ``drto.horizon`` captures. All physical constants
     and setpoints are mutable Params, so they retune by ``set_value``; the
     initial state is set through ``m.zc_hat`` / ``m.zt_hat``.
+
+    With ``disturbance`` the model gains ``w_c`` and ``w_t``, one added to
+    each balance's right-hand side and declared as disturbances. Without
+    it the model has neither Var.
     """
     m = pyo.ConcreteModel()
     m.t = ContinuousSet(initialize=pyo.RangeSet(0, N * h, h))
@@ -55,14 +63,20 @@ def hicks(N=5, h=1):
     # unbounded cost vars: a cost var pinned at a bound drags ipopt
     m.cost = pyo.Var(m.t)
     m.term = pyo.Var()
+    if disturbance:
+        m.w_c = pyo.Var(m.t, initialize=0.0)
+        m.w_t = pyo.Var(m.t, initialize=0.0)
+
+    def w(name, t):
+        return getattr(m, name)[t] if disturbance else 0.0
 
     @m.Constraint(m.t)
     def zc_ode(m, t):
-        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t])
+        return m.dzc[t] == (1 - m.zc[t]) / (m.u2sf * m.v2[t]) - m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t]) + w("w_c", t)
 
     @m.Constraint(m.t)
     def zt_ode(m, t):
-        return m.dzt[t] == (m.ztf - m.zt[t]) / (m.u2sf * m.v2[t]) + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t]) - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw)
+        return m.dzt[t] == (m.ztf - m.zt[t]) / (m.u2sf * m.v2[t]) + m.k0 * m.zc[t] * pyo.exp(-m.ea / m.zt[t]) - m.a0 * m.u1sf * m.v1[t] * (m.zt[t] - m.ztcw) + w("w_t", t)
 
     @m.Constraint(sorted(m.t)[:-1])  # the terminal cost owns the final time
     def stage(m, t):
@@ -86,6 +100,8 @@ def hicks(N=5, h=1):
     drto.state(m.zc, m.zt)
     drto.dynamics(m.zc_ode, m.zt_ode)
     drto.control(m.v1, m.v2, profile="piecewise_constant")
+    if disturbance:
+        drto.disturbance(m.w_c, m.w_t)
     drto.tracking_stage_cost(m.stage)
     drto.tracking_terminal_cost(m.terminal)
     drto.initial_condition(m.zc_init, m.zt_init)
