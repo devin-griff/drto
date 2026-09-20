@@ -24,20 +24,20 @@ alongside the CHANGELOG section rename.
 | [008 drto.steady_state_simulation](008-drto.steady_state_simulation.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [009 drto.steady_state_optimization](009-drto.steady_state_optimization.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [010 drto.initialize_steady_state](010-drto.initialize_steady_state.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [011 drto.cold_start_dynamic](011-drto.cold_start_dynamic.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [012 drto.advanced_step_controller](012-drto.advanced_step_controller.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [013 drto.warm_start_dynamic](013-drto.warm_start_dynamic.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [014 drto.ideal_nmpc](014-drto.ideal_nmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [015 drto.asnmpc](015-drto.asnmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [011 drto.cold_start_dynamic](011-drto.cold_start_dynamic.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [012 drto.advanced_step_controller](012-drto.advanced_step_controller.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [013 drto.warm_start_dynamic](013-drto.warm_start_dynamic.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [014 drto.ideal_nmpc](014-drto.ideal_nmpc.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [015 drto.asnmpc](015-drto.asnmpc.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [016 drto.nonideal_nmpc](016-drto.nonideal_nmpc.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [017 drto.parameterize](017-drto.parameterize.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [018 Estimation declarations](018-estimation_declarations.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [019 Registry units](019-registry_units.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [022 drto.plotting](022-drto.plotting.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
-| [023 drto.scale](023-drto.scale.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
-| [024 drto.check_index](024-drto.check_index.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [023 drto.scale](023-drto.scale.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
+| [024 drto.check_index](024-drto.check_index.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [025 drto.soft_bounds](025-drto.soft_bounds.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
-| [026 Approximate NMPC](026-approximate_nmpc.md) | ![implemented](https://img.shields.io/badge/implemented-yellowgreen) |
+| [026 Approximate NMPC](026-approximate_nmpc.md) | ![shipped](https://img.shields.io/badge/shipped-brightgreen) |
 | [027 drto.linearize_steady_state](027-drto.linearize_steady_state.md) | ![draft](https://img.shields.io/badge/draft-lightgrey) |
 
 ## Template

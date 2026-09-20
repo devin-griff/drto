@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-19
+
 ### Changed
 
 - The pyomo-pounce floor moves to 0.12.0, in the `pounce` and `dev`
@@ -128,6 +130,141 @@ All notable changes to this project are documented here. The format is based on
   point into the model, and the default solver name is `pounce`, with
   `pounce_v2` still resolving. An unknown solver name raises with the
   factory's registry listed.
+
+- `drto.plot_states` draws the terminal segment's element boundaries only
+  under `element_boundaries=True` (feature 022). The segment collocates on
+  Gauss-Legendre points, so a boundary value is the element polynomial
+  extended to its edge rather than a point the solver placed on the
+  trajectory; on a converged trajectory it is the only point away from the
+  curve, so it set the axis limits and a settled state read as if it were
+  oscillating.
+
+- The tracking costs are checked for coverage at declaration (gh #60):
+  the stage cost must reference every declared state and control and
+  may contain only declared state and control members (targets and
+  scales are Params); the terminal cost the same over the states. A
+  missing or foreign component is a descriptive error naming it. The
+  IDAES CSTR example gains the four material holdup terms its costs
+  were missing, at a loose scale chosen so the controller's behavior
+  is unchanged in substance, and its notebooks re-execute.
+
+- The terminal segment's copies of a dynamics family's algebraic
+  members are named `<family>_algebraic` instead of
+  `<family>_residue`, and the registry records them under `algebraic`.
+  They are algebraic constraints and the name now says so.
+
+- The terminal segment replicates spatially distributed models (gh #56).
+  A time-indexed Block family may carry further indices, an IDAES stage
+  element or a spatial node: each non-time combination replicates as its
+  own family, with its own segment copies and constraints, and solves
+  identically to the flat twin of the same physics. A derivative over a
+  ContinuousSet other than the declared time set is ordinary algebra,
+  its members copied and its discretization equations replicated despite the
+  pyomo.dae `_disc_eq` naming; only the declared time set's artifacts
+  are rebuilt over tau. Same-named components from different units (the
+  two settlers of a mixer-settler both carry `_flow_terms`) take
+  distinct segment names. The free-copy guard now also covers partially
+  copied containers, so a member whose defining constraint was dropped is a
+  descriptive error instead of a silent tail freedom; the guard credit
+  includes the replicated algebraic balances. On the declared PrOMMiS
+  mixer-settler the transform applies in seconds and the assembled
+  problem's freedoms are accounted for: the spatial discretization equations
+  land on the tail, closing the 1860 freedoms their omission left.
+
+- `drto.dynamics` reads the derivative side through its coefficients
+  (gh #51): a dynamics constraint's derivative side may be the DerivativeVar
+  multiplied by derivative-free factors, IDAES `ControlVolume1D`'s
+  `length * accumulation` idiom, with a side differentiated along the
+  declared time set winning over a spatial-derivative side in either
+  orientation. The steady reduction and the terminal segment read the
+  same shape, the segment carrying the coefficient onto the dilated
+  tail dynamics, verified equivalent to the hand-divided bare form
+  through a live tail. The PrOMMiS mixer-settler's settler balances,
+  the motivating model, declare cleanly.
+
+- The closed loop adopts the cold start's scaled clone (gh #42): the
+  cold start's report carries the initialized clone as `scaled_model`,
+  and the loop takes it as the persistent solve model instead of
+  deep-copying the same model again, one deepcopy per side instead of
+  two. The clone lives as long as its report; without scaling, without
+  pounce, or with the point solves skipped there is none and the loop
+  builds its own as before.
+
+- `cold_start_dynamic` gains `point_solves` (gh #43): `False` skips the
+  per-point algebra solves deliberately, the profiles and targets
+  landing without a solve and without the internal scaled clone, with
+  the report saying so. The profiles-only mode existed only as the
+  missing-install fallback; on large models the algebra cascade is the
+  cost that grows, and the choice belongs to the caller, reaching the
+  closed loop through the `initialize` mapping.
+
+- `cold_start_dynamic` initializes over the members a model kept: a
+  member that does not exist is skipped rather than rebuilt, and the
+  scaled solves' values copy back positionally instead of through
+  pyomo's `propagate_solution`, whose Var-container iteration indexes
+  References and thereby rebuilds members on demand. A model cut to a
+  window of the horizon (the closed loop's one-sample plant, cut
+  straight after the simulation transform) cold-starts in one
+  element's time: on the IDAES CSTR the plant's cold start drops from
+  0.8 s to 0.09 s and the demo loop from 11 s to about 5 s.
+
+- `initialize_steady_state` holds a declared disturbance at zero for
+  the equilibrium solve, the same convention as every control-side
+  mode, restoring the fixed flags it touched (gh #44). Previously the
+  disturbance rode the reduction as a free variable and any disturbed
+  model failed with the non-square error.
+
+- The terminal segment's endpoint pin penalty gains a quadratic term
+  (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
+  the same `mu`. The linear part is the exact L1 pin as before, zero
+  slack staying optimal whenever the pin can hold; the quadratic part
+  makes the pin's multipliers unique and continuous, where the bare L1
+  kink left them an interval the solver picked arbitrary points of, so
+  consecutive solves of near-identical problems disagreed wildly on
+  them and warm starts that carry multipliers were a lottery. On the
+  IDAES CSTR the same warm-started hand-off went from anywhere between
+  6 and 333 iterations to 6, and the cold solve improved from 84 to 59
+  (degraded-environment measurements, to be re-verified).
+
+- The terminal segment's algebraic copies (the flat algebra, the Block
+  members, the indexed residue members) are indexed over the interior
+  collocation points only (gh #32): every point that exists is one a
+  replicated equation determines, so no dead boundary member exists to
+  hold a stale value for a reader to find. State copies keep the full
+  tau set for their continuity and discretization equations, as the tail
+  cost's quadrature always has. The transform also records these copies
+  and the segment itself (with gamma) in the registry pairing (gh #27),
+  which the warm start reads. On the IDAES CSTR, the warm-started
+  second solve drops from 21 iterations to 10, beating a fresh cold
+  start at the same state, once the shift stops reading stale boundary
+  values.
+
+- The IDAES saponification CSTR moved into the canonical models
+  (`examples/models/idaes_cstr.py`), scaling included: the flowsheet
+  builders, the declaration surface, the units-driven `tag_scaling`, and
+  `scaled_solve`. The `idaes_cstr` and `cstr_cold_start` notebooks import
+  the model instead of defining it inline, with identical results.
+
+- The documentation is rebuilt around the workflows. The README and the
+  docs front page open with a runnable quickstart (declare, transform,
+  cold start, solve, plot, with real output); the user guide is
+  restructured as the three workflows (the infinite-horizon controller,
+  the forward simulation, the steady-state branch) plus scaling and
+  IDAES how-tos; the thirteen example notebooks render into the docs
+  from their committed outputs behind a curated gallery; the API
+  reference is grouped by use; and a design page links the feature
+  specs, stating plainly what is shipped versus specified.
+- The infinite-horizon transformation records, internally on the
+  registry, which terminal-segment component belongs to which
+  declaration, and `cold_start_dynamic` and the plotting read that
+  pairing instead of reconstructing component names (gh #27). The
+  registry view renders nothing new, component names are unchanged, and
+  a clone carries the pairing with its references remapped.
+- `initialize_steady_state` honors an active `scaling_factor` suffix: the
+  pipeline runs scaled and the solved values land in the model's own
+  units, with no change to the call (gh #24). Previously the suffix was
+  ignored, its entries riding the reduced clone into the subsystem solves
+  with NL-writer warnings; the scaled path removes both.
 
 ### Removed
 
@@ -391,143 +528,6 @@ All notable changes to this project are documented here. The format is based on
   The IDAES CSTR notebook (`examples/cstr_cold_start.ipynb`) shows
   the model before and after, the per-point solves working the outlet
   stream, the reaction cascade, and the indexed holdup's water member.
-
-### Changed
-
-- `drto.plot_states` draws the terminal segment's element boundaries only
-  under `element_boundaries=True` (feature 022). The segment collocates on
-  Gauss-Legendre points, so a boundary value is the element polynomial
-  extended to its edge rather than a point the solver placed on the
-  trajectory; on a converged trajectory it is the only point away from the
-  curve, so it set the axis limits and a settled state read as if it were
-  oscillating.
-
-- The tracking costs are checked for coverage at declaration (gh #60):
-  the stage cost must reference every declared state and control and
-  may contain only declared state and control members (targets and
-  scales are Params); the terminal cost the same over the states. A
-  missing or foreign component is a descriptive error naming it. The
-  IDAES CSTR example gains the four material holdup terms its costs
-  were missing, at a loose scale chosen so the controller's behavior
-  is unchanged in substance, and its notebooks re-execute.
-
-- The terminal segment's copies of a dynamics family's algebraic
-  members are named `<family>_algebraic` instead of
-  `<family>_residue`, and the registry records them under `algebraic`.
-  They are algebraic constraints and the name now says so.
-
-- The terminal segment replicates spatially distributed models (gh #56).
-  A time-indexed Block family may carry further indices, an IDAES stage
-  element or a spatial node: each non-time combination replicates as its
-  own family, with its own segment copies and constraints, and solves
-  identically to the flat twin of the same physics. A derivative over a
-  ContinuousSet other than the declared time set is ordinary algebra,
-  its members copied and its discretization equations replicated despite the
-  pyomo.dae `_disc_eq` naming; only the declared time set's artifacts
-  are rebuilt over tau. Same-named components from different units (the
-  two settlers of a mixer-settler both carry `_flow_terms`) take
-  distinct segment names. The free-copy guard now also covers partially
-  copied containers, so a member whose defining constraint was dropped is a
-  descriptive error instead of a silent tail freedom; the guard credit
-  includes the replicated algebraic balances. On the declared PrOMMiS
-  mixer-settler the transform applies in seconds and the assembled
-  problem's freedoms are accounted for: the spatial discretization equations
-  land on the tail, closing the 1860 freedoms their omission left.
-
-- `drto.dynamics` reads the derivative side through its coefficients
-  (gh #51): a dynamics constraint's derivative side may be the DerivativeVar
-  multiplied by derivative-free factors, IDAES `ControlVolume1D`'s
-  `length * accumulation` idiom, with a side differentiated along the
-  declared time set winning over a spatial-derivative side in either
-  orientation. The steady reduction and the terminal segment read the
-  same shape, the segment carrying the coefficient onto the dilated
-  tail dynamics, verified equivalent to the hand-divided bare form
-  through a live tail. The PrOMMiS mixer-settler's settler balances,
-  the motivating model, declare cleanly.
-
-- The closed loop adopts the cold start's scaled clone (gh #42): the
-  cold start's report carries the initialized clone as `scaled_model`,
-  and the loop takes it as the persistent solve model instead of
-  deep-copying the same model again, one deepcopy per side instead of
-  two. The clone lives as long as its report; without scaling, without
-  pounce, or with the point solves skipped there is none and the loop
-  builds its own as before.
-
-- `cold_start_dynamic` gains `point_solves` (gh #43): `False` skips the
-  per-point algebra solves deliberately, the profiles and targets
-  landing without a solve and without the internal scaled clone, with
-  the report saying so. The profiles-only mode existed only as the
-  missing-install fallback; on large models the algebra cascade is the
-  cost that grows, and the choice belongs to the caller, reaching the
-  closed loop through the `initialize` mapping.
-
-- `cold_start_dynamic` initializes over the members a model kept: a
-  member that does not exist is skipped rather than rebuilt, and the
-  scaled solves' values copy back positionally instead of through
-  pyomo's `propagate_solution`, whose Var-container iteration indexes
-  References and thereby rebuilds members on demand. A model cut to a
-  window of the horizon (the closed loop's one-sample plant, cut
-  straight after the simulation transform) cold-starts in one
-  element's time: on the IDAES CSTR the plant's cold start drops from
-  0.8 s to 0.09 s and the demo loop from 11 s to about 5 s.
-
-- `initialize_steady_state` holds a declared disturbance at zero for
-  the equilibrium solve, the same convention as every control-side
-  mode, restoring the fixed flags it touched (gh #44). Previously the
-  disturbance rode the reduction as a free variable and any disturbed
-  model failed with the non-square error.
-
-- The terminal segment's endpoint pin penalty gains a quadratic term
-  (gh #37): `mu*(eps_up + eps_lo + eps_up**2 + eps_lo**2)`, both parts on
-  the same `mu`. The linear part is the exact L1 pin as before, zero
-  slack staying optimal whenever the pin can hold; the quadratic part
-  makes the pin's multipliers unique and continuous, where the bare L1
-  kink left them an interval the solver picked arbitrary points of, so
-  consecutive solves of near-identical problems disagreed wildly on
-  them and warm starts that carry multipliers were a lottery. On the
-  IDAES CSTR the same warm-started hand-off went from anywhere between
-  6 and 333 iterations to 6, and the cold solve improved from 84 to 59
-  (degraded-environment measurements, to be re-verified).
-
-- The terminal segment's algebraic copies (the flat algebra, the Block
-  members, the indexed residue members) are indexed over the interior
-  collocation points only (gh #32): every point that exists is one a
-  replicated equation determines, so no dead boundary member exists to
-  hold a stale value for a reader to find. State copies keep the full
-  tau set for their continuity and discretization equations, as the tail
-  cost's quadrature always has. The transform also records these copies
-  and the segment itself (with gamma) in the registry pairing (gh #27),
-  which the warm start reads. On the IDAES CSTR, the warm-started
-  second solve drops from 21 iterations to 10, beating a fresh cold
-  start at the same state, once the shift stops reading stale boundary
-  values.
-
-- The IDAES saponification CSTR moved into the canonical models
-  (`examples/models/idaes_cstr.py`), scaling included: the flowsheet
-  builders, the declaration surface, the units-driven `tag_scaling`, and
-  `scaled_solve`. The `idaes_cstr` and `cstr_cold_start` notebooks import
-  the model instead of defining it inline, with identical results.
-
-- The documentation is rebuilt around the workflows. The README and the
-  docs front page open with a runnable quickstart (declare, transform,
-  cold start, solve, plot, with real output); the user guide is
-  restructured as the three workflows (the infinite-horizon controller,
-  the forward simulation, the steady-state branch) plus scaling and
-  IDAES how-tos; the thirteen example notebooks render into the docs
-  from their committed outputs behind a curated gallery; the API
-  reference is grouped by use; and a design page links the feature
-  specs, stating plainly what is shipped versus specified.
-- The infinite-horizon transformation records, internally on the
-  registry, which terminal-segment component belongs to which
-  declaration, and `cold_start_dynamic` and the plotting read that
-  pairing instead of reconstructing component names (gh #27). The
-  registry view renders nothing new, component names are unchanged, and
-  a clone carries the pairing with its references remapped.
-- `initialize_steady_state` honors an active `scaling_factor` suffix: the
-  pipeline runs scaled and the solved values land in the model's own
-  units, with no change to the call (gh #24). Previously the suffix was
-  ignored, its entries riding the reduced clone into the subsystem solves
-  with NL-writer warnings; the scaled path removes both.
 
 ### Fixed
 
@@ -1153,7 +1153,10 @@ All notable changes to this project are documented here. The format is based on
   declaration framework and the six modes are recorded in DESIGN.md and the
   README. No functionality yet.
 
-[Unreleased]: https://github.com/devin-griff/drto/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/devin-griff/drto/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/devin-griff/drto/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/devin-griff/drto/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/devin-griff/drto/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/devin-griff/drto/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/devin-griff/drto/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/devin-griff/drto/compare/v0.1.1...v0.1.2
