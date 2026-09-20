@@ -27,6 +27,10 @@ unmodified IDAES models.
   reduction and the equilibrium at held controls.
 - [Initializing from the steady state](notebooks/hicks_initialize.ipynb)
   — `drto.initialize_steady_state`, solve-based and broadcast flat.
+- [Three NMPC loops compared](notebooks/hicks_asnmpc_comparison.ipynb):
+  `drto.ideal_nmpc`, `drto.asnmpc`, and `drto.nonideal_nmpc` on the same
+  reactor, the delay set at 25% of the sampling interval, without
+  disturbances and under process noise.
 
 **More systems**
 
@@ -101,6 +105,7 @@ notebooks/hicks_dynamic_optimization
 notebooks/hicks_dynamic_simulation
 notebooks/hicks_steady_state
 notebooks/hicks_initialize
+notebooks/hicks_asnmpc_comparison
 notebooks/quad_tank
 notebooks/cart_pole
 notebooks/double_column
